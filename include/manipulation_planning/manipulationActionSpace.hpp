@@ -93,6 +93,8 @@ struct manipulationType : ims::actionType {
             std::vector<double> line_;
             double num;
             while (iss >> num) {
+                // convert from degrees to radians
+                num = num * M_PI / 180;
                 line_.push_back(num);
             }
             mprim.push_back(line_);
@@ -104,6 +106,7 @@ struct manipulationType : ims::actionType {
     /// @return A vector of all possible actions
     std::vector<action> getActions() override {
         if (mActions == nullptr) {
+            mActions = std::make_shared<std::vector<action>>();
             switch (mActionType) {
                 case ActionType::MOVE:
                     switch (mSpaceType) {
@@ -203,10 +206,10 @@ public:
     /// @brief Interpolate path between two states
     /// @param start The start state
     /// @param end The end state
-    /// @param resolution The resolution of the path
+    /// @param resolution The resolution of the path (default: 0.005 rad)
     /// @return The interpolated path
     static pathType interpolatePath(const stateType& start, const stateType& end,
-                             const double resolution=0.05) {
+                             const double resolution=0.005) {
         assert(start.size() == end.size());
         pathType path;
         // get the maximum distance between the two states
@@ -284,10 +287,12 @@ public:
         auto actions = mManipulationType->getActions();
         // get the successors
         for (auto action : actions) {
-            // create a new state
-            stateType new_state_val;
+            // create a new state in the length of the current state
+            stateType new_state_val {};
+            new_state_val.resize(curr_state_val.size());
+            std::fill(new_state_val.begin(), new_state_val.end(), 0.0);
             for (int i {0} ; i < curr_state_val.size() ; i++) {
-                new_state_val.push_back(curr_state_val[i] + action[i]);
+                new_state_val[i] = curr_state_val[i] + action[i];
             }
             // if the state is in the configuration space
             if (mManipulationType->getSpaceType() == manipulationType::spaceType::ConfigurationSpace) {
@@ -300,9 +305,10 @@ public:
             // check if the state is valid by linear interpolation
             if (isStateToStateValid(curr_state_val, new_state_val)) {
                 // create a new state
-                auto new_state = std::make_shared<ims::state>(new_state_val);
+                int next_state_ind = getOrCreateState(new_state_val);
+                auto new_state = this->getState(next_state_ind);
                 // add the state to the successors
-                successors.push_back(new_state.get());
+                successors.push_back(new_state);
                 // add the cost
                 // TODO: change this to the real cost
                 double norm = 0;

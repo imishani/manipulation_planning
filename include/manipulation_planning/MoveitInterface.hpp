@@ -55,6 +55,7 @@ public:
     bool isStateValid(const stateType &state) {
         moveit_msgs::RobotState robotState;
         robotState.joint_state.position = state;
+        robotState.joint_state.name = joint_names;
         return mPlanningScene->isStateValid(robotState, mGroupName);
     }
 
@@ -62,6 +63,12 @@ public:
     /// @param path The path to check
     /// @return True if the path is valid, false otherwise
     bool isPathValid(const pathType &path) {
+//        for (int i{0}; i < path.size(); ++i) {
+//            if (!isStateValid(path[i])) {
+//                return false;
+//            }
+//        }
+//        return true;
         // TODO: Is this ok or should i use isPathValid instead?
         return std::all_of(path.begin(), path.end(), [this](const stateType& state_val){return isStateValid(state_val);});
     }

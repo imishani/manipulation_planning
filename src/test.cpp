@@ -45,6 +45,7 @@ int main(int argc, char** argv) {
         MoveitInterface scene_interface ("manipulator_1");
         manipulationType action_type (path_mprim);
         stateType discretization {1, 1, 1, 1, 1, 1};
+        deg2rad(discretization);
         action_type.Discretization(discretization);
 
         std::shared_ptr<ManipulationActionSpace> action_space = std::make_shared<ManipulationActionSpace>(scene_interface, action_type);
@@ -59,9 +60,19 @@ int main(int argc, char** argv) {
         stateType goal_state = start_state;
 
         // change the goal state
-        goal_state[0] += 12;
+        goal_state[0] -= 12;
+        goal_state[1] -= 3;
+        goal_state[2] -= 1;
+
 
         deg2rad(start_state); deg2rad(goal_state);
+        // normalize the start and goal states
+        action_space->NormalizeAngles(start_state);
+        action_space->NormalizeAngles(goal_state);
+        std::cout << "goal state " << goal_state[0] << " " << goal_state[1] << " " << goal_state[2] << " " << goal_state[3] << " " << goal_state[4] << " " << goal_state[5] << std::endl;
+        roundStateToDiscretization(start_state, action_type.mStateDiscretization);
+        roundStateToDiscretization(goal_state, action_type.mStateDiscretization);
+        std::cout << "goal state " << goal_state[0] << " " << goal_state[1] << " " << goal_state[2] << " " << goal_state[3] << " " << goal_state[4] << " " << goal_state[5] << std::endl;
 
         ims::AStar planner(params);
         try {
@@ -73,10 +84,10 @@ int main(int argc, char** argv) {
         std::vector<ims::state*> path_;
         if (!planner.plan(path_)) {
             std::cout << "No path found" << std::endl;
+            return 0;
         }
         else {
             std::cout << "Path found" << std::endl;
-            return 0;
         }
 
         plannerStats stats = planner.reportStats();
@@ -93,5 +104,19 @@ int main(int argc, char** argv) {
             }
             std::cout << std::endl;
         }
+
+        // profile and execute the path
+        // @{
+        std::vector<stateType> traj;
+        for (auto& state : path_) {
+            traj.push_back(state->getState());
+        }
+        moveit_msgs::RobotTrajectory trajectory;
+        profileTrajectory(start_state,
+                          goal_state,
+                          traj,
+                          move_group,
+                          trajectory);
+        move_group.execute(trajectory);
         return 0;
 }
