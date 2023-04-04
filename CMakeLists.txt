@@ -7,22 +7,27 @@ project(manipulation_planning)
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
-find_package(catkin REQUIRED COMPONENTS
-  moveit_msgs
-  roscpp
-  rospy
-  std_msgs
+find_package(catkin REQUIRED
+        COMPONENTS
+         moveit_msgs
+         roscpp
+         rospy
+         std_msgs
+         moveit_ros_planning
+         moveit_ros_planning_interface
 )
 
 # TODO: FIX THIS!!!! You need to find a way to include the search package in the build
 # link to search package
-set(search_DIR /home/itamar/work/code/algorithms/search)
+
+#set(search_DIR /home/itamar/work/code/algorithms/search)
 find_package(search REQUIRED)
 
-set(search_INCLUDE_DIR ${search_DIR}/include)
+#set(search_INCLUDE_DIR ${search_DIR}/include)
 # print search package include directories
-message("search include directories: ${search_INCLUDE_DIR}")
-
+#message("search include directories: ${search_INCLUDE_DIRS}")
+#message("search include directories: ${search_INCLUDE_DIR}")
+#message("search library directories: ${search_LIBRARIES}")
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 
@@ -118,8 +123,10 @@ find_package(Eigen3 REQUIRED)
 catkin_package(
   INCLUDE_DIRS
         include
-        ${search_INCLUDE_DIR}
-  LIBRARIES manipulation_planning
+        ${search_INCLUDE_DIRS}
+  LIBRARIES
+        manipulation_planning
+        ${search_LIBRARIES}
   CATKIN_DEPENDS moveit_msgs roscpp rospy std_msgs
 #  DEPENDS system_lib
 )
@@ -131,18 +138,22 @@ catkin_package(
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
-    include
     include/manipulation_planning
     ${catkin_INCLUDE_DIRS}
-    ${search_INCLUDE_DIR}
+    ${search_INCLUDE_DIRS}
     ${EIGEN3_INCLUDE_DIR}
 )
 
 ## Declare a C++ library
- add_library(${PROJECT_NAME}_test
+ add_library(${PROJECT_NAME}
    src/test.cpp
  )
 
+target_link_libraries(${PROJECT_NAME}
+        ${catkin_LIBRARIES}
+        ${eigen_LIBRARIES}
+#        ${search_LIBRARIES}
+        )
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
 ## either from message generation or dynamic reconfigure
@@ -154,6 +165,11 @@ include_directories(
 # add_executable(${PROJECT_NAME}_node src/manipulation_planning_node.cpp)
  add_executable(${PROJECT_NAME}_node src/test.cpp)
 
+target_link_libraries(${PROJECT_NAME}_node
+        ${catkin_LIBRARIES}
+        ${eigen_LIBRARIES}
+        /usr/local/lib/${search_LIBRARIES}
+        )
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
 ## target back to the shorter version for ease of user use
@@ -164,11 +180,7 @@ include_directories(
 ## same as for the library above
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 
-## Specify libraries to link a library or executable target against
- target_link_libraries(${PROJECT_NAME}_node
-   ${catkin_LIBRARIES}
-   ${eigen_LIBRARIES}
- )
+
 
 #############
 ## Install ##

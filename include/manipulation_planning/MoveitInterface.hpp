@@ -28,7 +28,7 @@
 class MoveitInterface : public ims::SceneInterface {
 public:
     /// @brief Constructor
-    MoveitInterface(const std::string& group_name="manipulator") {
+    explicit MoveitInterface(const std::string& group_name="manipulator") {
         // planning scene monitor
         mPlanningSceneMonitor = std::make_shared<planning_scene_monitor::PlanningSceneMonitor>("robot_description");
         mPlanningSceneMonitor->startSceneMonitor();

@@ -227,6 +227,7 @@ public:
             }
             path.push_back(state);
         }
+        return path;
     }
 
     bool isStateToStateValid(const stateType& start, const stateType& end){
