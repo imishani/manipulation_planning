@@ -5,6 +5,7 @@
 #include <manipulationActionSpace.hpp>
 #include <MoveitInterface.hpp>
 #include <planners/AStar.hpp>
+#include <planners/wAStar.hpp>
 #include <common/stdHeuristics.hpp>
 
 #include <ros/ros.h>
@@ -40,7 +41,8 @@ int main(int argc, char** argv) {
         // Test AStar in configuration space
         // @{
         Heuristic heuristic = ims::jointAnglesHeuristic;
-        ims::AStarParams params(heuristic);
+        double weight = 10.0;
+        ims::wAStarParams params(heuristic, weight);
 
         MoveitInterface scene_interface ("manipulator_1");
         manipulationType action_type (path_mprim);
@@ -60,21 +62,23 @@ int main(int argc, char** argv) {
         stateType goal_state = start_state;
 
         // change the goal state
-        goal_state[0] -= 12;
-        goal_state[1] -= 3;
-        goal_state[2] -= 1;
+//        goal_state[0] += 12;
+        goal_state[1] -= 40;
+//        goal_state[2] += 60;
+//        goal_state[3] += 5;
+//        goal_state[4] += 20;
+//        goal_state[5] += 10;
 
 
         deg2rad(start_state); deg2rad(goal_state);
         // normalize the start and goal states
         action_space->NormalizeAngles(start_state);
         action_space->NormalizeAngles(goal_state);
-        std::cout << "goal state " << goal_state[0] << " " << goal_state[1] << " " << goal_state[2] << " " << goal_state[3] << " " << goal_state[4] << " " << goal_state[5] << std::endl;
         roundStateToDiscretization(start_state, action_type.mStateDiscretization);
         roundStateToDiscretization(goal_state, action_type.mStateDiscretization);
         std::cout << "goal state " << goal_state[0] << " " << goal_state[1] << " " << goal_state[2] << " " << goal_state[3] << " " << goal_state[4] << " " << goal_state[5] << std::endl;
 
-        ims::AStar planner(params);
+        ims::wAStar planner(params);
         try {
             planner.initializePlanner(action_space, start_state, goal_state);
         }

@@ -7,6 +7,8 @@
 
 #include <vector>
 #include <moveit/trajectory_processing/iterative_time_parameterization.h>
+#include <moveit/trajectory_processing/iterative_spline_parameterization.h>
+#include <moveit/trajectory_processing/time_optimal_trajectory_generation.h>
 
 /// \brief A function that dealing with the discontinuity of the joint angles
 /// \param state The state to check
@@ -56,12 +58,13 @@ bool profileTrajectory(const stateType & start,
     // Create a RobotTrajectory object
     robot_trajectory::RobotTrajectory robot_trajectory(move_group_.getRobotModel(), move_group_.getName());
     // convert the trajectory vector to trajectory message
-    moveit::core::RobotState start_state_moveit(move_group_.getRobotModel());
-    start_state_moveit.setJointGroupPositions(move_group_.getName(), start);
+    moveit::core::RobotState start_state_moveit(robot_trajectory.getRobotModel());
+    // set start_state_moveit to the start state of the trajectory
+    start_state_moveit.setJointGroupPositions(move_group_.getName(), trajectory[0]);
     robot_trajectory.setRobotTrajectoryMsg(start_state_moveit, trajectory_msg);
 
     // Trajectory processing
-    trajectory_processing::IterativeParabolicTimeParameterization time_param;
+    trajectory_processing::IterativeParabolicTimeParameterization time_param(true);
     if (!time_param.computeTimeStamps(robot_trajectory)){
         ROS_ERROR("Failed to compute timestamps for trajectory");
         return false;

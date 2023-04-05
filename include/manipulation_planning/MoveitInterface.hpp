@@ -44,6 +44,11 @@ public:
         joint_names = joint_model_group->getVariableNames();
         // get the number of joints
         num_joints = joint_names.size();
+        // print all collision objects in the scene:
+        std::vector<std::string> collision_objects = mPlanningScene->getWorld()->getObjectIds();
+        for (const auto &collision_object : collision_objects) {
+            std::cout << "Collision object: " << collision_object << std::endl;
+        }
     };
 
     /// @brief Destructor
@@ -86,7 +91,7 @@ public:
             m_kinematic_state->copyJointGroupPositions(joint_model_group, joint_state);
             return true;
         } else {
-            ROS_INFO("No IK solution found");
+//            ROS_INFO("No IK solution found");
             return false;
         }
     }

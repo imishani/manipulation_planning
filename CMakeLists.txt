@@ -146,7 +146,7 @@ include_directories(
 
 ## Declare a C++ library
  add_library(${PROJECT_NAME}
-   src/test.cpp
+         src/confspace_test.cpp
  )
 
 target_link_libraries(${PROJECT_NAME}
@@ -163,13 +163,22 @@ target_link_libraries(${PROJECT_NAME}
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 # add_executable(${PROJECT_NAME}_node src/manipulation_planning_node.cpp)
- add_executable(${PROJECT_NAME}_node src/test.cpp)
+add_executable(${PROJECT_NAME}_node src/confspace_test.cpp)
 
 target_link_libraries(${PROJECT_NAME}_node
         ${catkin_LIBRARIES}
         ${eigen_LIBRARIES}
         /usr/local/lib/${search_LIBRARIES}
         )
+
+add_executable(${PROJECT_NAME}_ws_test src/workspace_test.cpp)
+
+target_link_libraries(${PROJECT_NAME}_ws_test
+        ${catkin_LIBRARIES}
+        ${eigen_LIBRARIES}
+        /usr/local/lib/${search_LIBRARIES}
+        )
+
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
 ## target back to the shorter version for ease of user use

@@ -291,19 +291,41 @@ public:
             stateType new_state_val {};
             new_state_val.resize(curr_state_val.size());
             std::fill(new_state_val.begin(), new_state_val.end(), 0.0);
-            for (int i {0} ; i < curr_state_val.size() ; i++) {
-                new_state_val[i] = curr_state_val[i] + action[i];
-            }
+
             // if the state is in the configuration space
             if (mManipulationType->getSpaceType() == manipulationType::spaceType::ConfigurationSpace) {
+                for (int i {0} ; i < curr_state_val.size() ; i++) {
+                    new_state_val[i] = curr_state_val[i] + action[i];
+                }
                 // normalize the angles
                 NormalizeAngles(new_state_val);
-                // discretize the state
-                roundStateToDiscretization(new_state_val, mManipulationType->mStateDiscretization);
-            }
 
+            } else {
+                // if the state is in the workspace
+                // increment the xyz coordinates
+                for (int i {0} ; i < 3 ; i++) {
+                    new_state_val[i] = curr_state_val[i] + action[i];
+                }
+                // calculate the new orientation from the current orientation
+                // use eigen to convert to quaternion
+                Eigen::Quaterniond q_curr;
+                q_curr = Eigen::AngleAxisd(curr_state_val[5], Eigen::Vector3d::UnitZ())
+                         * Eigen::AngleAxisd(curr_state_val[4], Eigen::Vector3d::UnitY())
+                         * Eigen::AngleAxisd(curr_state_val[3], Eigen::Vector3d::UnitX());
+                Eigen::Quaterniond q_action = Eigen::AngleAxisd(action[5], Eigen::Vector3d::UnitX())
+                                              * Eigen::AngleAxisd(action[4], Eigen::Vector3d::UnitY())
+                                              * Eigen::AngleAxisd(action[3], Eigen::Vector3d::UnitX());
+                Eigen::Quaterniond q_new_total = q_curr * q_action;
+                // convert back to rpy
+                Eigen::Vector3d rpy_new = q_new_total.toRotationMatrix().eulerAngles(2, 1, 0);
+                // set the new state
+                new_state_val[3] = rpy_new[2]; new_state_val[4] = rpy_new[1]; new_state_val[5] = rpy_new[0];
+            }
+            // discretize the state
+            roundStateToDiscretization(new_state_val, mManipulationType->mStateDiscretization);
             // check if the state is valid by linear interpolation
-            if (isStateToStateValid(curr_state_val, new_state_val)) {
+//            if (isStateToStateValid(curr_state_val, new_state_val)) {
+            if (isStateValid(new_state_val)) {
                 // create a new state
                 int next_state_ind = getOrCreateState(new_state_val);
                 auto new_state = this->getState(next_state_ind);
