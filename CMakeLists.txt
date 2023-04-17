@@ -15,6 +15,7 @@ find_package(catkin REQUIRED
          std_msgs
          moveit_ros_planning
          moveit_ros_planning_interface
+         eigen_conversions
 )
 
 # TODO: FIX THIS!!!! You need to find a way to include the search package in the build
@@ -146,8 +147,7 @@ include_directories(
 
 ## Declare a C++ library
  add_library(${PROJECT_NAME}
-         src/confspace_test.cpp
- )
+         src/confspace_test.cpp)
 
 target_link_libraries(${PROJECT_NAME}
         ${catkin_LIBRARIES}
@@ -173,11 +173,13 @@ target_link_libraries(${PROJECT_NAME}_node
 
 add_executable(${PROJECT_NAME}_ws_test src/workspace_test.cpp)
 
+
 target_link_libraries(${PROJECT_NAME}_ws_test
         ${catkin_LIBRARIES}
         ${eigen_LIBRARIES}
         /usr/local/lib/${search_LIBRARIES}
         )
+
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the

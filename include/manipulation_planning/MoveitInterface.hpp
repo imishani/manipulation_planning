@@ -13,6 +13,7 @@
 #include <ros/ros.h>
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/planning_scene_monitor/planning_scene_monitor.h>
+#include <moveit/planning_scene_interface/planning_scene_interface.h>
 
 // project includes
 #include <common/types.hpp>
@@ -34,6 +35,11 @@ public:
         mPlanningSceneMonitor->startSceneMonitor();
         mPlanningSceneMonitor->startStateMonitor();
         mPlanningSceneMonitor->startWorldGeometryMonitor();
+        mPlanningSceneMonitor->requestPlanningSceneState();
+        ros::Duration(1.0).sleep();
+//        mPlanningSceneMonitor->startPublishingPlanningScene(planning_scene_monitor::PlanningSceneMonitor::UPDATE_SCENE,
+//                                                            "planning_scene");
+//        mPlanningSceneMonitor->providePlanningSceneService();
         mPlanningScene = mPlanningSceneMonitor->getPlanningScene();
         mGroupName = group_name;
 
@@ -44,10 +50,14 @@ public:
         joint_names = joint_model_group->getVariableNames();
         // get the number of joints
         num_joints = joint_names.size();
-        // print all collision objects in the scene:
-        std::vector<std::string> collision_objects = mPlanningScene->getWorld()->getObjectIds();
-        for (const auto &collision_object : collision_objects) {
-            std::cout << "Collision object: " << collision_object << std::endl;
+
+        auto object_names = mPlanningScene->getWorld()->getObjectIds();
+
+        for (auto& obj : object_names) {
+            std::cout << "Object name: " << obj << std::endl;
+        }
+        if (object_names.empty()) {
+            std::cout << "No collision objects in the scene" << std::endl;
         }
     };
 
@@ -59,8 +69,10 @@ public:
     /// @return True if the state is valid, false otherwise
     bool isStateValid(const stateType &state) {
         moveit_msgs::RobotState robotState;
+        // copy the values
         robotState.joint_state.position = state;
         robotState.joint_state.name = joint_names;
+        // check if the state is valid
         return mPlanningScene->isStateValid(robotState, mGroupName);
     }
 
@@ -68,12 +80,6 @@ public:
     /// @param path The path to check
     /// @return True if the path is valid, false otherwise
     bool isPathValid(const pathType &path) {
-//        for (int i{0}; i < path.size(); ++i) {
-//            if (!isStateValid(path[i])) {
-//                return false;
-//            }
-//        }
-//        return true;
         // TODO: Is this ok or should i use isPathValid instead?
         return std::all_of(path.begin(), path.end(), [this](const stateType& state_val){return isStateValid(state_val);});
     }
@@ -143,6 +149,7 @@ public:
 
     planning_scene_monitor::PlanningSceneMonitorPtr mPlanningSceneMonitor;
     std::shared_ptr<planning_scene::PlanningScene> mPlanningScene;
+    std::shared_ptr<moveit::planning_interface::PlanningSceneInterface> mPlanningSceneInterface;
     std::string mGroupName;
     moveit::core::RobotStatePtr m_kinematic_state;
     const moveit::core::JointModelGroup *joint_model_group;

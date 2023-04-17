@@ -77,6 +77,15 @@ struct manipulationType : ims::actionType {
 
     void Discretization(stateType& state_des) override {
         mStateDiscretization = state_des;
+   }
+
+   /// @brief In case of planning in the workspace, create a kdtree object for discretization
+   /// @param KDTree The kdtree object
+   /// @param psiVector The psi vector for discretization
+    void DiscretizationWS(KDTree<Eigen::Vector3d>* KDTree,
+                              std::vector<double>& psiVector) {
+          mKDTree = KDTree;
+          mPsiVector = psiVector;
     }
 
     static std::vector<action> readMPfile(const std::string& file_name) {
@@ -85,7 +94,7 @@ struct manipulationType : ims::actionType {
         std::vector<std::vector<double>> mprim;
         int i {0};
         while (std::getline(file, line)) {
-            if (i == 0){
+            if (i == 0) {
                 i++;
                 continue;
             }
@@ -93,8 +102,6 @@ struct manipulationType : ims::actionType {
             std::vector<double> line_;
             double num;
             while (iss >> num) {
-                // convert from degrees to radians
-                num = num * M_PI / 180;
                 line_.push_back(num);
             }
             mprim.push_back(line_);
@@ -113,6 +120,10 @@ struct manipulationType : ims::actionType {
                         case spaceType::ConfigurationSpace:{
                             auto mprim = readMPfile(mPrimFileName);
                             for (auto& action_ : mprim) {
+                                // convert from degrees to radians
+                                for (auto& num : action_) {
+                                    num = num * M_PI / 180;
+                                }
                                 mActions->push_back(action_);
                                 // get the opposite action
                                 for (auto& num : action_) {
@@ -122,17 +133,41 @@ struct manipulationType : ims::actionType {
                             }
                         }
                             break;
-                        case spaceType::WorkSpace:
-                            for (int i {0} ; i < mStateDiscretization.size() ; i++) {
-                                // create an action with size of the state
-                                action action_(mStateDiscretization.size());
-                                std::fill(action_.begin(), action_.end(), 0);
-                                action_[i] = mStateDiscretization[i];
-                                mActions->push_back(action_);
-                                if (mStateDiscretization[i] != 0){
-                                    action_[i] = -mStateDiscretization[i];
-                                    mActions->push_back(action_);
+                        case spaceType::WorkSpace:{
+                            auto mprim = readMPfile(mPrimFileName);
+                            for (auto& action_ : mprim) {
+                                // make an inverted action
+                                action inverted_action(action_.size());
+                                inverted_action[0] = -action_[0]; inverted_action[1] = -action_[1]; inverted_action[2] = -action_[2];
+                                inverted_action[3] = -action_[3]; inverted_action[4] = -action_[4]; inverted_action[5] = -action_[5];
+                                // convert from euler angles to quaternions
+                                tf::Quaternion q;
+                                q.setRPY(action_[3]*M_PI / 180, action_[4]*M_PI / 180, action_[5]*M_PI / 180);
+                                // check from antipodal quaternions
+                                int sign = 1;
+                                if (q.w() < 0) {
+                                    sign = -1;
                                 }
+                                action_.resize(7);
+                                action_[3] = sign*q.x();
+                                action_[4] = sign*q.y();
+                                action_[5] = sign*q.z();
+                                action_[6] = sign*q.w();
+                                mActions->push_back(action_);
+                                // get the opposite action
+                                q.setRPY(inverted_action[3]*M_PI / 180, inverted_action[4]*M_PI / 180, inverted_action[5]*M_PI / 180);
+                                // check from antipodal quaternions
+                                sign = 1;
+                                if (q.w() < 0) {
+                                    sign = -1;
+                                }
+                                inverted_action.resize(7);
+                                inverted_action[3] = sign*q.x();
+                                inverted_action[4] = sign*q.y();
+                                inverted_action[5] = sign*q.z();
+                                inverted_action[6] = sign*q.w();
+                                mActions->push_back(inverted_action);
+                            }
                             }
                             break;
                     }
@@ -153,6 +188,8 @@ struct manipulationType : ims::actionType {
     spaceType mSpaceType;
     std::string mPrimFileName;
     std::shared_ptr<std::vector<action>> mActions;
+    KDTree<Eigen::Vector3d>* mKDTree;
+    std::vector<double> mPsiVector;
 };
 
 
@@ -166,9 +203,11 @@ private:
     std::shared_ptr<MoveitInterface> mMoveitInterface;
     /// @brief joint limits
     std::vector<std::pair<double, double>> mJointLimits;
+    /// @brief Joint states seed
+//    std::vector<double> mJointStatesSeed {0, 0, 0, 0, 0, 0};
 
 public:
-    /// @brief Constractor
+    /// @brief Constructor
     /// @param moveitInterface The moveit interface
     /// @param manipulationType The manipulation type
     ManipulationActionSpace(const MoveitInterface& env,
@@ -186,10 +225,16 @@ public:
                 return mMoveitInterface->isStateValid(state_val);
             case manipulationType::spaceType::WorkSpace:
                 geometry_msgs::Pose pose;
-                pose.position.x = state_val[0];
-                pose.position.y = state_val[1];
-                pose.position.z = state_val[2];
-                pose.orientation = tf::createQuaternionMsgFromRollPitchYaw(state_val[3], state_val[4], state_val[5]);
+                pose.position.x = state_val[0]; pose.position.y = state_val[1]; pose.position.z = state_val[2];
+                // If using hopf coordinates as the state, convert to quaternions
+                Eigen::Quaterniond q;
+                Eigen::Vector3d Hopf(state_val[3], state_val[4], state_val[5]);
+                hopfToQuaternion(Hopf, q);
+                pose.orientation.x = q.x(); pose.orientation.y = q.y();
+                pose.orientation.z = q.z(); pose.orientation.w = q.w();
+                // If using quaternion coordinates as the state
+//                pose.orientation.x = state_val[3]; pose.orientation.y = state_val[4];
+//                pose.orientation.z = state_val[5]; pose.orientation.w = state_val[6];
                 stateType joint_state;
                 bool succ = mMoveitInterface->calculateIK(pose, joint_state);
                 if (!succ) {
@@ -210,6 +255,7 @@ public:
     /// @return The interpolated path
     static pathType interpolatePath(const stateType& start, const stateType& end,
                              const double resolution=0.005) {
+        // TODO: Currently only works for configuration space
         assert(start.size() == end.size());
         pathType path;
         // get the maximum distance between the two states
@@ -244,12 +290,19 @@ public:
                 return mMoveitInterface->isPathValid(path);
             case manipulationType::spaceType::WorkSpace:
                 pathType poses;
-                for (auto state : path) {
+                for (auto& state : path) {
                     geometry_msgs::Pose pose;
-                    pose.position.x = state[0];
-                    pose.position.y = state[1];
-                    pose.position.z = state[2];
-                    pose.orientation = tf::createQuaternionMsgFromRollPitchYaw(state[3], state[4], state[5]);
+                    pose.position.x = state[0]; pose.position.y = state[1]; pose.position.z = state[2];
+                    // If using hopf coordinates as the state, convert to quaternions
+                    Eigen::Quaterniond q;
+                    Eigen::Vector3d Hopf(state[3], state[4], state[5]);
+                    hopfToQuaternion(Hopf, q);
+                    pose.orientation.x = q.x(); pose.orientation.y = q.y();
+                    pose.orientation.z = q.z(); pose.orientation.w = q.w();
+                    // If using quaternion coordinates as the state
+//                pose.orientation.x = state_val[3]; pose.orientation.y = state_val[4];
+//                pose.orientation.z = state_val[5]; pose.orientation.w = state_val[6];
+
                     stateType joint_state;
                     bool succ = mMoveitInterface->calculateIK(pose, joint_state);
                     if (!succ) {
@@ -277,9 +330,88 @@ public:
         }
     }
 
-    bool getSuccessors(int curr_state_ind,
-                       std::vector<ims::state*>& successors,
-                       std::vector<double>& costs) override {
+
+    bool getSuccessorsWs(int curr_state_ind,
+                         std::vector<ims::state*>& successors,
+                         std::vector<double>& costs) {
+        // get the current state
+        auto curr_state = this->getState(curr_state_ind);
+        auto curr_state_val = curr_state->getState();
+        std::cout << "curr_state_val: " << curr_state_val[0] << ", " << curr_state_val[1] << ", " << curr_state_val[2] << ", " << curr_state_val[3] << ", " << curr_state_val[4] << ", " << curr_state_val[5] << std::endl;
+        // get the actions
+        auto actions = mManipulationType->getActions();
+        Eigen::Quaterniond q_curr;
+        // If using the hopf coordinates as the state
+        Eigen::Vector3d Hopf_curr = {curr_state_val[3], curr_state_val[4], curr_state_val[5]};
+        hopfToQuaternion(Hopf_curr, q_curr);
+
+        // If using the quaternion coordinates as the state
+//        q_curr = {curr_state_val[6], curr_state_val[3], curr_state_val[4], curr_state_val[5]};
+        // get the successors
+        stateType new_state_val;
+        for (auto action : actions) {
+            // create a new state in the length of the current state
+            new_state_val.resize(3);
+            // increment the xyz coordinates
+            for (int i {0} ; i < 3 ; i++) {
+                new_state_val[i] = curr_state_val[i] + action[i];
+            }
+            // round the xyz coordinates
+            roundStateToDiscretization(new_state_val, mManipulationType->mStateDiscretization);
+
+            Eigen::Quaterniond q_action {action[6], action[3], action[4], action[5]};
+            Eigen::Quaterniond q_new_total = q_curr * q_action;
+            q_new_total.normalize();
+            // make sure the quaternion is antipodal
+            if (q_new_total.w() < 0) {
+                q_new_total.x() = -q_new_total.x();
+                q_new_total.y() = -q_new_total.y();
+                q_new_total.z() = -q_new_total.z();
+                q_new_total.w() = -q_new_total.w();
+            }
+
+            // If using hopf coordinates as the state
+            Eigen::Vector3d Hopf_new;
+            quaternionToHopf(q_new_total, Hopf_new);
+            getClosestHopf(Hopf_new, mManipulationType->mKDTree, mManipulationType->mPsiVector);
+            new_state_val.resize(6);
+            new_state_val[3] = Hopf_new[0]; new_state_val[4] = Hopf_new[1]; new_state_val[5] = Hopf_new[2];
+            // If using quaternion coordinates as the state
+//            getClosestQuaternion(quat_proj, mManipulationType->mKDTree, mManipulationType->mPsiVector);
+//            // normalize the quaternion
+//            std::vector<double> quat_proj {q_curr.x(), q_curr.y(), q_curr.z(), q_curr.w()};
+//            new_state_val[3] = quat_proj[0]; new_state_val[4] = quat_proj[1];
+//            new_state_val[5] = quat_proj[2]; new_state_val[6] = quat_proj[3];
+
+
+            // check if the state is valid by linear interpolation
+//            if (isStateToStateValid(curr_state_val, new_state_val)) {
+            if (isStateValid(new_state_val)) {
+                // create a new state
+                int next_state_ind = getOrCreateState(new_state_val);
+                auto new_state = this->getState(next_state_ind);
+                // add the state to the successors
+                successors.push_back(new_state);
+                // add the cost
+                double cost {0}; int ind {0};
+                for (double i : action) {
+                    // the first three elements are the xyz coordinates and the last four are the quaternion coordinates
+                    if (ind < 3) {
+                        cost += i * i;
+                    } else {
+                        cost += i * i * 0.1; // TODO: change this to the real cost
+                    }
+                    ind++;
+                }
+                costs.push_back(cost);
+            }
+        }
+        return true;
+    }
+
+    bool getSuccessorsCs(int curr_state_ind,
+                         std::vector<ims::state*>& successors,
+                         std::vector<double>& costs) {
         // get the current state
         auto curr_state = this->getState(curr_state_ind);
         auto curr_state_val = curr_state->getState();
@@ -292,39 +424,16 @@ public:
             new_state_val.resize(curr_state_val.size());
             std::fill(new_state_val.begin(), new_state_val.end(), 0.0);
 
-            // if the state is in the configuration space
-            if (mManipulationType->getSpaceType() == manipulationType::spaceType::ConfigurationSpace) {
-                for (int i {0} ; i < curr_state_val.size() ; i++) {
-                    new_state_val[i] = curr_state_val[i] + action[i];
-                }
-                // normalize the angles
-                NormalizeAngles(new_state_val);
-
-            } else {
-                // if the state is in the workspace
-                // increment the xyz coordinates
-                for (int i {0} ; i < 3 ; i++) {
-                    new_state_val[i] = curr_state_val[i] + action[i];
-                }
-                // calculate the new orientation from the current orientation
-                // use eigen to convert to quaternion
-                Eigen::Quaterniond q_curr;
-                q_curr = Eigen::AngleAxisd(curr_state_val[5], Eigen::Vector3d::UnitZ())
-                         * Eigen::AngleAxisd(curr_state_val[4], Eigen::Vector3d::UnitY())
-                         * Eigen::AngleAxisd(curr_state_val[3], Eigen::Vector3d::UnitX());
-                Eigen::Quaterniond q_action = Eigen::AngleAxisd(action[5], Eigen::Vector3d::UnitX())
-                                              * Eigen::AngleAxisd(action[4], Eigen::Vector3d::UnitY())
-                                              * Eigen::AngleAxisd(action[3], Eigen::Vector3d::UnitX());
-                Eigen::Quaterniond q_new_total = q_curr * q_action;
-                // convert back to rpy
-                Eigen::Vector3d rpy_new = q_new_total.toRotationMatrix().eulerAngles(2, 1, 0);
-                // set the new state
-                new_state_val[3] = rpy_new[2]; new_state_val[4] = rpy_new[1]; new_state_val[5] = rpy_new[0];
+            for (int i {0} ; i < curr_state_val.size() ; i++) {
+                new_state_val[i] = curr_state_val[i] + action[i];
             }
+            // normalize the angles
+            NormalizeAngles(new_state_val);
             // discretize the state
             roundStateToDiscretization(new_state_val, mManipulationType->mStateDiscretization);
+
             // check if the state is valid by linear interpolation
-//            if (isStateToStateValid(curr_state_val, new_state_val)) {
+            // if (isStateToStateValid(curr_state_val, new_state_val)) {
             if (isStateValid(new_state_val)) {
                 // create a new state
                 int next_state_ind = getOrCreateState(new_state_val);
@@ -342,9 +451,16 @@ public:
         }
         return true;
     }
+
+    bool getSuccessors(int curr_state_ind,
+                       std::vector<ims::state*>& successors,
+                       std::vector<double>& costs) override {
+        if (mManipulationType->getSpaceType() == manipulationType::spaceType::ConfigurationSpace) {
+            return getSuccessorsCs(curr_state_ind, successors, costs);
+        } else {
+            return getSuccessorsWs(curr_state_ind, successors, costs);
+        }
+    }
 };
-
-
-
 
 #endif //MANIPULATION_PLANNING_MANIPULATIONACTIONSPACE_HPP
