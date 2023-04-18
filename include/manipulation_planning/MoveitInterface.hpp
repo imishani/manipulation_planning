@@ -113,7 +113,7 @@ public:
         // set the pose
         // TODO: check if its really seeding
         m_kinematic_state->setJointGroupPositions(joint_model_group, seed);
-        if (m_kinematic_state->setFromIK(joint_model_group, pose)) {
+        if (m_kinematic_state->setFromIK(joint_model_group, pose, 0.01)) {
             // get the joint values
             m_kinematic_state->copyJointGroupPositions(joint_model_group, joint_state);
             return true;

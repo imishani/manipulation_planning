@@ -79,14 +79,6 @@ struct manipulationType : ims::actionType {
         mStateDiscretization = state_des;
    }
 
-   /// @brief In case of planning in the workspace, create a kdtree object for discretization
-   /// @param KDTree The kdtree object
-   /// @param psiVector The psi vector for discretization
-    void DiscretizationWS(KDTree<Eigen::Vector3d>* KDTree,
-                              std::vector<double>& psiVector) {
-          mKDTree = KDTree;
-          mPsiVector = psiVector;
-    }
 
     static std::vector<action> readMPfile(const std::string& file_name) {
         std::ifstream file(file_name);
@@ -188,8 +180,6 @@ struct manipulationType : ims::actionType {
     spaceType mSpaceType;
     std::string mPrimFileName;
     std::shared_ptr<std::vector<action>> mActions;
-    KDTree<Eigen::Vector3d>* mKDTree;
-    std::vector<double> mPsiVector;
 };
 
 
@@ -226,15 +216,11 @@ public:
             case manipulationType::spaceType::WorkSpace:
                 geometry_msgs::Pose pose;
                 pose.position.x = state_val[0]; pose.position.y = state_val[1]; pose.position.z = state_val[2];
-                // If using hopf coordinates as the state, convert to quaternions
+                // Euler angles to quaternion
                 Eigen::Quaterniond q;
-                Eigen::Vector3d Hopf(state_val[3], state_val[4], state_val[5]);
-                hopfToQuaternion(Hopf, q);
+                from_euler_zyx(state_val[5], state_val[4], state_val[3], q);
                 pose.orientation.x = q.x(); pose.orientation.y = q.y();
                 pose.orientation.z = q.z(); pose.orientation.w = q.w();
-                // If using quaternion coordinates as the state
-//                pose.orientation.x = state_val[3]; pose.orientation.y = state_val[4];
-//                pose.orientation.z = state_val[5]; pose.orientation.w = state_val[6];
                 stateType joint_state;
                 bool succ = mMoveitInterface->calculateIK(pose, joint_state);
                 if (!succ) {
@@ -293,16 +279,11 @@ public:
                 for (auto& state : path) {
                     geometry_msgs::Pose pose;
                     pose.position.x = state[0]; pose.position.y = state[1]; pose.position.z = state[2];
-                    // If using hopf coordinates as the state, convert to quaternions
+                    // Euler angles to quaternion
                     Eigen::Quaterniond q;
-                    Eigen::Vector3d Hopf(state[3], state[4], state[5]);
-                    hopfToQuaternion(Hopf, q);
+                    from_euler_zyx(state[5], state[4], state[3], q);
                     pose.orientation.x = q.x(); pose.orientation.y = q.y();
                     pose.orientation.z = q.z(); pose.orientation.w = q.w();
-                    // If using quaternion coordinates as the state
-//                pose.orientation.x = state_val[3]; pose.orientation.y = state_val[4];
-//                pose.orientation.z = state_val[5]; pose.orientation.w = state_val[6];
-
                     stateType joint_state;
                     bool succ = mMoveitInterface->calculateIK(pose, joint_state);
                     if (!succ) {
@@ -337,52 +318,31 @@ public:
         // get the current state
         auto curr_state = this->getState(curr_state_ind);
         auto curr_state_val = curr_state->getState();
-        std::cout << "curr_state_val: " << curr_state_val[0] << ", " << curr_state_val[1] << ", " << curr_state_val[2] << ", " << curr_state_val[3] << ", " << curr_state_val[4] << ", " << curr_state_val[5] << std::endl;
         // get the actions
         auto actions = mManipulationType->getActions();
+        // convert to quaternion
         Eigen::Quaterniond q_curr;
-        // If using the hopf coordinates as the state
-        Eigen::Vector3d Hopf_curr = {curr_state_val[3], curr_state_val[4], curr_state_val[5]};
-        hopfToQuaternion(Hopf_curr, q_curr);
-
+        from_euler_zyx(curr_state_val[5], curr_state_val[4], curr_state_val[3], q_curr);
         // If using the quaternion coordinates as the state
 //        q_curr = {curr_state_val[6], curr_state_val[3], curr_state_val[4], curr_state_val[5]};
         // get the successors
         stateType new_state_val;
         for (auto action : actions) {
             // create a new state in the length of the current state
-            new_state_val.resize(3);
+            new_state_val.resize(curr_state_val.size());
             // increment the xyz coordinates
             for (int i {0} ; i < 3 ; i++) {
                 new_state_val[i] = curr_state_val[i] + action[i];
             }
-            // round the xyz coordinates
-            roundStateToDiscretization(new_state_val, mManipulationType->mStateDiscretization);
 
             Eigen::Quaterniond q_action {action[6], action[3], action[4], action[5]};
-            Eigen::Quaterniond q_new_total = q_curr * q_action;
-            q_new_total.normalize();
-            // make sure the quaternion is antipodal
-            if (q_new_total.w() < 0) {
-                q_new_total.x() = -q_new_total.x();
-                q_new_total.y() = -q_new_total.y();
-                q_new_total.z() = -q_new_total.z();
-                q_new_total.w() = -q_new_total.w();
-            }
+            auto q_new = q_curr * q_action;
 
-            // If using hopf coordinates as the state
-            Eigen::Vector3d Hopf_new;
-            quaternionToHopf(q_new_total, Hopf_new);
-            getClosestHopf(Hopf_new, mManipulationType->mKDTree, mManipulationType->mPsiVector);
-            new_state_val.resize(6);
-            new_state_val[3] = Hopf_new[0]; new_state_val[4] = Hopf_new[1]; new_state_val[5] = Hopf_new[2];
-            // If using quaternion coordinates as the state
-//            getClosestQuaternion(quat_proj, mManipulationType->mKDTree, mManipulationType->mPsiVector);
-//            // normalize the quaternion
-//            std::vector<double> quat_proj {q_curr.x(), q_curr.y(), q_curr.z(), q_curr.w()};
-//            new_state_val[3] = quat_proj[0]; new_state_val[4] = quat_proj[1];
-//            new_state_val[5] = quat_proj[2]; new_state_val[6] = quat_proj[3];
-
+            // convert the quaternion to euler angles
+            get_euler_zyx(q_new, new_state_val[5], new_state_val[4], new_state_val[3]);
+            normalize_euler_zyx(new_state_val[5], new_state_val[4], new_state_val[3]);
+            // discretize
+            roundStateToDiscretization(new_state_val, mManipulationType->mStateDiscretization);
 
             // check if the state is valid by linear interpolation
 //            if (isStateToStateValid(curr_state_val, new_state_val)) {
@@ -393,16 +353,14 @@ public:
                 // add the state to the successors
                 successors.push_back(new_state);
                 // add the cost
-                double cost {0}; int ind {0};
-                for (double i : action) {
-                    // the first three elements are the xyz coordinates and the last four are the quaternion coordinates
-                    if (ind < 3) {
-                        cost += i * i;
-                    } else {
-                        cost += i * i * 0.1; // TODO: change this to the real cost
-                    }
-                    ind++;
+                double cost {0};
+                for (int i {0} ; i < 3 ; i++) {
+                    cost += action[i]*action[i];
                 }
+                // add the cost of the rotation which is quaternion
+                double r, p, y;
+                get_euler_zyx(q_action, y, p, r);
+                cost += r*r + p*p + y*y;
                 costs.push_back(cost);
             }
         }

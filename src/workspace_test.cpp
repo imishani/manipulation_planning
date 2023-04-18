@@ -46,37 +46,20 @@ int main(int argc, char** argv) {
 
     // Test AStar in configuration space
     // @{
-    auto* heuristic = new ims::SE3HeuristicHopf;
-    double weight = 0.0;
+    auto* heuristic = new ims::SE3HeuristicRPY;
+    double weight = 20.0;
     ims::wAStarParams params(heuristic, weight);
 
     MoveitInterface scene_interface ("manipulator_1");
     manipulationType action_type(path_mprim);
 
-    stateType discretization {0.02, 0.02, 0.02};
+    stateType discretization {0.02, 0.02, 0.02, M_PI/180, M_PI/180, M_PI/180};
     action_type.Discretization(discretization);
     action_type.setSpaceType(manipulationType::spaceType::WorkSpace);
 
-    std::vector<std::vector<double>> hopf_points = readPointsFromFile(full_path.string() + "/config/hopf_dist_samples_healpix.txt");
-    // create kdtree obj
-    // first convert to std::vector<Eigen::Vector2d>
-    std::vector<Eigen::Vector3d> hopf_points_eigen;
-    std::vector<double> psi_vec;
-    for (auto& point : hopf_points) {
-        Eigen::Vector3d point_eigen;
-        point_eigen << point[0], point[1], point[2];
-        hopf_points_eigen.push_back(point_eigen);
-        psi_vec.push_back(point[2]);
-    }
-
-    auto kdtree = createKDTree(hopf_points_eigen);
-    action_type.DiscretizationWS(kdtree, psi_vec);
-
     std::shared_ptr<ManipulationActionSpace> action_space = std::make_shared<ManipulationActionSpace>(scene_interface, action_type);
 
-    // I using quaternion for the orientation:
-//    stateType start_state {0, 0, 0, 0, 0, 0, 0};
-    // If using hopf coordinates:
+
     stateType start_state {0, 0, 0, 0, 0, 0};
     // get the current end effector pose
     geometry_msgs::PoseStamped current_pose = move_group.getCurrentPose();  // "arm_1tool0"
@@ -84,79 +67,47 @@ int main(int argc, char** argv) {
     start_state[0] = current_pose.pose.position.x;
     start_state[1] = current_pose.pose.position.y;
     start_state[2] = current_pose.pose.position.z;
-//    start_state[3] = current_pose.pose.orientation.x;
-//    start_state[4] = current_pose.pose.orientation.y;
-//    start_state[5] = current_pose.pose.orientation.z;
-//    start_state[6] = current_pose.pose.orientation.w;
+
     // If using hopf coordinates:
     Eigen::Quaterniond current_pose_eigen;
     tf::quaternionMsgToEigen(current_pose.pose.orientation, current_pose_eigen);
-    Eigen::Vector3d start_hopf;
-    quaternionToHopf(current_pose_eigen, start_hopf);
-    start_state[3] = start_hopf[0]; start_state[4] = start_hopf[1]; start_state[5] = start_hopf[2];
 
-    std::cout << "current state ";
-    for (auto& s_ : start_state){
-        std::cout << s_ << " ";
-    }
-    std::cout << std::endl;
+    get_euler_zyx(current_pose_eigen, start_state[5], start_state[4], start_state[3]);
+    normalize_euler_zyx(start_state[5], start_state[4], start_state[3]);
 
     stateType goal_state = start_state;
 
     // change the goal state
-//    goal_state[0] -= 0.2;
-//    goal_state[1] -= 0.16;
-//    goal_state[2] -= 0.08;
+    goal_state[0] = 0.0;
+    goal_state[1] = 0.3;// 0.8;
+    goal_state[2] = 1.1;// 1.28;
+    goal_state[3] = 0.1; //4*M_PI/180;
+    goal_state[4] = 0.0; //10*M_PI/180;
+    goal_state[5] = 0.3;
+
+    // discrtize the goal state
+    for (int i = 0; i < 6; i++) {
+        goal_state[i] = std::round(goal_state[i] / discretization[i]) * discretization[i];
+        start_state[i] = std::round(start_state[i] / discretization[i]) * discretization[i];
+    }
+    Eigen::Quaterniond start_pose_eigen;
+    from_euler_zyx(start_state[5], start_state[4], start_state[3], start_pose_eigen);
+    geometry_msgs::Pose pose_check;
+    pose_check.position.x = start_state[0]; pose_check.position.y = start_state[1]; pose_check.position.z = start_state[2];
+    tf::quaternionEigenToMsg(start_pose_eigen, pose_check.orientation);
 
 
-    Eigen::Quaterniond quat;
-    quat = Eigen::AngleAxisd(0.5, Eigen::Vector3d::UnitZ())
-              * Eigen::AngleAxisd(0.0, Eigen::Vector3d::UnitY())
-              * Eigen::AngleAxisd(0.0, Eigen::Vector3d::UnitX());
-    Eigen::Quaterniond goal_quat;
-    goal_quat = current_pose_eigen * quat;
-//    goal_state[3] = goal_quat.x();
-//    goal_state[4] = goal_quat.y();
-//    goal_state[5] = goal_quat.z();
-//    goal_state[6] = goal_quat.w();
-    // If using hopf coordinates:
-    Eigen::Vector3d goal_hopf;
-    quaternionToHopf(goal_quat, goal_hopf);
-    goal_state[3] = goal_hopf[0]; goal_state[4] = goal_hopf[1]; goal_state[5] = goal_hopf[2];
+    std::cout << "rounded pose " << pose_check.position.x << " " << pose_check.position.y << " " << pose_check.position.z << " "
+    << pose_check.orientation.x << " " << pose_check.orientation.y << " " << pose_check.orientation.z << " " << pose_check.orientation.w << std::endl;
 
-    std::vector<double> start_state_vec(start_state.begin(), start_state.begin() + 3);
-    std::vector<double> goal_state_vec(goal_state.begin(), goal_state.begin() + 3);
-    roundStateToDiscretization(start_state_vec, discretization);
-    roundStateToDiscretization(goal_state_vec, discretization);
-    // copy the sliced vector to the start and goal state
-    std::copy(start_state_vec.begin(), start_state_vec.end(), start_state.begin());
-    std::copy(goal_state_vec.begin(), goal_state_vec.end(), goal_state.begin());
-    // lets do the quaternions:
-//    std::vector<double> start_state_quat(start_state.begin() + 3, start_state.begin() + 6);
-//    std::vector<double> goal_state_quat(goal_state.begin() + 3, goal_state.begin() + 6);
-//    getClosestQuaternion(start_state_quat, action_type.mKDTree, action_type.mPsiVector);
-//    std::copy(start_state_quat.begin(), start_state_quat.end(), start_state.begin() + 3);
-//    getClosestQuaternion(goal_state_quat, action_type.mKDTree, action_type.mPsiVector);
-//    std::copy(goal_state_quat.begin(), goal_state_quat.end(), goal_state.begin() + 3);
-    std::vector<int> check;
-    query_disc(std::vector<double>(start_hopf[0], start_hopf[1]), M_PI/ 16.0, check);
-    std::cout << action_type.mKDTree->getData()[check[0]] << std::endl;
-    std::cout << action_type.mKDTree->getData()[check[1]] << std::endl;
-    std::cout << action_type.mKDTree->getData()[check[2]] << std::endl;
-    std::cout << action_type.mKDTree->getData()[check[3]] << std::endl;
+    std::cout << "original pose " << current_pose.pose.position.x << " " << current_pose.pose.position.y << " " << current_pose.pose.position.z << " "
+    << current_pose.pose.orientation.x << " " << current_pose.pose.orientation.y << " " << current_pose.pose.orientation.z << " " << current_pose.pose.orientation.w << std::endl;
 
-
-    // If using hopf coordinates:
-    getClosestHopf(start_hopf, action_type.mKDTree, action_type.mPsiVector);
-    getClosestHopf(goal_hopf, action_type.mKDTree, action_type.mPsiVector);
-    start_state[3] = start_hopf[0]; start_state[4] = start_hopf[1]; start_state[5] = start_hopf[2];
-    goal_state[3] = goal_hopf[0]; goal_state[4] = goal_hopf[1]; goal_state[5] = goal_hopf[2];
-
-// check if the inverse kinematics solution exists for the current pose and check if the solution is equal to the current joint state
+    // check if the inverse kinematics solution exists for the current pose and check if the solution is equal to the current joint state
     std::vector<double> current_joint_state = move_group.getCurrentJointValues();
     std::vector<double> ik_solution;
 
-    if (!scene_interface.calculateIK(current_pose.pose, current_joint_state, ik_solution)) {
+    if (!scene_interface.calculateIK(pose_check, current_joint_state, ik_solution)) {
         std::cout << "No IK solution for the current pose" << std::endl;
         return 0;
     }
@@ -211,15 +162,8 @@ int main(int argc, char** argv) {
         pose.position.x = state[0];
         pose.position.y = state[1];
         pose.position.z = state[2];
-        // If using quaternion coordinates:
-//        pose.orientation.x = state[3];
-//        pose.orientation.y = state[4];
-//        pose.orientation.z = state[5];
-//        pose.orientation.w = state[6];
-        // If using hopf coordinates:
-        Eigen::Vector3d hopf(state[3], state[4], state[5]);
         Eigen::Quaterniond quat_res;
-        hopfToQuaternion(hopf, quat_res);
+        from_euler_zyx(state[5], state[4], state[3], quat_res);
         pose.orientation.x = quat_res.x(); pose.orientation.y = quat_res.y();
         pose.orientation.z = quat_res.z(); pose.orientation.w = quat_res.w();
         waypoints.push_back(pose);
