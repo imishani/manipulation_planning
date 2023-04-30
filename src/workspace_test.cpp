@@ -2,8 +2,8 @@
 // Created by itamar on 4/3/23.
 //
 
-#include <manipulationActionSpace.hpp>
-#include <MoveitInterface.hpp>
+#include <manipulation_planning/manipulationActionSpace.hpp>
+#include <manipulation_planning/common/MoveitInterface.hpp>
 #include <planners/AStar.hpp>
 #include <planners/wAStar.hpp>
 #include <heuristics/standardHeu.hpp>
@@ -13,21 +13,11 @@
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <tf2_ros/transform_listener.h>
 
-#include <utils.hpp>
+#include <manipulation_planning/common/utils.hpp>
 
 int ims::state::id_counter = 0;
 
-void rad2deg(stateType& state) {
-    for (auto& val : state) {
-        val = val * 180 / M_PI;
-    }
-}
 
-void deg2rad(stateType& state) {
-    for (auto& val : state) {
-        val = val * M_PI / 180;
-    }
-}
 
 int main(int argc, char** argv) {
 
@@ -50,14 +40,14 @@ int main(int argc, char** argv) {
     double weight = 20.0;
     ims::wAStarParams params(heuristic, weight);
 
-    MoveitInterface scene_interface ("manipulator_1");
-    manipulationType action_type(path_mprim);
+    ims::MoveitInterface scene_interface ("manipulator_1");
+    ims::manipulationType action_type(path_mprim);
 
     stateType discretization {0.02, 0.02, 0.02, M_PI/180, M_PI/180, M_PI/180};
     action_type.Discretization(discretization);
-    action_type.setSpaceType(manipulationType::spaceType::WorkSpace);
+    action_type.setSpaceType(ims::manipulationType::spaceType::WorkSpace);
 
-    std::shared_ptr<ManipulationActionSpace> action_space = std::make_shared<ManipulationActionSpace>(scene_interface, action_type);
+    std::shared_ptr<ims::ManipulationActionSpace> action_space = std::make_shared<ims::ManipulationActionSpace>(scene_interface, action_type);
 
 
     stateType start_state {0, 0, 0, 0, 0, 0};
@@ -72,15 +62,15 @@ int main(int argc, char** argv) {
     Eigen::Quaterniond current_pose_eigen;
     tf::quaternionMsgToEigen(current_pose.pose.orientation, current_pose_eigen);
 
-    get_euler_zyx(current_pose_eigen, start_state[5], start_state[4], start_state[3]);
-    normalize_euler_zyx(start_state[5], start_state[4], start_state[3]);
+    ims::get_euler_zyx(current_pose_eigen, start_state[5], start_state[4], start_state[3]);
+    ims::normalize_euler_zyx(start_state[5], start_state[4], start_state[3]);
 
     stateType goal_state = start_state;
 
     // change the goal state
     goal_state[0] = 0.0;
     goal_state[1] = 0.3;// 0.8;
-    goal_state[2] = 1.1;// 1.28;
+    goal_state[2] = 1.28;// 1.28;
     goal_state[3] = 0.1; //4*M_PI/180;
     goal_state[4] = 0.0; //10*M_PI/180;
     goal_state[5] = 0.3;
@@ -91,7 +81,7 @@ int main(int argc, char** argv) {
         start_state[i] = std::round(start_state[i] / discretization[i]) * discretization[i];
     }
     Eigen::Quaterniond start_pose_eigen;
-    from_euler_zyx(start_state[5], start_state[4], start_state[3], start_pose_eigen);
+    ims::from_euler_zyx(start_state[5], start_state[4], start_state[3], start_pose_eigen);
     geometry_msgs::Pose pose_check;
     pose_check.position.x = start_state[0]; pose_check.position.y = start_state[1]; pose_check.position.z = start_state[2];
     tf::quaternionEigenToMsg(start_pose_eigen, pose_check.orientation);
@@ -112,7 +102,7 @@ int main(int argc, char** argv) {
         return 0;
     }
     else {
-        rad2deg(ik_solution); rad2deg(current_joint_state);
+        ims::rad2deg(ik_solution); ims::rad2deg(current_joint_state);
         std::cout << "IK solution for the current pose" << std::endl;
         for (int i = 0; i < ik_solution.size(); i++) {
             std::cout << "joint " << i << " " << ik_solution[i] << " " << current_joint_state[i] << std::endl;
@@ -163,7 +153,7 @@ int main(int argc, char** argv) {
         pose.position.y = state[1];
         pose.position.z = state[2];
         Eigen::Quaterniond quat_res;
-        from_euler_zyx(state[5], state[4], state[3], quat_res);
+        ims::from_euler_zyx(state[5], state[4], state[3], quat_res);
         pose.orientation.x = quat_res.x(); pose.orientation.y = quat_res.y();
         pose.orientation.z = quat_res.z(); pose.orientation.w = quat_res.w();
         waypoints.push_back(pose);

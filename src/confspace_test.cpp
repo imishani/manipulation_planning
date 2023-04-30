@@ -4,32 +4,21 @@
 
 #include <memory>
 
-#include <manipulationActionSpace.hpp>
-#include <MoveitInterface.hpp>
+#include <manipulation_planning/manipulationActionSpace.hpp>
+#include <manipulation_planning/common/MoveitInterface.hpp>
 #include <planners/AStar.hpp>
 #include <planners/wAStar.hpp>
-#include <manipHeuristics.hpp>
+#include <manipulation_planning/heuristics/manipHeuristics.hpp>
 #include <heuristics/standardHeu.hpp>
 
 #include <ros/ros.h>
-#include <utils.hpp>
+#include <manipulation_planning/common/utils.hpp>
 #include <moveit/collision_distance_field/collision_env_distance_field.h>
 #include <moveit/occupancy_map_monitor/occupancy_map_monitor.h>
 
 
 int ims::state::id_counter = 0;
 
-void rad2deg(stateType& state) {
-    for (auto& val : state) {
-        val = val * 180 / M_PI;
-    }
-}
-
-void deg2rad(stateType& state) {
-    for (auto& val : state) {
-        val = val * M_PI / 180;
-    }
-}
 
 int main(int argc, char** argv) {
 
@@ -53,20 +42,20 @@ int main(int argc, char** argv) {
     collision_detection::CollisionResult collision_result;
     planning_scene->checkCollision(collision_request, collision_result, *current_state);
 
-    auto df = getDistanceFieldMoveIt();
-//        auto* heuristic = new BFSHeuristic(df, "manipulator_1");
-    auto* heuristic = new ims::jointAnglesHeuristic;
+    auto df = ims::getDistanceFieldMoveIt();
+    auto* heuristic = new ims::BFSHeuristic(df, "manipulator_1");
+//    auto* heuristic = new ims::jointAnglesHeuristic;
     double weight = 10.0;
     ims::wAStarParams params(heuristic, weight);
 
-    MoveitInterface scene_interface("manipulator_1");
+    ims::MoveitInterface scene_interface("manipulator_1");
 
-    manipulationType action_type (path_mprim);
+    ims::manipulationType action_type (path_mprim);
     stateType discretization {1, 1, 1, 1, 1, 1};
-    deg2rad(discretization);
+    ims::deg2rad(discretization);
     action_type.Discretization(discretization);
 
-    std::shared_ptr<ManipulationActionSpace> action_space = std::make_shared<ManipulationActionSpace>(scene_interface, action_type);
+    std::shared_ptr<ims::ManipulationActionSpace> action_space = std::make_shared<ims::ManipulationActionSpace>(scene_interface, action_type);
 
     stateType start_state {0, 0, 0, 0, 0, 0};
     auto joint_names = move_group.getJointNames();
@@ -74,7 +63,7 @@ int main(int argc, char** argv) {
         start_state[i] = current_state->getVariablePosition(joint_names[i]);
     }
     // make a goal_state a copy of start_state
-    rad2deg(start_state);
+    ims::rad2deg(start_state);
     stateType goal_state = start_state;
 
     // change the goal state
@@ -88,12 +77,12 @@ int main(int argc, char** argv) {
 //        goal_state[3] = -207; goal_state[4] = -90; goal_state[5] = 200;
 
 
-    deg2rad(start_state); deg2rad(goal_state);
+    ims::deg2rad(start_state); ims::deg2rad(goal_state);
     // normalize the start and goal states
-    action_space->NormalizeAngles(start_state);
-    action_space->NormalizeAngles(goal_state);
-    roundStateToDiscretization(start_state, action_type.mStateDiscretization);
-    roundStateToDiscretization(goal_state, action_type.mStateDiscretization);
+    ims::normalizeAngles(start_state);
+    ims::normalizeAngles(goal_state);
+    ims::roundStateToDiscretization(start_state, action_type.mStateDiscretization);
+    ims::roundStateToDiscretization(goal_state, action_type.mStateDiscretization);
 
     ims::wAStar planner(params);
     try {
@@ -128,7 +117,7 @@ int main(int argc, char** argv) {
         traj.push_back(state->getState());
     }
     moveit_msgs::RobotTrajectory trajectory;
-    profileTrajectory(start_state,
+    ims::profileTrajectory(start_state,
                       goal_state,
                       traj,
                       move_group,

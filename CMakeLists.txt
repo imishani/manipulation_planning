@@ -127,11 +127,17 @@ catkin_package(
         ${search_INCLUDE_DIRS}
   LIBRARIES
         manipulation_planning
-        ${search_LIBRARIES}
-  CATKIN_DEPENDS moveit_msgs roscpp rospy std_msgs
+        /usr/local/lib/${search_LIBRARIES}
+  CATKIN_DEPENDS
+        moveit_msgs
+        moveit_ros_planning
+        moveit_ros_planning_interface
+        roscpp rospy
+        std_msgs
 #  DEPENDS system_lib
 )
 
+#add_definitions(-DSV_PACKAGE_NAME="manipulation_planning")
 ###########
 ## Build ##
 ###########
@@ -139,20 +145,25 @@ catkin_package(
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 include_directories(
-    include/manipulation_planning
+    include
     ${catkin_INCLUDE_DIRS}
     ${search_INCLUDE_DIRS}
     ${EIGEN3_INCLUDE_DIR}
 )
 
 ## Declare a C++ library
- add_library(${PROJECT_NAME}
-         src/confspace_test.cpp)
+add_library(${PROJECT_NAME}
+        src/confspace_test.cpp
+        include/manipulation_planning/manipulationActionSpace.hpp
+        include/manipulation_planning/common/MoveitInterface.hpp
+        include/manipulation_planning/heuristics/manipHeuristics.hpp
+        include/manipulation_planning/common/utils.hpp
+)
 
 target_link_libraries(${PROJECT_NAME}
         ${catkin_LIBRARIES}
         ${eigen_LIBRARIES}
-#        ${search_LIBRARIES}
+        /usr/local/lib/${search_LIBRARIES}
         )
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
@@ -179,7 +190,6 @@ target_link_libraries(${PROJECT_NAME}_ws_test
         ${eigen_LIBRARIES}
         /usr/local/lib/${search_LIBRARIES}
         )
-
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -215,18 +225,18 @@ target_link_libraries(${PROJECT_NAME}_ws_test
 
 ## Mark libraries for installation
 ## See http://docs.ros.org/melodic/api/catkin/html/howto/format1/building_libraries.html
-# install(TARGETS ${PROJECT_NAME}
-#   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-#   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-#   RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION}
-# )
+ install(TARGETS ${PROJECT_NAME}
+   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
+   RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION}
+ )
 
 ## Mark cpp header files for installation
-# install(DIRECTORY include/${PROJECT_NAME}/
-#   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
-#   FILES_MATCHING PATTERN "*.h"
-#   PATTERN ".svn" EXCLUDE
-# )
+ install(DIRECTORY include
+   DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}/${PROJECT_NAME}
+#   FILES_MATCHING PATTERN "*.hpp"
+   PATTERN ".svn" EXCLUDE
+ )
 
 ## Mark other files for installation (e.g. launch and bag files, etc.)
 # install(FILES
