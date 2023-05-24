@@ -15,8 +15,6 @@
 
 #include <manipulation_planning/common/utils.hpp>
 
-int ims::state::id_counter = 0;
-
 
 
 int main(int argc, char** argv) {
@@ -68,12 +66,12 @@ int main(int argc, char** argv) {
     stateType goal_state = start_state;
 
     // change the goal state
-    goal_state[0] = 0.0;
-    goal_state[1] = 0.3;// 0.8;
-    goal_state[2] = 1.28;// 1.28;
-    goal_state[3] = 0.1; //4*M_PI/180;
+    goal_state[0] = 0.76;
+    goal_state[1] = -0.02;// 0.8;
+    goal_state[2] = 0.86;// 1.28;
+    goal_state[3] = 0.0; //4*M_PI/180;
     goal_state[4] = 0.0; //10*M_PI/180;
-    goal_state[5] = 0.3;
+    goal_state[5] = 0.0;
 
     // discrtize the goal state
     for (int i = 0; i < 6; i++) {
@@ -131,39 +129,67 @@ int main(int argc, char** argv) {
 
     // @}
     // Print nicely the path
+    std::vector<stateType> traj;
     for (auto& state : path_) {
         std::cout << "state: " << state->getStateId() << std::endl;
+        if (state->getStateId() == 0){
+            ims::deg2rad(current_joint_state);
+            state->setMappedState(current_joint_state);
+        }
         for (auto& val : state->getState()) {
             std::cout << val << ", ";
         }
         std::cout << std::endl;
+        std::cout << "Joint state: " << std::endl;
+        for (auto& val : state->getMappedState()) {
+            std::cout << val << ", ";
+        }
+        std::cout << std::endl;
+        traj.push_back(state->getMappedState());
     }
+
+//    // profile and execute the path
+//    // @{
+//    std::vector<stateType> traj;
+//    for (auto& state : path_) {
+//        traj.push_back(state->getState());
+//    }
+//    // execute a waypoint in the workspace
+//    std::vector<geometry_msgs::Pose> waypoints;
+//    for (auto& state : traj) {
+//        geometry_msgs::Pose pose;
+//        pose.position.x = state[0];
+//        pose.position.y = state[1];
+//        pose.position.z = state[2];
+//        Eigen::Quaterniond quat_res;
+//        ims::from_euler_zyx(state[5], state[4], state[3], quat_res);
+//        pose.orientation.x = quat_res.x(); pose.orientation.y = quat_res.y();
+//        pose.orientation.z = quat_res.z(); pose.orientation.w = quat_res.w();
+//        waypoints.push_back(pose);
+//    }
+//    moveit_msgs::RobotTrajectory trajectory;
+//    double fraction = move_group.computeCartesianPath(waypoints, 0.01, 0.0, trajectory);
+//    std::cout << "fraction: " << fraction << std::endl;
+//    moveit::planning_interface::MoveGroupInterface::Plan my_plan;
+//    my_plan.trajectory_ = trajectory;
+//    move_group.execute(my_plan);
 
     // profile and execute the path
     // @{
-    std::vector<stateType> traj;
-    for (auto& state : path_) {
-        traj.push_back(state->getState());
-    }
-    // execute a waypoint in the workspace
-    std::vector<geometry_msgs::Pose> waypoints;
-    for (auto& state : traj) {
-        geometry_msgs::Pose pose;
-        pose.position.x = state[0];
-        pose.position.y = state[1];
-        pose.position.z = state[2];
-        Eigen::Quaterniond quat_res;
-        ims::from_euler_zyx(state[5], state[4], state[3], quat_res);
-        pose.orientation.x = quat_res.x(); pose.orientation.y = quat_res.y();
-        pose.orientation.z = quat_res.z(); pose.orientation.w = quat_res.w();
-        waypoints.push_back(pose);
-    }
+//    std::vector<stateType> traj;
+//    for (auto& state : path_) {
+//        // assert if the size of the mapped state is not equal to the size of the joint state
+//        std::cout << state->getMappedState().size() << std::endl;
+//        assert(state->getMappedState().size() == move_group.getJoints().size());
+//        traj.push_back(state->getMappedState());
+//    }
     moveit_msgs::RobotTrajectory trajectory;
-    double fraction = move_group.computeCartesianPath(waypoints, 0.01, 0.0, trajectory);
-    std::cout << "fraction: " << fraction << std::endl;
-    moveit::planning_interface::MoveGroupInterface::Plan my_plan;
-    my_plan.trajectory_ = trajectory;
-    move_group.execute(my_plan);
+    ims::profileTrajectory(start_state,
+                           goal_state,
+                           traj,
+                           move_group,
+                           trajectory);
+    move_group.execute(trajectory);
 
     // rerport stats
     plannerStats stats = planner.reportStats();

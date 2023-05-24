@@ -17,8 +17,6 @@
 #include <moveit/occupancy_map_monitor/occupancy_map_monitor.h>
 
 
-int ims::state::id_counter = 0;
-
 
 int main(int argc, char** argv) {
 
@@ -43,8 +41,8 @@ int main(int argc, char** argv) {
     planning_scene->checkCollision(collision_request, collision_result, *current_state);
 
     auto df = ims::getDistanceFieldMoveIt();
-    auto* heuristic = new ims::BFSHeuristic(df, "manipulator_1");
-//    auto* heuristic = new ims::jointAnglesHeuristic;
+//    auto* heuristic = new ims::BFSHeuristic(df, "manipulator_1");
+    auto* heuristic = new ims::jointAnglesHeuristic;
     double weight = 10.0;
     ims::wAStarParams params(heuristic, weight);
 
@@ -122,6 +120,7 @@ int main(int argc, char** argv) {
                       traj,
                       move_group,
                       trajectory);
+    std::cout << "Executing trajectory" << std::endl;
     move_group.execute(trajectory);
 
     // rerport stats

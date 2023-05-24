@@ -44,7 +44,7 @@
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/planning_scene_monitor/planning_scene_monitor.h>
 #include <moveit/planning_scene_interface/planning_scene_interface.h>
-// include for conversion from geometry_msgs/Pose to eigen
+
 #include <eigen_conversions/eigen_msg.h>
 
 // project includes
@@ -63,7 +63,7 @@ namespace ims{
     class MoveitInterface : public SceneInterface {
     public:
         /// @brief Constructor
-        explicit MoveitInterface(const std::string& group_name="manipulator") {
+        explicit MoveitInterface(const std::string& group_name) {
             // planning scene monitor
             mPlanningSceneMonitor = std::make_shared<planning_scene_monitor::PlanningSceneMonitor>("robot_description");
             mPlanningSceneMonitor->startSceneMonitor();
@@ -71,9 +71,6 @@ namespace ims{
             mPlanningSceneMonitor->startWorldGeometryMonitor();
             mPlanningSceneMonitor->requestPlanningSceneState();
             ros::Duration(1.0).sleep();
-//        mPlanningSceneMonitor->startPublishingPlanningScene(planning_scene_monitor::PlanningSceneMonitor::UPDATE_SCENE,
-//                                                            "planning_scene");
-//        mPlanningSceneMonitor->providePlanningSceneService();
             mPlanningScene = mPlanningSceneMonitor->getPlanningScene();
             mGroupName = group_name;
 
@@ -121,17 +118,25 @@ namespace ims{
         /// @brief Calculate IK for a given pose
         /// @param pose The pose to calculate IK for
         /// @param joint_state The joint state to store the IK solution
+        /// @param timeout The timeout for the IK calculation
         /// @return True if IK was found, false otherwise
-        bool calculateIK(const geometry_msgs::Pose &pose, stateType &joint_state) {
+        bool calculateIK(const geometry_msgs::Pose &pose,
+                         stateType &joint_state,
+                         double timeout = 0.1) {
             // resize the joint state
             joint_state.resize(num_joints);
+            // set joint model group as random, only the relevant kinematic group
+            m_kinematic_state->setToRandomPositions(joint_model_group);
+            // update
+            mPlanningSceneMonitor->updateFrameTransforms();
+            mPlanningSceneMonitor->updateSceneWithCurrentState();
             // set the pose
-            if (m_kinematic_state->setFromIK(joint_model_group, pose, 0.1)) {
+            if (m_kinematic_state->setFromIK(joint_model_group, pose, timeout)) {
                 // get the joint values
                 m_kinematic_state->copyJointGroupPositions(joint_model_group, joint_state);
                 return true;
             } else {
-//            ROS_INFO("No IK solution found");
+                ROS_INFO("No IK solution found without using seed");
                 return false;
             }
         }
@@ -140,28 +145,35 @@ namespace ims{
         /// @param pose The pose to calculate IK for
         /// @param seed The seed to use for the IK
         /// @param joint_state The joint state to store the IK solution
+        /// @param consistency_limit The consistency limit to use for the IK
+        /// @param timeout The timeout for the IK calculation
         /// @return True if IK was found, false otherwise
-        bool calculateIK(const geometry_msgs::Pose &pose, const stateType &seed, stateType &joint_state) {
+        bool calculateIK(const geometry_msgs::Pose &pose,
+                         const stateType &seed,
+                         stateType &joint_state,
+                         double consistency_limit = 0.5,
+                         double timeout = 0.05) {
             // resize the joint state
             joint_state.resize(num_joints);
             // set the pose
-            // TODO: check if its really seeding;
-            // copy the values
             m_kinematic_state->setJointGroupPositions(joint_model_group,seed);
+            // update
+            mPlanningSceneMonitor->updateFrameTransforms();
+            mPlanningSceneMonitor->updateSceneWithCurrentState();
             // add a consistency_limits of 0.1 to the seed
-            std::vector<double> consistency_limits(num_joints, 0.2);
+            std::vector<double> consistency_limits(num_joints, consistency_limit);
             // get the tip link
             const std::string &tip_link = joint_model_group->getLinkModelNames().back();
             Eigen::Isometry3d pose_eigen;
             tf::poseMsgToEigen(pose, pose_eigen);
+
             if (m_kinematic_state->setFromIK(joint_model_group, pose_eigen,
-                                             tip_link, consistency_limits,
-                                             0.1)) {
-                // get the joint values
+                                             tip_link, //consistency_limits,
+                                             timeout)) {
                 m_kinematic_state->copyJointGroupPositions(joint_model_group, joint_state);
                 return true;
             } else {
-                ROS_INFO("No IK solution found");
+                ROS_INFO("No IK solution found using seed");
                 return false;
             }
         }
@@ -182,7 +194,7 @@ namespace ims{
             }
             // resize the joint limits
             joint_limits.resize(num_joints);
-            // assert if the number of joint is not equal ti the size of the bounds
+            // assert if the number of joint is not equal to the size of the bounds
             assert(num_joints == min_vals.size());
             for(int i = 0; i < num_joints;i++)
             {

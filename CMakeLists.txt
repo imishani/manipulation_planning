@@ -18,10 +18,6 @@ find_package(catkin REQUIRED
          eigen_conversions
 )
 
-# TODO: FIX THIS!!!! You need to find a way to include the search package in the build
-# link to search package
-
-#set(search_DIR /home/itamar/work/code/algorithms/search)
 find_package(search REQUIRED)
 
 #set(search_INCLUDE_DIR ${search_DIR}/include)
@@ -186,6 +182,15 @@ add_executable(${PROJECT_NAME}_ws_test src/workspace_test.cpp)
 
 
 target_link_libraries(${PROJECT_NAME}_ws_test
+        ${catkin_LIBRARIES}
+        ${eigen_LIBRARIES}
+        /usr/local/lib/${search_LIBRARIES}
+        )
+
+add_executable(${PROJECT_NAME}_ocmap_test src/occupancy_map_test.cpp)
+
+
+target_link_libraries(${PROJECT_NAME}_ocmap_test
         ${catkin_LIBRARIES}
         ${eigen_LIBRARIES}
         /usr/local/lib/${search_LIBRARIES}

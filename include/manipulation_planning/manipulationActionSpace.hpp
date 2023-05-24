@@ -259,10 +259,69 @@ namespace ims {
             ws_state[0] = ee_pose.translation().x(); ws_state[1] = ee_pose.translation().y(); ws_state[2] = ee_pose.translation().z();
             Eigen::Vector3d euler_angles = ee_pose.rotation().eulerAngles(2, 1, 0);
             ws_state[3] = euler_angles[2]; ws_state[4] = euler_angles[1]; ws_state[5] = euler_angles[0];
+            normalize_euler_zyx(ws_state[5], ws_state[4], ws_state[3]);
+            roundStateToDiscretization(ws_state, mManipulationType->mStateDiscretization);
         }
 
 
         bool isStateValid(const stateType& state_val) override {
+            // check if the state is valid
+            switch (mManipulationType->getSpaceType()) {
+                case manipulationType::spaceType::ConfigurationSpace:
+                    return mMoveitInterface->isStateValid(state_val);
+                case manipulationType::spaceType::WorkSpace:
+                    // check if state exists with IK solution already
+                    geometry_msgs::Pose pose;
+                    pose.position.x = state_val[0]; pose.position.y = state_val[1]; pose.position.z = state_val[2];
+                    // Euler angles to quaternion
+                    Eigen::Quaterniond q;
+                    from_euler_zyx(state_val[5], state_val[4], state_val[3], q);
+                    pose.orientation.x = q.x(); pose.orientation.y = q.y();
+                    pose.orientation.z = q.z(); pose.orientation.w = q.w();
+                    stateType joint_state;
+                    bool succ = mMoveitInterface->calculateIK(pose, joint_state);
+                    if (!succ) {
+                        return false;
+                    }
+                    else {
+                        return mMoveitInterface->isStateValid(joint_state);
+                    }
+            }
+            return false;
+        }
+
+        /// @brief Check state validity (IK and collision) and saves the ik solution in joint_state
+        /// @param state_val The state to check
+        /// @param joint_state The ik solution
+        /// @return True if the state is valid, false otherwise
+        bool isStateValid(const stateType& state_val,
+                          stateType& joint_state) {
+            switch (mManipulationType->getSpaceType()) {
+                case manipulationType::spaceType::ConfigurationSpace:
+                    return mMoveitInterface->isStateValid(state_val);
+                case manipulationType::spaceType::WorkSpace:
+                    geometry_msgs::Pose pose;
+                    pose.position.x = state_val[0]; pose.position.y = state_val[1]; pose.position.z = state_val[2];
+                    // Euler angles to quaternion
+                    Eigen::Quaterniond q;
+                    from_euler_zyx(state_val[5], state_val[4], state_val[3], q);
+                    pose.orientation.x = q.x(); pose.orientation.y = q.y();
+                    pose.orientation.z = q.z(); pose.orientation.w = q.w();
+                    bool succ = mMoveitInterface->calculateIK(pose,joint_state);
+                    if (!succ) {
+                        ROS_INFO("IK failed");
+                        return false;
+                    }
+                    else {
+                        return mMoveitInterface->isStateValid(joint_state);
+                    }
+            }
+            return false;
+        }
+
+        bool isStateValid(const stateType& state_val,
+                          const stateType& seed,
+                          stateType& joint_state){
             // check if the state is valid
             switch (mManipulationType->getSpaceType()) {
                 case manipulationType::spaceType::ConfigurationSpace:
@@ -275,8 +334,8 @@ namespace ims {
                     from_euler_zyx(state_val[5], state_val[4], state_val[3], q);
                     pose.orientation.x = q.x(); pose.orientation.y = q.y();
                     pose.orientation.z = q.z(); pose.orientation.w = q.w();
-                    stateType joint_state;
-                    bool succ = mMoveitInterface->calculateIK(pose, joint_state);
+                    joint_state.resize(mMoveitInterface->num_joints);
+                    bool succ = mMoveitInterface->calculateIK(pose, seed,joint_state);
                     if (!succ) {
                         return false;
                     }
@@ -352,7 +411,7 @@ namespace ims {
             return false;
         }
 
-        bool getSuccessorsWs(int curr_state_ind,
+        virtual bool getSuccessorsWs(int curr_state_ind,
                              std::vector<state*>& successors,
                              std::vector<double>& costs) {
             // get the current state
@@ -384,10 +443,21 @@ namespace ims {
                 roundStateToDiscretization(new_state_val, mManipulationType->mStateDiscretization);
 
 //            if (isStateToStateValid(curr_state_val, new_state_val)) {
-                if (isStateValid(new_state_val)) {
+                bool succ; stateType mapped_state;
+                if (curr_state->getMappedState().empty()){
+//                    ROS_INFO("No mapped state, using IK without seed");
+                    succ = isStateValid(new_state_val,
+                                        mapped_state);
+                }
+                else
+                    succ = isStateValid(new_state_val,
+                                        curr_state->getMappedState(),
+                                        mapped_state);
+                if (succ) {
                     // create a new state
                     int next_state_ind = getOrCreateState(new_state_val);
                     auto new_state = this->getState(next_state_ind);
+                    new_state->setMappedState(mapped_state);
                     // add the state to the successors
                     successors.push_back(new_state);
                     // add the cost
@@ -405,7 +475,7 @@ namespace ims {
             return true;
         }
 
-        bool getSuccessorsCs(int curr_state_ind,
+        virtual bool getSuccessorsCs(int curr_state_ind,
                              std::vector<state*>& successors,
                              std::vector<double>& costs) {
             // get the current state

@@ -186,7 +186,6 @@ namespace ims {
     }
 
 
-
     /// \brief Search for the nearest point in a 1d vector in the most efficient way assuming the vector is sorted
     /// \param point The point to search for (int/double)
     /// \param points The vector of points (vector of int/double)
@@ -308,6 +307,149 @@ namespace ims {
         return df;
     }
 
+
+    /// \brief Visualize the distance field bounding box in rviz
+    /// \param df The distance field
+    /// \param marker_pub The marker publisher
+    /// \param frame_id The frame id
+    void visualizeBoundingBox(std::shared_ptr<distance_field::PropagationDistanceField> &df,
+                              ros::Publisher &marker_pub,
+                              const std::string &frame_id){
+        int id {1};
+        int x_min {0}, x_max {df->getXNumCells()}, y_min {0}, y_max {df->getYNumCells()}, z_min {0}, z_max {df->getYNumCells()};
+        visualization_msgs::Marker marker;
+        marker.header.frame_id = frame_id;
+        marker.ns = "bounding_box";
+        marker.type = visualization_msgs::Marker::LINE_STRIP;
+        marker.action = visualization_msgs::Marker::ADD;
+        marker.pose.orientation.w = 1.0;
+        marker.scale.x = 0.02; marker.scale.y = 0.02; marker.scale.z = 0.02;
+        marker.color.a = 0.5; marker.color.r = 1.0; marker.color.g = 0.0; marker.color.b = 0.0;
+
+        geometry_msgs::Point p;
+        ros::Duration(1).sleep();
+        df->gridToWorld(x_min, y_min, z_min, p.x, p.y, p.z);
+        marker.points.push_back(p);
+        df->gridToWorld(x_max, y_min, z_min, p.x, p.y, p.z);
+        marker.points.push_back(p);
+        marker.header.stamp = ros::Time();
+        marker.id = id; ++id;
+        marker_pub.publish(marker);
+
+        marker.points.clear();
+
+        df->gridToWorld(x_min, y_min, z_min, p.x, p.y, p.z);
+        marker.points.push_back(p);
+        df->gridToWorld(x_min, y_max, z_min, p.x, p.y, p.z);
+        marker.points.push_back(p);
+        marker.header.stamp = ros::Time();
+        marker.id = id; ++id;
+        marker_pub.publish(marker);
+
+        marker.points.clear();
+
+        df->gridToWorld(x_min, y_min, z_min, p.x, p.y, p.z);
+        marker.points.push_back(p);
+        df->gridToWorld(x_min, y_min, z_max, p.x, p.y, p.z);
+        marker.points.push_back(p);
+        marker.header.stamp = ros::Time();
+        marker.id = id; ++id;
+        marker_pub.publish(marker);
+
+        marker.points.clear();
+
+        df->gridToWorld(x_max, y_min, z_min, p.x, p.y, p.z);
+        marker.points.push_back(p);
+        df->gridToWorld(x_max, y_min, z_max, p.x, p.y, p.z);
+        marker.points.push_back(p);
+        marker.header.stamp = ros::Time();
+        marker.id = id; ++id;
+        marker_pub.publish(marker);
+
+        marker.points.clear();
+
+        df->gridToWorld(x_max, y_min, z_min, p.x, p.y, p.z);
+        marker.points.push_back(p);
+        df->gridToWorld(x_max, y_max, z_min, p.x, p.y, p.z);
+        marker.points.push_back(p);
+        marker.header.stamp = ros::Time();
+        marker.id = id; ++id;
+        marker_pub.publish(marker);
+
+        marker.points.clear();
+
+        df->gridToWorld(x_min, y_max, z_min, p.x, p.y, p.z);
+        marker.points.push_back(p);
+        df->gridToWorld(x_max, y_max, z_min, p.x, p.y, p.z);
+        marker.points.push_back(p);
+        marker.header.stamp = ros::Time();
+        marker.id = id; ++id;
+        marker_pub.publish(marker);
+
+        marker.points.clear();
+
+        df->gridToWorld(x_min, y_max, z_min, p.x, p.y, p.z);
+        marker.points.push_back(p);
+        df->gridToWorld(x_min, y_max, z_max, p.x, p.y, p.z);
+        marker.points.push_back(p);
+        marker.header.stamp = ros::Time();
+        marker.id = id; ++id;
+        marker_pub.publish(marker);
+
+        marker.points.clear();
+
+        df->gridToWorld(x_min, y_max, z_max, p.x, p.y, p.z);
+        marker.points.push_back(p);
+        df->gridToWorld(x_max, y_max, z_max, p.x, p.y, p.z);
+        marker.points.push_back(p);
+        marker.header.stamp = ros::Time();
+        marker.id = id; ++id;
+        marker_pub.publish(marker);
+
+        marker.points.clear();
+
+        df->gridToWorld(x_max, y_max, z_min, p.x, p.y, p.z);
+        marker.points.push_back(p);
+        df->gridToWorld(x_max, y_max, z_max, p.x, p.y, p.z);
+        marker.points.push_back(p);
+        marker.header.stamp = ros::Time();
+        marker.id = id; ++id;
+        marker_pub.publish(marker);
+
+        marker.points.clear();
+
+        df->gridToWorld(x_max, y_min, z_max, p.x, p.y, p.z);
+        marker.points.push_back(p);
+        df->gridToWorld(x_max, y_max, z_max, p.x, p.y, p.z);
+        marker.points.push_back(p);
+        marker.header.stamp = ros::Time();
+        marker.id = id; ++id;
+        marker_pub.publish(marker);
+
+        marker.points.clear();
+
+        df->gridToWorld(x_min, y_min, z_max, p.x, p.y, p.z);
+        marker.points.push_back(p);
+        df->gridToWorld(x_max, y_min, z_max, p.x, p.y, p.z);
+        marker.points.push_back(p);
+        marker.header.stamp = ros::Time();
+        marker.id = id; ++id;
+        marker_pub.publish(marker);
+
+        marker.points.clear();
+
+        df->gridToWorld(x_min, y_min, z_max, p.x, p.y, p.z);
+        marker.points.push_back(p);
+        df->gridToWorld(x_min, y_max, z_max, p.x, p.y, p.z);
+        marker.points.push_back(p);
+        marker.header.stamp = ros::Time();
+        marker.id = id; ++id;
+        marker_pub.publish(marker);
+
+    }
+
+
+
     /// \brief Check if a point is in collision
     /// \param df The distance field
     /// \param point The point to check
@@ -345,6 +487,87 @@ namespace ims {
             }
         }
         return count;
+    }
+
+    /// \brief Get the shape occupancy in the distance field
+    /// \param df The distance field
+    /// \param shape The shape to check
+    /// \param occupied_cells The vector of occupied cells
+    /// \return A vector of occupied cells
+    inline void getShapeOccupancy(const std::shared_ptr<distance_field::PropagationDistanceField>& df,
+                                  const shapes::Shape &shape,
+                                  const Eigen::Transform<double, 3, 1> &pose,
+                                  std::vector<std::vector<int>> &occupied_cells){
+        /// TODO: Its not working well.
+
+        double radius;
+        Eigen::Vector3d center;
+        computeShapeBoundingSphere(&shape, center, radius);
+        // get the bounding cylinder of the shape
+        visualization_msgs::Marker marker;
+        constructMarkerFromShape(&shape, marker);
+        // loop through the points and add them to the distance field as occupied
+        for (auto & i : marker.points)
+        {
+            // transform point to world frame
+            Eigen::Vector3d point(i.x, i.y, i.z);
+            point = pose * point;
+            // get the grid coordinates
+            int x, y, z;
+            df->worldToGrid(point.x(), point.y(), point.z(), x, y, z);
+            // If the cell is already occupied, skip it
+            if (df->getCell(x, y, z).distance_square_ == 0)
+            {
+                continue;
+            }
+            // add the cell to the occupied cells vector
+            std::vector<int> cell;
+            cell.push_back(x);
+            cell.push_back(y);
+            cell.push_back(z);
+            occupied_cells.push_back(cell);
+        }
+    }
+
+
+    /// \brief Get the occupied cells by the arm's robot_state in the distance field
+    /// \param df The distance field
+    /// \param robot_state The robot state
+    /// \param move_group_ The move group object
+    /// \param occupied_cells The vector of occupied cells
+    /// \return A vector of occupied cells
+    inline void getRobotOccupancy(
+            const std::shared_ptr<distance_field::PropagationDistanceField>& df,
+            moveit::core::RobotState &robot_state,
+            const moveit::planning_interface::MoveGroupInterface &move_group_,
+            std::vector<std::vector<int>> &occupied_cells){
+        // get the collision models of the robot
+        std::vector<const robot_model::LinkModel*> link_models =
+                robot_state.getJointModelGroup(move_group_.getName())->getLinkModels();
+        // delete all link models besides the first two:
+//        link_models.erase(link_models.begin(), link_models.end()-3);
+
+        // get all the occupied cells
+        for (auto& link : link_models){
+            if (link->getName() == "world"){
+                continue;
+            }
+            if (link->getShapes().empty())
+                continue;
+            // for each shape in the link model get the occupied cells
+            for (auto& shape : link->getShapes()){
+                // get the link pose in the world frame
+//                // get the occupied cells
+                robot_state.updateLinkTransforms();
+                Eigen::Isometry3d transform = robot_state.getGlobalLinkTransform(link);
+                df->addShapeToField(shape.get(), transform);
+                std::vector<std::vector<int>> link_occupied_cells;
+                getShapeOccupancy(df, *shape, transform, link_occupied_cells);
+                // add the occupied cells to the vector
+                occupied_cells.insert(occupied_cells.end(), link_occupied_cells.begin(),
+                                      link_occupied_cells.end());
+            }
+        }
     }
 }
 
