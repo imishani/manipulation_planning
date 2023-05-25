@@ -569,6 +569,47 @@ namespace ims {
             }
         }
     }
+
+    /// \brief Visualize the occupied cells in the distance field
+    /// \param df The distance field
+    /// \param publisher The publisher object
+    /// \param frame_id The frame id
+    /// \param id The marker id
+    inline void visualizeOccupancy(const std::shared_ptr<distance_field::PropagationDistanceField>& df,
+                                   const ros::Publisher &publisher,
+                                   const std::string &frame_id,
+                                   int id=1){
+        visualization_msgs::Marker marker;
+        marker.header.frame_id = frame_id;
+        marker.header.stamp = ros::Time();
+        marker.ns = "occupied_cells";
+        marker.id = id;
+        marker.type = visualization_msgs::Marker::CUBE_LIST;
+        marker.action = visualization_msgs::Marker::ADD;
+        marker.scale.x = df->getResolution();
+        marker.scale.y = df->getResolution();
+        marker.scale.z = df->getResolution();
+        marker.color.a = 0.4;
+        marker.color.r = 0.0;
+        marker.color.g = 0.5;
+        marker.color.b = 0.5;
+        marker.pose.orientation.w = 1.0;
+        size_t num_occupied_cells = 0;
+        for (int x {0} ; x < df->getXNumCells(); x++){
+            for (int y{0}; y < df->getYNumCells(); y++){
+                for (int z {0} ; z < df->getZNumCells(); z++ ){
+                    if (df->getCell(x, y, z).distance_square_ == 0){
+                        geometry_msgs::Point p;
+                        df->gridToWorld(x, y, z, p.x, p.y, p.z);
+                        marker.points.push_back(p);
+                        num_occupied_cells++;
+                    }
+                }
+            }
+        }
+        ROS_DEBUG_STREAM("Added " << num_occupied_cells << " occupied cells to the marker array" << std::endl);
+        publisher.publish(marker);
+    }
 }
 
 

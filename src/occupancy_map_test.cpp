@@ -46,67 +46,9 @@ int main(int argc, char** argv){
     ros::Duration(1).sleep();
     // visualize all occupied cells
 
-    visualization_msgs::Marker markers;
-    markers.header.frame_id = group.getPlanningFrame();
-    markers.header.stamp = ros::Time();
-    markers.ns = "occupied_cells";
-    markers.id = 1;
-    markers.type = visualization_msgs::Marker::CUBE_LIST;
-    markers.action = visualization_msgs::Marker::ADD;
-    markers.scale.x = df->getResolution();
-    markers.scale.y = df->getResolution();
-    markers.scale.z = df->getResolution();
-    markers.color.a = 0.2;
-    markers.color.r = 0.0;
-    markers.color.g = 0.0;
-    markers.color.b = 1.0;
-    markers.points.clear();
-    markers.pose.orientation.w = 1.0;
-    size_t num_occupied_cells = 0;
-    for (int x {0} ; x < df->getXNumCells(); x++){
-        for (int y{0}; y < df->getYNumCells(); y++){
-            for (int z {0} ; z < df->getZNumCells(); z++ ){
-                if (df->getCell(x, y, z).distance_square_ == 0){
-                    geometry_msgs::Point p;
-                    df->gridToWorld(x, y, z, p.x, p.y, p.z);
-                    markers.points.push_back(p);
-                    num_occupied_cells++;
-                }
-            }
-        }
-    }
-    std::cout << "Added " << num_occupied_cells << " occupied cells to the marker array" << std::endl;
-    one_marker_pub.publish(markers);
+    ims::visualizeOccupancy(df, one_marker_pub, group.getPlanningFrame(), 1);
+    ros::Duration(1).sleep();
 
-
-    // create a marker for each occupied cell
-//    visualization_msgs::Marker marker;
-//    // reference frame is the origin of the df
-//    marker.header.frame_id = group.getPlanningFrame();
-//    marker.header.stamp = ros::Time();
-//    marker.ns = "ss";
-//    marker.id = 1;
-//    marker.type = visualization_msgs::Marker::CUBE_LIST;
-//    marker.action = visualization_msgs::Marker::ADD;
-//    marker.scale.x = df->getResolution();
-//    marker.scale.y = df->getResolution();
-//    marker.scale.z = df->getResolution();
-//    marker.color.a = 0.2;
-//    marker.color.r = 0.0;
-//    marker.color.g = 0.0;
-//    marker.color.b = 1.0;
-//    marker.points.clear();
-//    for (int i = 0; i < occupancy_grid.size(); i++) {
-//        geometry_msgs::Point p;
-//        df->gridToWorld(occupancy_grid[i][0], occupancy_grid[i][1], occupancy_grid[i][2],
-//                        p.x, p.y, p.z);
-//        marker.points.push_back(p);
-//    }
-//    std::cout << "Number of occupied cells: " << marker.points.size() << std::endl;
-//    one_marker_pub.publish(marker);
-//    ros::Duration(2).sleep();
-//
-//    ROS_INFO("Publishing markers");
 
     return 0;
 
