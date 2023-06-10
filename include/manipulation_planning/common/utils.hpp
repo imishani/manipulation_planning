@@ -259,8 +259,42 @@ namespace ims {
         return true;
     }
 
+    /// \brief Get an empty distance field
+    /// \param df_size_x The size of the distance field in x
+    /// \param df_size_y The size of the distance field in y
+    /// \param df_size_z The size of the distance field in z
+    /// \param df_res The resolution of the distance field
+    /// \param df_origin_x The origin of the distance field in x
+    /// \param df_origin_y The origin of the distance field in y
+    /// \param df_origin_z The origin of the distance field in z
+    /// \param max_distance The maximum distance of the distance field
+    /// \return The distance field
+    inline std::shared_ptr<distance_field::PropagationDistanceField> getEmptyDistanceField(double df_size_x = 3.0,
+                                                                                      double df_size_y = 3.0,
+                                                                                      double df_size_z = 3.0,
+                                                                                      double df_res = 0.02,
+                                                                                      double df_origin_x = -0.75,
+                                                                                      double df_origin_y = -1.5,
+                                                                                      double df_origin_z = 0.0,
+                                                                                      double max_distance = 1.8){
+        std::shared_ptr<distance_field::PropagationDistanceField> df(new distance_field::PropagationDistanceField(
+                df_size_x, df_size_y, df_size_z,
+                df_res, df_origin_x, df_origin_y, df_origin_z,
+                max_distance));
+        return df;
+    }
+
 
     /// \brief Get the distance field
+    /// \param df_size_x The size of the distance field in x
+    /// \param df_size_y The size of the distance field in y
+    /// \param df_size_z The size of the distance field in z
+    /// \param df_res The resolution of the distance field
+    /// \param df_origin_x The origin of the distance field in x
+    /// \param df_origin_y The origin of the distance field in y
+    /// \param df_origin_z The origin of the distance field in z
+    /// \param max_distance The maximum distance of the distance field
+    /// \return The distance field
     inline std::shared_ptr<distance_field::PropagationDistanceField> getDistanceFieldMoveIt(double df_size_x = 3.0,
                                                                                             double df_size_y = 3.0,
                                                                                             double df_size_z = 3.0,
@@ -307,12 +341,172 @@ namespace ims {
         return df;
     }
 
+    /// \brief Check if a point is in collision
+    /// \param df The distance field
+    /// \param point The point to check
+    /// \return True if the point is in collision
+    inline bool isPointInCollision(const distance_field::PropagationDistanceField &df, const Eigen::Vector3d &point){
+        int x, y, z;
+        df.worldToGrid(point[0], point[1], point[2], x, y, z);
+        return df.getCell(x, y, z).distance_square_ == 0;
+    }
+
+    /// \brief Check if cell is occupied
+    /// \param df The distance field
+    /// \param cell The cell to check
+    /// \return True if the cell is occupied
+    inline bool isCellOccupied(const distance_field::PropagationDistanceField &df, const Eigen::Vector3i &cell){
+        return df.getCell(cell[1], cell[1], cell[2]).distance_square_ == 0;
+    }
+
+    /// \brief Count occupied cells in the distance field
+    /// \param df The distance field
+    /// \return The number of occupied cells
+    inline unsigned int countOccupiedCells(const distance_field::PropagationDistanceField &df){
+        unsigned int count = 0;
+        for (int z = 0; z < df.getZNumCells(); z++)
+        {
+            for (int x = 0; x < df.getXNumCells(); x++)
+            {
+                for (int y = 0; y < df.getYNumCells(); y++)
+                {
+                    if (df.getCell(x, y, z).distance_square_ == 0)
+                    {
+                        count++;
+                    }
+                }
+            }
+        }
+        return count;
+    }
+
+    /// \brief Get the shape occupancy in the distance field
+    /// \param df The distance field
+    /// \param shape The shape to check
+    /// \param occupied_cells The vector of occupied cells
+    /// \return A vector of occupied cells
+    inline void getShapeOccupancy(const std::shared_ptr<distance_field::PropagationDistanceField>& df,
+                                  const shapes::Shape &shape,
+                                  const Eigen::Transform<double, 3, 1> &pose,
+                                  std::vector<std::vector<int>> &occupied_cells){
+        /// TODO: Its not working well.
+
+        double radius;
+        Eigen::Vector3d center;
+        computeShapeBoundingSphere(&shape, center, radius);
+        // get the bounding cylinder of the shape
+        visualization_msgs::Marker marker;
+        constructMarkerFromShape(&shape, marker);
+        // loop through the points and add them to the distance field as occupied
+        for (auto & i : marker.points)
+        {
+            // transform point to world frame
+            Eigen::Vector3d point(i.x, i.y, i.z);
+            point = pose * point;
+            // get the grid coordinates
+            int x, y, z;
+            df->worldToGrid(point.x(), point.y(), point.z(), x, y, z);
+            // If the cell is already occupied, skip it
+            if (df->getCell(x, y, z).distance_square_ == 0)
+            {
+                continue;
+            }
+            // add the cell to the occupied cells vector
+            std::vector<int> cell;
+            cell.push_back(x);
+            cell.push_back(y);
+            cell.push_back(z);
+            occupied_cells.push_back(cell);
+        }
+    }
+
+
+    /// \brief Get the occupied cells by the arm's robot_state in the distance field
+    /// \param df The distance field
+    /// \param robot_state The robot state
+    /// \param move_group_ The move group object
+    /// \param occupied_cells The vector of occupied cells
+    /// \return A vector of occupied cells
+    inline void getRobotOccupancy(
+            const std::shared_ptr<distance_field::PropagationDistanceField>& df,
+            moveit::core::RobotState &robot_state,
+            const std::unique_ptr<moveit::planning_interface::MoveGroupInterface> &move_group_,
+            std::vector<std::vector<int>> &occupied_cells){
+        // get the collision models of the robot
+        std::vector<const robot_model::LinkModel*> link_models =
+                robot_state.getJointModelGroup(move_group_->getName())->getLinkModels();
+        // delete all link models besides the first two:
+        link_models.erase(link_models.begin(), link_models.begin()+2);
+
+        // get all the occupied cells
+        for (auto& link : link_models){
+            if (link->getName() == "world"){
+                continue;
+            }
+            if (link->getShapes().empty())
+                continue;
+            // for each shape in the link model get the occupied cells
+            for (auto& shape : link->getShapes()){
+                // get the link pose in the world frame
+//                // get the occupied cells
+                robot_state.updateLinkTransforms();
+                Eigen::Isometry3d transform = robot_state.getGlobalLinkTransform(link);
+                df->addShapeToField(shape.get(), transform);
+                std::vector<std::vector<int>> link_occupied_cells;
+                getShapeOccupancy(df, *shape, transform, link_occupied_cells);
+                // add the occupied cells to the vector
+                occupied_cells.insert(occupied_cells.end(), link_occupied_cells.begin(),
+                                      link_occupied_cells.end());
+            }
+        }
+    }
+
+    /// \brief Visualize the occupied cells in the distance field
+    /// \param df The distance field
+    /// \param publisher The publisher object
+    /// \param frame_id The frame id
+    /// \param id The marker id
+    inline void visualizeOccupancy(const std::shared_ptr<distance_field::PropagationDistanceField>& df,
+                                   const ros::Publisher &publisher,
+                                   const std::string &frame_id,
+                                   int id=1){
+        visualization_msgs::Marker marker;
+        marker.header.frame_id = frame_id;
+        marker.header.stamp = ros::Time();
+        marker.ns = "occupied_cells";
+        marker.id = id;
+        marker.type = visualization_msgs::Marker::CUBE_LIST;
+        marker.action = visualization_msgs::Marker::ADD;
+        marker.scale.x = df->getResolution();
+        marker.scale.y = df->getResolution();
+        marker.scale.z = df->getResolution();
+        marker.color.a = 0.3;
+        marker.color.r = 0.5;
+        marker.color.g = 0.5;
+        marker.color.b = 0.0;
+        marker.pose.orientation.w = 1.0;
+        size_t num_occupied_cells = 0;
+        for (int x {0} ; x < df->getXNumCells(); x++){
+            for (int y{0}; y < df->getYNumCells(); y++){
+                for (int z {0} ; z < df->getZNumCells(); z++ ){
+                    if (df->getCell(x, y, z).distance_square_ == 0){
+                        geometry_msgs::Point p;
+                        df->gridToWorld(x, y, z, p.x, p.y, p.z);
+                        marker.points.push_back(p);
+                        num_occupied_cells++;
+                    }
+                }
+            }
+        }
+        ROS_DEBUG_STREAM("Added " << num_occupied_cells << " occupied cells to the marker array" << std::endl);
+        publisher.publish(marker);
+    }
 
     /// \brief Visualize the distance field bounding box in rviz
     /// \param df The distance field
     /// \param marker_pub The marker publisher
     /// \param frame_id The frame id
-    void visualizeBoundingBox(std::shared_ptr<distance_field::PropagationDistanceField> &df,
+    inline void visualizeBoundingBox(std::shared_ptr<distance_field::PropagationDistanceField> &df,
                               ros::Publisher &marker_pub,
                               const std::string &frame_id){
         int id {1};
@@ -446,169 +640,6 @@ namespace ims {
         marker.id = id; ++id;
         marker_pub.publish(marker);
 
-    }
-
-
-
-    /// \brief Check if a point is in collision
-    /// \param df The distance field
-    /// \param point The point to check
-    /// \return True if the point is in collision
-    inline bool isPointInCollision(const distance_field::PropagationDistanceField &df, const Eigen::Vector3d &point){
-        int x, y, z;
-        df.worldToGrid(point[0], point[1], point[2], x, y, z);
-        return df.getCell(x, y, z).distance_square_ == 0;
-    }
-
-    /// \brief Check if cell is occupied
-    /// \param df The distance field
-    /// \param cell The cell to check
-    /// \return True if the cell is occupied
-    inline bool isCellOccupied(const distance_field::PropagationDistanceField &df, const Eigen::Vector3i &cell){
-        return df.getCell(cell[1], cell[1], cell[2]).distance_square_ == 0;
-    }
-
-    /// \brief Count occupied cells in the distance field
-    /// \param df The distance field
-    /// \return The number of occupied cells
-    inline unsigned int countOccupiedCells(const distance_field::PropagationDistanceField &df){
-        unsigned int count = 0;
-        for (int z = 0; z < df.getZNumCells(); z++)
-        {
-            for (int x = 0; x < df.getXNumCells(); x++)
-            {
-                for (int y = 0; y < df.getYNumCells(); y++)
-                {
-                    if (df.getCell(x, y, z).distance_square_ == 0)
-                    {
-                        count++;
-                    }
-                }
-            }
-        }
-        return count;
-    }
-
-    /// \brief Get the shape occupancy in the distance field
-    /// \param df The distance field
-    /// \param shape The shape to check
-    /// \param occupied_cells The vector of occupied cells
-    /// \return A vector of occupied cells
-    inline void getShapeOccupancy(const std::shared_ptr<distance_field::PropagationDistanceField>& df,
-                                  const shapes::Shape &shape,
-                                  const Eigen::Transform<double, 3, 1> &pose,
-                                  std::vector<std::vector<int>> &occupied_cells){
-        /// TODO: Its not working well.
-
-        double radius;
-        Eigen::Vector3d center;
-        computeShapeBoundingSphere(&shape, center, radius);
-        // get the bounding cylinder of the shape
-        visualization_msgs::Marker marker;
-        constructMarkerFromShape(&shape, marker);
-        // loop through the points and add them to the distance field as occupied
-        for (auto & i : marker.points)
-        {
-            // transform point to world frame
-            Eigen::Vector3d point(i.x, i.y, i.z);
-            point = pose * point;
-            // get the grid coordinates
-            int x, y, z;
-            df->worldToGrid(point.x(), point.y(), point.z(), x, y, z);
-            // If the cell is already occupied, skip it
-            if (df->getCell(x, y, z).distance_square_ == 0)
-            {
-                continue;
-            }
-            // add the cell to the occupied cells vector
-            std::vector<int> cell;
-            cell.push_back(x);
-            cell.push_back(y);
-            cell.push_back(z);
-            occupied_cells.push_back(cell);
-        }
-    }
-
-
-    /// \brief Get the occupied cells by the arm's robot_state in the distance field
-    /// \param df The distance field
-    /// \param robot_state The robot state
-    /// \param move_group_ The move group object
-    /// \param occupied_cells The vector of occupied cells
-    /// \return A vector of occupied cells
-    inline void getRobotOccupancy(
-            const std::shared_ptr<distance_field::PropagationDistanceField>& df,
-            moveit::core::RobotState &robot_state,
-            const moveit::planning_interface::MoveGroupInterface &move_group_,
-            std::vector<std::vector<int>> &occupied_cells){
-        // get the collision models of the robot
-        std::vector<const robot_model::LinkModel*> link_models =
-                robot_state.getJointModelGroup(move_group_.getName())->getLinkModels();
-        // delete all link models besides the first two:
-//        link_models.erase(link_models.begin(), link_models.end()-3);
-
-        // get all the occupied cells
-        for (auto& link : link_models){
-            if (link->getName() == "world"){
-                continue;
-            }
-            if (link->getShapes().empty())
-                continue;
-            // for each shape in the link model get the occupied cells
-            for (auto& shape : link->getShapes()){
-                // get the link pose in the world frame
-//                // get the occupied cells
-                robot_state.updateLinkTransforms();
-                Eigen::Isometry3d transform = robot_state.getGlobalLinkTransform(link);
-                df->addShapeToField(shape.get(), transform);
-                std::vector<std::vector<int>> link_occupied_cells;
-                getShapeOccupancy(df, *shape, transform, link_occupied_cells);
-                // add the occupied cells to the vector
-                occupied_cells.insert(occupied_cells.end(), link_occupied_cells.begin(),
-                                      link_occupied_cells.end());
-            }
-        }
-    }
-
-    /// \brief Visualize the occupied cells in the distance field
-    /// \param df The distance field
-    /// \param publisher The publisher object
-    /// \param frame_id The frame id
-    /// \param id The marker id
-    inline void visualizeOccupancy(const std::shared_ptr<distance_field::PropagationDistanceField>& df,
-                                   const ros::Publisher &publisher,
-                                   const std::string &frame_id,
-                                   int id=1){
-        visualization_msgs::Marker marker;
-        marker.header.frame_id = frame_id;
-        marker.header.stamp = ros::Time();
-        marker.ns = "occupied_cells";
-        marker.id = id;
-        marker.type = visualization_msgs::Marker::CUBE_LIST;
-        marker.action = visualization_msgs::Marker::ADD;
-        marker.scale.x = df->getResolution();
-        marker.scale.y = df->getResolution();
-        marker.scale.z = df->getResolution();
-        marker.color.a = 0.4;
-        marker.color.r = 0.0;
-        marker.color.g = 0.5;
-        marker.color.b = 0.5;
-        marker.pose.orientation.w = 1.0;
-        size_t num_occupied_cells = 0;
-        for (int x {0} ; x < df->getXNumCells(); x++){
-            for (int y{0}; y < df->getYNumCells(); y++){
-                for (int z {0} ; z < df->getZNumCells(); z++ ){
-                    if (df->getCell(x, y, z).distance_square_ == 0){
-                        geometry_msgs::Point p;
-                        df->gridToWorld(x, y, z, p.x, p.y, p.z);
-                        marker.points.push_back(p);
-                        num_occupied_cells++;
-                    }
-                }
-            }
-        }
-        ROS_DEBUG_STREAM("Added " << num_occupied_cells << " occupied cells to the marker array" << std::endl);
-        publisher.publish(marker);
     }
 }
 

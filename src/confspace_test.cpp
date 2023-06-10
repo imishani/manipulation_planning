@@ -29,7 +29,7 @@ int main(int argc, char** argv) {
     std::string path_mprim = full_path.string() + "/config/manip.mprim";
 
     // Define Robot inteface to give commands and get info from moveit:
-    moveit::planning_interface::MoveGroupInterface move_group("manipulator_1");
+    moveit::planning_interface::MoveGroupInterface move_group("manipulator");
 
     moveit::core::RobotStatePtr current_state = move_group.getCurrentState();
 
@@ -41,12 +41,12 @@ int main(int argc, char** argv) {
     planning_scene->checkCollision(collision_request, collision_result, *current_state);
 
     auto df = ims::getDistanceFieldMoveIt();
-//    auto* heuristic = new ims::BFSHeuristic(df, "manipulator_1");
+//    auto* heuristic = new ims::BFSHeuristic(df, "manipulator");
     auto* heuristic = new ims::jointAnglesHeuristic;
     double weight = 10.0;
     ims::wAStarParams params(heuristic, weight);
 
-    ims::MoveitInterface scene_interface("manipulator_1");
+    ims::MoveitInterface scene_interface("manipulator");
 
     ims::manipulationType action_type (path_mprim);
     stateType discretization {1, 1, 1, 1, 1, 1};
@@ -65,14 +65,14 @@ int main(int argc, char** argv) {
     stateType goal_state = start_state;
 
     // change the goal state
-    goal_state[0] = -18;
-    goal_state[1] = 36;
-    goal_state[2] = 52;
-    goal_state[3] = 25;
-    goal_state[4] = 55;
-    goal_state[5] = -108;
-//        goal_state[0] = -36; goal_state[1] = -118; goal_state[2] = 152;
-//        goal_state[3] = -207; goal_state[4] = -90; goal_state[5] = 200;
+//    goal_state[0] = -18;
+//    goal_state[1] = 36;
+//    goal_state[2] = 52;
+//    goal_state[3] = 25;
+//    goal_state[4] = 55;
+//    goal_state[5] = -108;
+    goal_state[0] = -36; goal_state[1] = -118; goal_state[2] = 152;
+    goal_state[3] = -207; goal_state[4] = -90; goal_state[5] = 200;
 
 
     ims::deg2rad(start_state); ims::deg2rad(goal_state);

@@ -239,6 +239,16 @@ namespace ims {
             mMoveitInterface->getJointLimits(mJointLimits);
         }
 
+        /// @brief Set the manipulation space type
+        /// @param spaceType The manipulation type
+        void setManipActionType(manipulationType::spaceType spaceType) {
+            mManipulationType->setSpaceType(spaceType);
+        }
+
+        manipulationType::spaceType getManipActionType() {
+            return mManipulationType->getSpaceType();
+        }
+
         /// @brief Get current joint states
         /// @param joint_states The joint states
         void getJointStates(stateType& joint_states) {

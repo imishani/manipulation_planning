@@ -26,16 +26,16 @@ int main(int argc, char** argv){
     ros::AsyncSpinner spinner(1);
     spinner.start();
 
-    moveit::planning_interface::MoveGroupInterface group("manipulator_1");
-
+    // get the move group interface
+    moveit::planning_interface::MoveGroupInterfaceUniquePtr group = std::make_unique<moveit::planning_interface::MoveGroupInterface>("manipulator_1");
     auto df = ims::getDistanceFieldMoveIt();
     // show the bounding box of the distance field
     ros::Publisher bb_pub = nh.advertise<visualization_msgs::Marker>("bb_marker", 10);
     // get the planning frame
-    ims::visualizeBoundingBox(df, bb_pub, group.getPlanningFrame());
+    ims::visualizeBoundingBox(df, bb_pub, group->getPlanningFrame());
 
     // get the current robot state
-    moveit::core::RobotState current_state = *group.getCurrentState();
+    moveit::core::RobotState current_state = *group->getCurrentState();
 
     std::vector<std::vector<int>> occupancy_grid;
     ims::getRobotOccupancy(df, current_state, group, occupancy_grid);
@@ -46,7 +46,7 @@ int main(int argc, char** argv){
     ros::Duration(1).sleep();
     // visualize all occupied cells
 
-    ims::visualizeOccupancy(df, one_marker_pub, group.getPlanningFrame(), 1);
+    ims::visualizeOccupancy(df, one_marker_pub, group->getPlanningFrame(), 1);
     ros::Duration(1).sleep();
 
 
