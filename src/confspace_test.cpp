@@ -56,29 +56,33 @@ int main(int argc, char** argv) {
     std::shared_ptr<ims::ManipulationActionSpace> action_space = std::make_shared<ims::ManipulationActionSpace>(scene_interface, action_type);
 
     stateType start_state {0, 0, 0, 0, 0, 0};
-    auto joint_names = move_group.getJointNames();
+    auto joint_names = move_group.getVariableNames();
     for (int i = 0; i < 6; i++) {
         start_state[i] = current_state->getVariablePosition(joint_names[i]);
+        ROS_INFO_STREAM("Joint " << joint_names[i] << " is " << start_state[i]);
     }
     // make a goal_state a copy of start_state
     ims::rad2deg(start_state);
     stateType goal_state = start_state;
 
     // change the goal state
-//    goal_state[0] = -18;
-//    goal_state[1] = 36;
-//    goal_state[2] = 52;
-//    goal_state[3] = 25;
-//    goal_state[4] = 55;
-//    goal_state[5] = -108;
-    goal_state[0] = -36; goal_state[1] = -118; goal_state[2] = 152;
-    goal_state[3] = -207; goal_state[4] = -90; goal_state[5] = 200;
+    goal_state[0] = 0;
+    goal_state[1] = 0;
+    goal_state[2] = 0;
+    goal_state[3] = 0;
+    goal_state[4] = 0;
+    goal_state[5] = 0;
+//    goal_state[0] = -36; goal_state[1] = -118; goal_state[2] = 152;
+//    goal_state[3] = -207; goal_state[4] = -90; goal_state[5] = 200;
 
 
     ims::deg2rad(start_state); ims::deg2rad(goal_state);
     // normalize the start and goal states
-    ims::normalizeAngles(start_state);
-    ims::normalizeAngles(goal_state);
+    // get the joint limits
+    std::vector<std::pair<double, double>> joint_limits;
+    scene_interface.getJointLimits(joint_limits);
+    ims::normalizeAngles(start_state, joint_limits);
+    ims::normalizeAngles(goal_state, joint_limits);
     ims::roundStateToDiscretization(start_state, action_type.mStateDiscretization);
     ims::roundStateToDiscretization(goal_state, action_type.mStateDiscretization);
 
@@ -120,6 +124,7 @@ int main(int argc, char** argv) {
                       traj,
                       move_group,
                       trajectory);
+
     std::cout << "Executing trajectory" << std::endl;
     move_group.execute(trajectory);
 

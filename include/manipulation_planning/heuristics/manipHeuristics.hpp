@@ -341,7 +341,7 @@ namespace ims {
                 }
             }
 
-            std::cout << "getHeuristic between to random states with BFS is not supported!" << std::endl;
+            std::cout << "getHeuristic between two random states with BFS is not supported!" << std::endl;
             return false;
         }
 

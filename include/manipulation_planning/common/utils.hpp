@@ -46,7 +46,25 @@ namespace ims {
         }
     }
 
+
     /// \brief A function that dealing with the discontinuity of the joint angles
+    /// \param state The state to check
+    /// \param joint_limits The joint limits
+    /// \return The state with the joint angles in the range of the joint limits
+    template <typename T>
+    void normalizeAngles(std::vector<T>& state, std::vector<std::pair<T, T>>& joint_limits){
+        for (int i = 0; i < state.size(); ++i) {
+            if (state[i] > joint_limits[i].second){
+                state[i] = state[i] - 2*M_PI;
+            }
+            else if (state[i] < joint_limits[i].first){
+                state[i] = state[i] + 2*M_PI;
+            }
+        }
+    }
+
+    /// \brief A function that dealing with the discontinuity of the joint angles
+    /// \note This function assumes that the joint limits are [-pi, pi]
     /// \param state The state to check
     /// \return The state with the joint angles in the range of [-pi, pi]
     template <typename T>
@@ -236,6 +254,11 @@ namespace ims {
         trajectory_msg.joint_trajectory.header.frame_id = move_group_.getPlanningFrame();
         trajectory_msg.joint_trajectory.joint_names = move_group_.getActiveJoints();
         trajectory_msg.joint_trajectory.points.resize(trajectory.size());
+
+        // check if current robot state is the same as the start state
+        auto current_state = move_group_.getCurrentState();
+        std::vector<double> joint_values;
+        current_state->copyJointGroupPositions(move_group_.getName(), joint_values);
         for (int i = 0; i < trajectory.size(); ++i) {
             trajectory_msg.joint_trajectory.points[i].positions = trajectory[i];
         }

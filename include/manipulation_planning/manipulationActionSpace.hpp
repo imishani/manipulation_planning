@@ -57,14 +57,16 @@ namespace ims {
         /// @brief Constructor
         manipulationType() : mActionType(ActionType::MOVE),
                              mSpaceType(spaceType::ConfigurationSpace),
-                             mPrimFileName("../config/manip.mprim") {
+                             mPrimFileName("../config/manip.mprim"),
+                             mMaxAction(0.0){
             // make mActions to point to nullptr
             mActions = nullptr;
         };
 
         explicit manipulationType(std::string mprimFile) : mActionType(ActionType::MOVE),
                                                            mSpaceType(spaceType::ConfigurationSpace),
-                                                           mPrimFileName(std::move(mprimFile)) {};
+                                                           mPrimFileName(std::move(mprimFile)),
+                                                           mMaxAction(0.0){};
 
         /// @brief Destructor
         ~manipulationType() override = default;
@@ -111,7 +113,7 @@ namespace ims {
         }
 
 
-        static std::vector<action> readMPfile(const std::string& file_name) {
+        std::vector<action> readMPfile(const std::string& file_name) {
             std::ifstream file(file_name);
             std::string line;
             std::vector<std::vector<double>> mprim;
@@ -126,6 +128,9 @@ namespace ims {
                 double num;
                 while (iss >> num) {
                     line_.push_back(num);
+                    if (abs(num * M_PI/180.0) > mMaxAction) {
+                        mMaxAction = abs(num * M_PI/180.0);
+                    }
                 }
                 mprim.push_back(line_);
             }
@@ -145,7 +150,7 @@ namespace ims {
                                 for (auto& action_ : mprim) {
                                     // convert from degrees to radians
                                     for (auto& num : action_) {
-                                        num = num * M_PI / 180;
+                                        num = num * M_PI / 180.0;
                                     }
                                     mActions->push_back(action_);
                                     // get the opposite action
@@ -165,7 +170,7 @@ namespace ims {
                                     inverted_action[3] = -action_[3]; inverted_action[4] = -action_[4]; inverted_action[5] = -action_[5];
                                     // convert from euler angles to quaternions
                                     tf::Quaternion q;
-                                    q.setRPY(action_[3]*M_PI / 180, action_[4]*M_PI / 180, action_[5]*M_PI / 180);
+                                    q.setRPY(action_[3]*M_PI / 180.0, action_[4]*M_PI / 180, action_[5]*M_PI / 180);
                                     // check from antipodal quaternions
                                     int sign = 1;
                                     if (q.w() < 0) {
@@ -211,6 +216,7 @@ namespace ims {
         spaceType mSpaceType;
         std::string mPrimFileName;
         std::shared_ptr<std::vector<action>> mActions;
+        double mMaxAction;
     };
 
 
@@ -504,12 +510,21 @@ namespace ims {
                     new_state_val[i] = curr_state_val[i] + action[i];
                 }
                 // normalize the angles
-                normalizeAngles(new_state_val);
+                normalizeAngles(new_state_val, mJointLimits);
                 // discretize the state
                 roundStateToDiscretization(new_state_val, mManipulationType->mStateDiscretization);
+                // check if the state went thru discontinuity
+                bool discontinuity {false};
+                // check for maximum absolute action
+                for (int i {0} ; i < curr_state_val.size() ; i++) {
+                    if (fabs(new_state_val[i] - curr_state_val[i]) > 1.5*mManipulationType->mMaxAction) {
+                        discontinuity = true;
+                        break;
+                    }
+                }
 
                 // if (isStateToStateValid(curr_state_val, new_state_val)) {
-                if (isStateValid(new_state_val)) {
+                if (isStateValid(new_state_val) && !discontinuity) {
                     // create a new state
                     int next_state_ind = getOrCreateState(new_state_val);
                     auto new_state = this->getState(next_state_ind);
@@ -522,6 +537,7 @@ namespace ims {
                         norm += i * i;
                     }
                     costs.push_back(sqrt(norm));
+//                    costs.push_back(30);
                 }
             }
             return true;
