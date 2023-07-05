@@ -22,7 +22,7 @@
 #include <eigen_conversions/eigen_msg.h>
 #include <geometric_shapes/shape_operations.h>
 
-#include <common/types.hpp>
+#include <search/common/types.hpp>
 
 
 
@@ -177,7 +177,7 @@ namespace ims {
     /// \brief A function that takes the discretization vector and a state, and round it to the nearest discretization value
     /// \param state The state to check
     /// \param discretization The discretization vector
-    inline void roundStateToDiscretization(stateType& state, const stateType& discretization){
+    inline void roundStateToDiscretization(StateType& state, const StateType& discretization){
         for (int i = 0; i < state.size(); ++i) {
             state[i] = round(state[i]/discretization[i])*discretization[i];
         }
@@ -239,15 +239,15 @@ namespace ims {
 
 
     /// \brief Profile the trajectory
-    /// \param start The start joint state. type: stateType
-    /// \param goal The goal joint state. type: stateType
-    /// \param trajectory a vector of joint states. type: std::vector<stateType>
+    /// \param start The start joint state. type: StateType
+    /// \param goal The goal joint state. type: StateType
+    /// \param trajectory a vector of joint states. type: std::vector<StateType>
     /// \param move_group_ The move group object. type: moveit::planning_interface::MoveGroupInterface
     /// \param trajectory_msg The output trajectory. type: moveit_msgs::RobotTrajectory
     /// \return success bool
-    inline bool profileTrajectory(const stateType & start,
-                                  const stateType & goal,
-                                  const std::vector<stateType> & trajectory,
+    inline bool profileTrajectory(const StateType & start,
+                                  const StateType & goal,
+                                  const std::vector<StateType> & trajectory,
                                   const moveit::planning_interface::MoveGroupInterface & move_group_,
                                   moveit_msgs::RobotTrajectory& trajectory_msg){
 

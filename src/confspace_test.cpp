@@ -4,12 +4,12 @@
 
 #include <memory>
 
-#include <manipulation_planning/manipulationActionSpace.hpp>
-#include <manipulation_planning/common/MoveitInterface.hpp>
-#include <planners/AStar.hpp>
-#include <planners/wAStar.hpp>
-#include <manipulation_planning/heuristics/manipHeuristics.hpp>
-#include <heuristics/standardHeu.hpp>
+#include <manipulation_planning/manipulation_action_space.hpp>
+#include <manipulation_planning/common/moveit_interface.hpp>
+#include <search/planners/astar.hpp>
+#include <search/planners/wastar.hpp>
+#include <manipulation_planning/heuristics/manip_heuristics.hpp>
+#include <search/heuristics/standard_heuristics.hpp>
 
 #include <ros/ros.h>
 #include <manipulation_planning/common/utils.hpp>
@@ -42,28 +42,29 @@ int main(int argc, char** argv) {
 
     auto df = ims::getDistanceFieldMoveIt();
 //    auto* heuristic = new ims::BFSHeuristic(df, "manipulator");
-    auto* heuristic = new ims::jointAnglesHeuristic;
+    auto* heuristic = new ims::JointAnglesHeuristic;
     double weight = 10.0;
     ims::wAStarParams params(heuristic, weight);
 
     ims::MoveitInterface scene_interface("manipulator");
 
     ims::manipulationType action_type (path_mprim);
-    stateType discretization {1, 1, 1, 1, 1, 1};
+    StateType discretization {1, 1, 1, 1, 1, 1};
     ims::deg2rad(discretization);
     action_type.Discretization(discretization);
 
     std::shared_ptr<ims::ManipulationActionSpace> action_space = std::make_shared<ims::ManipulationActionSpace>(scene_interface, action_type);
 
-    stateType start_state {0, 0, 0, 0, 0, 0};
-    auto joint_names = move_group.getVariableNames();
+    StateType start_state {0, 0, 0, 0, 0, 0};
+    // auto joint_names = move_group.getVariableNames(); // NOTE(yoraish): Is the method below the same in Noetic?
+    const std::vector<std::string>& joint_names = move_group.getJointNames();
     for (int i = 0; i < 6; i++) {
         start_state[i] = current_state->getVariablePosition(joint_names[i]);
         ROS_INFO_STREAM("Joint " << joint_names[i] << " is " << start_state[i]);
     }
     // make a goal_state a copy of start_state
     ims::rad2deg(start_state);
-    stateType goal_state = start_state;
+    StateType goal_state = start_state;
 
     // change the goal state
     goal_state[0] = 0;
@@ -83,8 +84,8 @@ int main(int argc, char** argv) {
     scene_interface.getJointLimits(joint_limits);
     ims::normalizeAngles(start_state, joint_limits);
     ims::normalizeAngles(goal_state, joint_limits);
-    ims::roundStateToDiscretization(start_state, action_type.mStateDiscretization);
-    ims::roundStateToDiscretization(goal_state, action_type.mStateDiscretization);
+    ims::roundStateToDiscretization(start_state, action_type.state_discretization_);
+    ims::roundStateToDiscretization(goal_state, action_type.state_discretization_);
 
     ims::wAStar planner(params);
     try {
@@ -94,7 +95,7 @@ int main(int argc, char** argv) {
         std::cout << e.what() << std::endl;
     }
 
-    std::vector<ims::state*> path_;
+    std::vector<ims::State*> path_;
     if (!planner.plan(path_)) {
         std::cout << "No path found" << std::endl;
         return 0;
@@ -114,7 +115,7 @@ int main(int argc, char** argv) {
 
     // profile and execute the path
     // @{
-    std::vector<stateType> traj;
+    std::vector<StateType> traj;
     for (auto& state : path_) {
         traj.push_back(state->getState());
     }
@@ -129,12 +130,12 @@ int main(int argc, char** argv) {
     move_group.execute(trajectory);
 
     // rerport stats
-    plannerStats stats = planner.reportStats();
+    PlannerStats stats = planner.reportStats();
     std::cout << GREEN << "Planning time: " << stats.time << " sec" << std::endl;
     std::cout << "cost: " << stats.cost << std::endl;
     std::cout << "Path length: " << path_.size() << std::endl;
-    std::cout << "Number of nodes expanded: " << stats.numExpanded << std::endl;
-    std::cout << "Suboptimality: " << stats.subOptimality << RESET << std::endl;
+    std::cout << "Number of nodes expanded: " << stats.num_expanded << std::endl;
+    std::cout << "Suboptimality: " << stats.suboptimality << RESET << std::endl;
     // @}
     return 0;
 }

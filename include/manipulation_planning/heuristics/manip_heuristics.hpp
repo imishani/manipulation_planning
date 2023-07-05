@@ -11,12 +11,12 @@
 #include <manipulation_planning/common/utils.hpp>
 #include <vector>
 
-#include <common/SceneInterface.hpp>
-#include <common/actionSpace.hpp>
-#include <common/state.hpp>
-#include <common/types.hpp>
-#include <planners/dijkstra.hpp>
-#include <planners/bfs3d.h>
+#include <search/common/scene_interface.hpp>
+#include <search/common/action_space.hpp>
+#include <search/common/state.hpp>
+#include <search/common/types.hpp>
+#include <search/planners/dijkstra.hpp>
+#include <search/planners/bfs3d.h>
 
 namespace ims {
 
@@ -29,9 +29,9 @@ namespace ims {
         std::shared_ptr<distance_field::PropagationDistanceField> df_map;
     };
 
-    struct actionType3Dpoint : public actionType {
+    struct actionType3Dpoint : public ActionType {
 
-        actionType3Dpoint() : actionType() {
+        actionType3Dpoint() : ActionType() {
             this->num_actions = 26;
             this->action_costs = std::vector<double>(num_actions, 1);
             this->action_deltas = std::vector<std::vector<double>>(num_actions, std::vector<double>(3, 0));
@@ -54,12 +54,12 @@ namespace ims {
 
         }
 
-        std::vector<action> getActions() override {
+        std::vector<Action> getActions() override {
             return this->action_deltas;
         }
 
-        void Discretization(stateType &state_des) override {
-            mStateDiscretization = state_des;
+        void Discretization(StateType &state_des) override {
+            state_discretization_ = state_des;
         }
 
         int num_actions;
@@ -68,7 +68,7 @@ namespace ims {
 
     };
 
-    class actionSpace3Dpoint : public actionSpace {
+    class actionSpace3Dpoint : public ActionSpace {
 
     private:
         std::shared_ptr<scene3Dpoint> m_env;
@@ -76,29 +76,29 @@ namespace ims {
 
     public:
         actionSpace3Dpoint(const scene3Dpoint &env,
-                           const actionType3Dpoint &actions_ptr) : actionSpace() {
+                           const actionType3Dpoint &actions_ptr) : ActionSpace() {
             this->m_env = std::make_shared<scene3Dpoint>(env);
             this->m_actions = std::make_shared<actionType3Dpoint>(actions_ptr);
         }
 
-        bool isStateValid(const stateType &state_val) override {
+        bool isStateValid(const StateType &state_val) override {
             return m_env->df_map->getCell(state_val[0], state_val[1], state_val[2]).distance_square_ > 0;
         }
 
-        bool isPathValid(const pathType &path) override {
+        bool isPathValid(const PathType &path) override {
             return std::all_of(path.begin(), path.end(),
-                               [this](const stateType &state_val) { return isStateValid(state_val); });
+                               [this](const StateType &state_val) { return isStateValid(state_val); });
         }
 
         bool getSuccessors(int curr_state_ind,
-                           std::vector<state *> &successors,
+                           std::vector<State *> &successors,
                            std::vector<double> &costs) override {
             auto curr_state = this->getState(curr_state_ind);
             auto curr_state_val = curr_state->getState();
             auto actions = m_actions->getActions();
             for (int i{0}; i < m_actions->num_actions; i++) {
                 auto action = actions[i];
-                auto next_state_val = stateType(curr_state_val.size());
+                auto next_state_val = StateType(curr_state_val.size());
                 std::transform(curr_state_val.begin(), curr_state_val.end(), action.begin(), next_state_val.begin(),
                                std::plus<double>());
                 // Check if state is outside the map
@@ -121,11 +121,11 @@ namespace ims {
         /// \param state_val The state value
         /// \param state_ind The state index to be returned
         /// \return True if the state exists, false otherwise
-        bool getStateByValue(const stateType& state_val, size_t& state_ind) {
+        bool getStateByValue(const StateType& state_val, size_t& state_ind) {
             // check if the state exists
-            auto* curr_state = new state(state_val);
-            auto it = m_state_to_id.find(curr_state);
-            if(it == m_state_to_id.end()){
+            auto* curr_state = new State(state_val);
+            auto it = state_to_id_.find(curr_state);
+            if(it == state_to_id_.end()){
                 delete curr_state;
                 return false;
             }
@@ -135,7 +135,7 @@ namespace ims {
         }
     };
 
-    class DijkstraHeuristic : public baseHeuristic{
+    class DijkstraHeuristic : public BaseHeuristic{
     public:
         DijkstraHeuristic() : DijkstraHeuristic(getDistanceFieldMoveIt()){
         }
@@ -156,7 +156,7 @@ namespace ims {
             tip_link = joint_model_group->getLinkModelNames().back();
         }
 
-        void setGoal(state* goal) override{
+        void setGoal(State* goal) override{
             mGoal = goal;
             // Do forward kinematics to get the goal pose
             auto goal_state = mGoal->getState();
@@ -176,7 +176,7 @@ namespace ims {
         }
 
         bool run_planner(){
-            auto* zero_heuristic = new zeroHeuristic();
+            auto* zero_heuristic = new ZeroHeuristic();
             dijkstraParams params (zero_heuristic);
             scene3Dpoint scene(m_distanceField);
             actionType3Dpoint actions;
@@ -195,7 +195,7 @@ namespace ims {
                 throw std::runtime_error("failed to look in the entire space");
         }
 
-        bool getHeuristic(state* s1, state* s2, double& dist) override{
+        bool getHeuristic(State* s1, State* s2, double& dist) override{
                 const auto& s1_state = s1->getState();
                 const auto& s2_state = s2->getState();
                 // Do forward kinematics to get the goal pose
@@ -214,8 +214,8 @@ namespace ims {
                 m_distanceField->worldToGrid(s2_position.x(), s2_position.y(), s2_position.z(),
                                                 x2, y2, z2);
 
-                stateType s1_pos {(double)x1, (double)y1, (double)z1};
-                stateType s2_pos {(double)x2, (double)y2, (double)z2};
+                StateType s1_pos {(double)x1, (double)y1, (double)z1};
+                StateType s2_pos {(double)x2, (double)y2, (double)z2};
 
                 size_t s1_ind_int, s2_ind_int;
                 if (!action_space->getStateByValue(s1_pos, s1_ind_int))
@@ -228,7 +228,7 @@ namespace ims {
                 }
             }
 
-        bool getHeuristic(state* s, double& dist) override{
+        bool getHeuristic(State* s, double& dist) override{
             if (goal_position_ind.empty())
                 return false;
             else {
@@ -241,7 +241,7 @@ namespace ims {
                 m_distanceField->worldToGrid(s_position.x(), s_position.y(), s_position.z(),
                                              x, y, z);
 
-                stateType s_pos {(double)x, (double)y, (double)z};
+                StateType s_pos {(double)x, (double)y, (double)z};
                 size_t s_ind_int;
                 if (!action_space->getStateByValue(s_pos, s_ind_int))
                     return false;
@@ -263,7 +263,7 @@ namespace ims {
         const moveit::core::JointModelGroup* joint_model_group;
         moveit::core::RobotStatePtr kinematic_state;
 
-        stateType goal_position_ind;
+        StateType goal_position_ind;
 
         dijkstra* dijkstra_planner = nullptr;
 
@@ -271,7 +271,7 @@ namespace ims {
     };
 
 
-    class BFSHeuristic : public baseHeuristic{
+    class BFSHeuristic : public BaseHeuristic{
     public:
         BFSHeuristic() : BFSHeuristic(getDistanceFieldMoveIt()){
         }
@@ -304,7 +304,7 @@ namespace ims {
             m_cost_per_cell = cost_per_cell;
         }
 
-        void setGoal(state* goal) override{
+        void setGoal(State* goal) override{
             const auto& goal_state = goal->getState();
             kinematic_state->setJointGroupPositions(joint_model_group, goal_state);
             auto ee_goal_state = kinematic_state->getGlobalLinkTransform(tip_link);
@@ -322,7 +322,7 @@ namespace ims {
         }
 
 
-        bool getHeuristic(state* s1, state* s2, double& dist) override{
+        bool getHeuristic(State* s1, State* s2, double& dist) override{
             // check if s2 is a goal state
             const auto& s_check = s2->getState();
             kinematic_state->setJointGroupPositions(joint_model_group, s_check);
@@ -345,7 +345,7 @@ namespace ims {
             return false;
         }
 
-        bool getHeuristic(state* s, double& dist) override{
+        bool getHeuristic(State* s, double& dist) override{
             if (m_goal_cells.empty())
                 return false;
 
@@ -416,9 +416,9 @@ namespace ims {
     };
 
     /// @brief SE(3) distance heuristic using hopf coordinates
-    struct SE3HeuristicHopf : public baseHeuristic {
+    struct SE3HeuristicHopf : public BaseHeuristic {
 
-        bool getHeuristic(state* s1, state* s2,
+        bool getHeuristic(State* s1, State* s2,
                           double& dist) override {
             // check id the states are the same size
             if (s1->getState().size() != s2->getState().size()) {
