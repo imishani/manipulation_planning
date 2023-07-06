@@ -7,6 +7,7 @@
 
 // ROS includes
 #include <ros/ros.h>
+#include <unordered_map>
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/distance_field/propagation_distance_field.h>
 #include <moveit/robot_state/robot_state.h>

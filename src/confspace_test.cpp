@@ -29,7 +29,7 @@ int main(int argc, char** argv) {
     std::string path_mprim = full_path.string() + "/config/manip.mprim";
 
     // Define Robot inteface to give commands and get info from moveit:
-    moveit::planning_interface::MoveGroupInterface move_group("manipulator");
+    moveit::planning_interface::MoveGroupInterface move_group("manipulator_1");
 
     moveit::core::RobotStatePtr current_state = move_group.getCurrentState();
 
@@ -46,7 +46,7 @@ int main(int argc, char** argv) {
     double weight = 10.0;
     ims::wAStarParams params(heuristic, weight);
 
-    ims::MoveitInterface scene_interface("manipulator");
+    ims::MoveitInterface scene_interface("manipulator_1");
 
     ims::manipulationType action_type (path_mprim);
     StateType discretization {1, 1, 1, 1, 1, 1};
