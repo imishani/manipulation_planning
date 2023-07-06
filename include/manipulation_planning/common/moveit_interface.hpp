@@ -48,10 +48,10 @@
 #include <eigen_conversions/eigen_msg.h>
 
 // project includes
-#include <common/types.hpp>
-#include <common/state.hpp>
-#include <common/SceneInterface.hpp>
-#include <common/actionSpace.hpp>
+#include <search/common/types.hpp>
+#include <search/common/state.hpp>
+#include <search/common/scene_interface.hpp>
+#include <search/common/action_space.hpp>
 
 
 namespace ims{
@@ -98,7 +98,7 @@ namespace ims{
         /// @brief check if the state is valid
         /// @param state The state to check
         /// @return True if the state is valid, false otherwise
-        bool isStateValid(const stateType &state) {
+        bool isStateValid(const StateType &state) {
             moveit_msgs::RobotState robotState;
             // copy the values
             robotState.joint_state.position = state;
@@ -110,9 +110,9 @@ namespace ims{
         /// @brief Check if a path is valid
         /// @param path The path to check
         /// @return True if the path is valid, false otherwise
-        bool isPathValid(const pathType &path) {
+        bool isPathValid(const PathType &path) {
             // TODO: Is this ok or should i use isPathValid instead?
-            return std::all_of(path.begin(), path.end(), [this](const stateType& state_val){return isStateValid(state_val);});
+            return std::all_of(path.begin(), path.end(), [this](const StateType& state_val){return isStateValid(state_val);});
         }
 
         /// @brief Calculate IK for a given pose
@@ -121,7 +121,7 @@ namespace ims{
         /// @param timeout The timeout for the IK calculation
         /// @return True if IK was found, false otherwise
         bool calculateIK(const geometry_msgs::Pose &pose,
-                         stateType &joint_state,
+                         StateType &joint_state,
                          double timeout = 0.1) {
             // resize the joint state
             joint_state.resize(num_joints);
@@ -149,8 +149,8 @@ namespace ims{
         /// @param timeout The timeout for the IK calculation
         /// @return True if IK was found, false otherwise
         bool calculateIK(const geometry_msgs::Pose &pose,
-                         const stateType &seed,
-                         stateType &joint_state,
+                         const StateType &seed,
+                         StateType &joint_state,
                          double consistency_limit = 0.5,
                          double timeout = 0.05) {
             // resize the joint state

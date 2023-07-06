@@ -150,9 +150,9 @@ include_directories(
 ## Declare a C++ library
 add_library(${PROJECT_NAME}
         src/confspace_test.cpp
-        include/manipulation_planning/manipulationActionSpace.hpp
-        include/manipulation_planning/common/MoveitInterface.hpp
-        include/manipulation_planning/heuristics/manipHeuristics.hpp
+        include/manipulation_planning/manipulation_action_space.hpp
+        include/manipulation_planning/common/moveit_interface.hpp
+        include/manipulation_planning/heuristics/manip_heuristics.hpp
         include/manipulation_planning/common/utils.hpp
 )
 

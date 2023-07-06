@@ -2,11 +2,11 @@
 // Created by itamar on 4/3/23.
 //
 
-#include <manipulation_planning/manipulationActionSpace.hpp>
-#include <manipulation_planning/common/MoveitInterface.hpp>
-#include <planners/AStar.hpp>
-#include <planners/wAStar.hpp>
-#include <heuristics/standardHeu.hpp>
+#include <manipulation_planning/manipulation_action_space.hpp>
+#include <manipulation_planning/common/moveit_interface.hpp>
+#include <search/planners/astar.hpp>
+#include <search/planners/wastar.hpp>
+#include <search/heuristics/standard_heuristics.hpp>
 
 #include <ros/ros.h>
 // include tf2
@@ -41,14 +41,14 @@ int main(int argc, char** argv) {
     ims::MoveitInterface scene_interface ("manipulator_1");
     ims::manipulationType action_type(path_mprim);
 
-    stateType discretization {0.02, 0.02, 0.02, M_PI/180, M_PI/180, M_PI/180};
+    StateType discretization {0.02, 0.02, 0.02, M_PI/180, M_PI/180, M_PI/180};
     action_type.Discretization(discretization);
     action_type.setSpaceType(ims::manipulationType::spaceType::WorkSpace);
 
     std::shared_ptr<ims::ManipulationActionSpace> action_space = std::make_shared<ims::ManipulationActionSpace>(scene_interface, action_type);
 
 
-    stateType start_state {0, 0, 0, 0, 0, 0};
+    StateType start_state {0, 0, 0, 0, 0, 0};
     // get the current end effector pose
     geometry_msgs::PoseStamped current_pose = move_group.getCurrentPose();  // "arm_1tool0"
 
@@ -63,7 +63,7 @@ int main(int argc, char** argv) {
     ims::get_euler_zyx(current_pose_eigen, start_state[5], start_state[4], start_state[3]);
     ims::normalize_euler_zyx(start_state[5], start_state[4], start_state[3]);
 
-    stateType goal_state = start_state;
+    StateType goal_state = start_state;
 
     // change the goal state
     goal_state[0] = 0.76;
@@ -118,7 +118,7 @@ int main(int argc, char** argv) {
     catch (std::exception& e) {
         std::cout << e.what() << std::endl;
     }
-    std::vector<ims::state*> path_;
+    std::vector<ims::State*> path_;
     if (!planner.plan(path_)) {
         std::cout << "No path found" << std::endl;
         return 0;
@@ -129,7 +129,7 @@ int main(int argc, char** argv) {
 
     // @}
     // Print nicely the path
-    std::vector<stateType> traj;
+    std::vector<StateType> traj;
     for (auto& state : path_) {
         std::cout << "state: " << state->getStateId() << std::endl;
         if (state->getStateId() == 0){
@@ -150,7 +150,7 @@ int main(int argc, char** argv) {
 
 //    // profile and execute the path
 //    // @{
-//    std::vector<stateType> traj;
+//    std::vector<StateType> traj;
 //    for (auto& state : path_) {
 //        traj.push_back(state->getState());
 //    }
@@ -176,7 +176,7 @@ int main(int argc, char** argv) {
 
     // profile and execute the path
     // @{
-//    std::vector<stateType> traj;
+//    std::vector<StateType> traj;
 //    for (auto& state : path_) {
 //        // assert if the size of the mapped state is not equal to the size of the joint state
 //        std::cout << state->getMappedState().size() << std::endl;
@@ -192,12 +192,12 @@ int main(int argc, char** argv) {
     move_group.execute(trajectory);
 
     // rerport stats
-    plannerStats stats = planner.reportStats();
+    PlannerStats stats = planner.reportStats();
     std::cout << GREEN << "Planning time: " << stats.time << " sec" << std::endl;
     std::cout << "cost: " << stats.cost << std::endl;
     std::cout << "Path length: " << path_.size() << std::endl;
-    std::cout << "Number of nodes expanded: " << stats.numExpanded << std::endl;
-    std::cout << "Suboptimality: " << stats.subOptimality << RESET << std::endl;
+    std::cout << "Number of nodes expanded: " << stats.num_expanded << std::endl;
+    std::cout << "Suboptimality: " << stats.suboptimality << RESET << std::endl;
 
     return 0;
 }
