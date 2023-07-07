@@ -49,6 +49,8 @@
 // project includes
 #include <manipulation_planning/common/moveit_interface.hpp>
 #include <manipulation_planning/common/utils.hpp>
+#include <search/common/action_space.hpp>
+
 
 namespace ims
 {
@@ -265,6 +267,7 @@ namespace ims
         //    std::vector<double> mJointStatesSeed {0, 0, 0, 0, 0, 0};
 
     public:
+
         /// @brief Constructor
         /// @param moveitInterface The moveit interface
         /// @param manipulationType The manipulation type
@@ -505,12 +508,12 @@ namespace ims
         }
 
         virtual bool getSuccessorsWs(int curr_state_ind,
-                                     std::vector<State *> &successors,
+                                     std::vector<int>& successors,
                                      std::vector<double> &costs)
         {
             // get the current state
             auto curr_state = this->getState(curr_state_ind);
-            auto curr_state_val = curr_state->getState();
+            auto curr_state_val = curr_state->state_;
             // get the actions
             auto actions = mManipulationType->getActions();
             // convert to quaternion
@@ -541,7 +544,7 @@ namespace ims
                 //            if (isStateToStateValid(curr_state_val, new_state_val)) {
                 bool succ;
                 StateType mapped_state;
-                if (curr_state->getMappedState().empty())
+                if (curr_state->state_mapped_.empty())
                 {
                     //                    ROS_INFO("No mapped state, using IK without seed");
                     succ = isStateValid(new_state_val,
@@ -549,16 +552,16 @@ namespace ims
                 }
                 else
                     succ = isStateValid(new_state_val,
-                                        curr_state->getMappedState(),
+                                        curr_state->state_mapped_,
                                         mapped_state);
                 if (succ)
                 {
                     // create a new state
                     int next_state_ind = getOrCreateState(new_state_val);
                     auto new_state = this->getState(next_state_ind);
-                    new_state->setMappedState(mapped_state);
+                    new_state->state_mapped_ = mapped_state;
                     // add the state to the successors
-                    successors.push_back(new_state);
+                    successors.push_back(next_state_ind);
                     // add the cost
                     double cost{0};
                     for (int i{0}; i < 3; i++)
@@ -576,12 +579,12 @@ namespace ims
         }
 
         virtual bool getSuccessorsCs(int curr_state_ind,
-                                     std::vector<State *> &successors,
+                                     std::vector<int>& successors,
                                      std::vector<double> &costs)
         {
             // get the current state
             auto curr_state = this->getState(curr_state_ind);
-            auto curr_state_val = curr_state->getState();
+            auto curr_state_val = curr_state->state_;
             // get the actions
             auto actions = mManipulationType->getActions();
             // get the successors
@@ -617,9 +620,8 @@ namespace ims
                 {
                     // create a new state
                     int next_state_ind = getOrCreateState(new_state_val);
-                    auto new_state = this->getState(next_state_ind);
                     // add the state to the successors
-                    successors.push_back(new_state);
+                    successors.push_back(next_state_ind);
                     // add the cost
                     // TODO: change this to the real cost
                     double norm = 0;
@@ -635,7 +637,7 @@ namespace ims
         }
 
         bool getSuccessors(int curr_state_ind,
-                           std::vector<State *> &successors,
+                           std::vector<int> &successors,
                            std::vector<double> &costs) override
         {
             if (mManipulationType->getSpaceType() == manipulationType::spaceType::ConfigurationSpace)

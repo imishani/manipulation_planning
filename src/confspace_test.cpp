@@ -56,8 +56,8 @@ int main(int argc, char** argv) {
     std::shared_ptr<ims::ManipulationActionSpace> action_space = std::make_shared<ims::ManipulationActionSpace>(scene_interface, action_type);
 
     StateType start_state {0, 0, 0, 0, 0, 0};
-    // auto joint_names = move_group.getVariableNames(); // NOTE(yoraish): Is the method below the same in Noetic?
-    const std::vector<std::string>& joint_names = move_group.getJointNames();
+    // auto joint_names = move_group.getVariableNames(); // NOTE(yoraish): Is the method below the same in Noetic? NOTE(imishani):YES
+    const std::vector<std::string>& joint_names = move_group.getVariableNames();
     for (int i = 0; i < 6; i++) {
         start_state[i] = current_state->getVariablePosition(joint_names[i]);
         ROS_INFO_STREAM("Joint " << joint_names[i] << " is " << start_state[i]);
@@ -95,7 +95,7 @@ int main(int argc, char** argv) {
         std::cout << e.what() << std::endl;
     }
 
-    std::vector<ims::State*> path_;
+    std::vector<StateType> path_;
     if (!planner.plan(path_)) {
         std::cout << "No path found" << std::endl;
         return 0;
@@ -105,9 +105,10 @@ int main(int argc, char** argv) {
     }
 
     // Print nicely the path
+    int counter = 0;
     for (auto& state : path_) {
-        std::cout << "state: " << state->getStateId() << std::endl;
-        for (auto& val : state->getState()) {
+        std::cout << "State: " << counter++ << ": ";
+        for (auto& val : state) {
             std::cout << val << ", ";
         }
         std::cout << std::endl;
@@ -117,7 +118,7 @@ int main(int argc, char** argv) {
     // @{
     std::vector<StateType> traj;
     for (auto& state : path_) {
-        traj.push_back(state->getState());
+        traj.push_back(state);
     }
     moveit_msgs::RobotTrajectory trajectory;
     ims::profileTrajectory(start_state,

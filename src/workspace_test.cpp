@@ -118,7 +118,7 @@ int main(int argc, char** argv) {
     catch (std::exception& e) {
         std::cout << e.what() << std::endl;
     }
-    std::vector<ims::State*> path_;
+    std::vector<StateType> path_;
     if (!planner.plan(path_)) {
         std::cout << "No path found" << std::endl;
         return 0;
@@ -127,26 +127,29 @@ int main(int argc, char** argv) {
         std::cout << "Path found" << std::endl;
     }
 
+    /// TODO: Fix this!
+
     // @}
-    // Print nicely the path
-    std::vector<StateType> traj;
-    for (auto& state : path_) {
-        std::cout << "state: " << state->getStateId() << std::endl;
-        if (state->getStateId() == 0){
-            ims::deg2rad(current_joint_state);
-            state->setMappedState(current_joint_state);
-        }
-        for (auto& val : state->getState()) {
-            std::cout << val << ", ";
-        }
-        std::cout << std::endl;
-        std::cout << "Joint state: " << std::endl;
-        for (auto& val : state->getMappedState()) {
-            std::cout << val << ", ";
-        }
-        std::cout << std::endl;
-        traj.push_back(state->getMappedState());
-    }
+//    // Print nicely the path
+//    int counter = 0;
+//    std::vector<StateType> traj;
+//    for (auto& state : path_) {
+//        std::cout << "State: " << counter++ << std::endl;
+////        if (counter == 1){
+////            ims::deg2rad(current_joint_state);
+////            state->setMappedState(current_joint_state);
+////        }
+//        for (auto& val : state) {
+//            std::cout << val << ", ";
+//        }
+//        std::cout << std::endl;
+//        std::cout << "Joint state: " << std::endl;
+//        for (auto& val : state->getMappedState()) {
+//            std::cout << val << ", ";
+//        }
+//        std::cout << std::endl;
+//        traj.push_back(state->getMappedState());
+//    }
 
 //    // profile and execute the path
 //    // @{
@@ -183,21 +186,21 @@ int main(int argc, char** argv) {
 //        assert(state->getMappedState().size() == move_group.getJoints().size());
 //        traj.push_back(state->getMappedState());
 //    }
-    moveit_msgs::RobotTrajectory trajectory;
-    ims::profileTrajectory(start_state,
-                           goal_state,
-                           traj,
-                           move_group,
-                           trajectory);
-    move_group.execute(trajectory);
-
-    // rerport stats
-    PlannerStats stats = planner.reportStats();
-    std::cout << GREEN << "Planning time: " << stats.time << " sec" << std::endl;
-    std::cout << "cost: " << stats.cost << std::endl;
-    std::cout << "Path length: " << path_.size() << std::endl;
-    std::cout << "Number of nodes expanded: " << stats.num_expanded << std::endl;
-    std::cout << "Suboptimality: " << stats.suboptimality << RESET << std::endl;
+//    moveit_msgs::RobotTrajectory trajectory;
+//    ims::profileTrajectory(start_state,
+//                           goal_state,
+//                           traj,
+//                           move_group,
+//                           trajectory);
+//    move_group.execute(trajectory);
+//
+//    // rerport stats
+//    PlannerStats stats = planner.reportStats();
+//    std::cout << GREEN << "Planning time: " << stats.time << " sec" << std::endl;
+//    std::cout << "cost: " << stats.cost << std::endl;
+//    std::cout << "Path length: " << path_.size() << std::endl;
+//    std::cout << "Number of nodes expanded: " << stats.num_expanded << std::endl;
+//    std::cout << "Suboptimality: " << stats.suboptimality << RESET << std::endl;
 
     return 0;
 }

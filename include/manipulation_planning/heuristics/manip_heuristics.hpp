@@ -5,18 +5,23 @@
 #ifndef MANIPULATION_PLANNING_MANIPHEURISTICS_HPP
 #define MANIPULATION_PLANNING_MANIPHEURISTICS_HPP
 
-#include <moveit/distance_field/propagation_distance_field.h>
+// standard includes
 #include <memory>
 #include <utility>
-#include <manipulation_planning/common/utils.hpp>
 #include <vector>
 
+// moveit and ros includes
+#include <moveit/distance_field/propagation_distance_field.h>
+
+// search includes
 #include <search/common/scene_interface.hpp>
 #include <search/common/action_space.hpp>
-#include <search/common/state.hpp>
 #include <search/common/types.hpp>
 #include <search/planners/dijkstra.hpp>
 #include <search/planners/bfs3d.h>
+
+// project includes
+#include <manipulation_planning/common/utils.hpp>
 
 namespace ims {
 
@@ -91,16 +96,16 @@ namespace ims {
         }
 
         bool getSuccessors(int curr_state_ind,
-                           std::vector<State *> &successors,
+                           std::vector<int> &successors,
                            std::vector<double> &costs) override {
             auto curr_state = this->getState(curr_state_ind);
-            auto curr_state_val = curr_state->getState();
+            auto curr_state_val = curr_state->state_;
             auto actions = m_actions->getActions();
             for (int i{0}; i < m_actions->num_actions; i++) {
                 auto action = actions[i];
                 auto next_state_val = StateType(curr_state_val.size());
                 std::transform(curr_state_val.begin(), curr_state_val.end(), action.begin(), next_state_val.begin(),
-                               std::plus<double>());
+                               std::plus<>());
                 // Check if state is outside the map
                 if (next_state_val[0] < 0 || next_state_val[0] >= m_env->df_map->getXNumCells() ||
                     next_state_val[1] < 0 || next_state_val[1] >= m_env->df_map->getYNumCells() ||
@@ -109,8 +114,7 @@ namespace ims {
                 }
                 if (isStateValid(next_state_val)) {
                     int next_state_ind = getOrCreateState(next_state_val);
-                    auto next_state = this->getState(next_state_ind);
-                    successors.push_back(next_state);
+                    successors.push_back(next_state_ind);
                     costs.push_back(m_actions->action_costs[i]);
                 }
             }
@@ -123,7 +127,7 @@ namespace ims {
         /// \return True if the state exists, false otherwise
         bool getStateByValue(const StateType& state_val, size_t& state_ind) {
             // check if the state exists
-            auto* curr_state = new State(state_val);
+            auto curr_state = new RobotState; curr_state->state_ = state_val;
             auto it = state_to_id_.find(curr_state);
             if(it == state_to_id_.end()){
                 delete curr_state;
@@ -135,140 +139,137 @@ namespace ims {
         }
     };
 
-    class DijkstraHeuristic : public BaseHeuristic{
-    public:
-        DijkstraHeuristic() : DijkstraHeuristic(getDistanceFieldMoveIt()){
-        }
-
-        explicit DijkstraHeuristic(std::shared_ptr<distance_field::PropagationDistanceField> distance_field_,
-                     const std::string& group_name = "manipulator_1"){
-            m_distanceField = std::move(distance_field_);
-            // setup robot move group and planning scene
-            move_group = std::make_shared<moveit::planning_interface::MoveGroupInterface>(group_name);
-            // robot model
-            robot_model = move_group->getRobotModel();
-            // joint model group
-            joint_model_group = robot_model->getJointModelGroup(group_name);
-
-            kinematic_state = std::make_shared<moveit::core::RobotState>(robot_model);
-
-            // get the planning group tip link
-            tip_link = joint_model_group->getLinkModelNames().back();
-        }
-
-        void setGoal(State* goal) override{
-            mGoal = goal;
-            // Do forward kinematics to get the goal pose
-            auto goal_state = mGoal->getState();
-
-            kinematic_state->setJointGroupPositions(joint_model_group, goal_state);
-
-            auto end_effector_state = kinematic_state->getGlobalLinkTransform(tip_link);
-
-            auto goal_pose = end_effector_state.translation();
-            goal_position_ind.resize(3);
-            int x, y, z;
-            m_distanceField->worldToGrid(goal_pose.x(), goal_pose.y(), goal_pose.z(),
-                                         x, y, z);
-            goal_position_ind[0] = x; goal_position_ind[1] = y; goal_position_ind[2] = z;
-
-            run_planner();
-        }
-
-        bool run_planner(){
-            auto* zero_heuristic = new ZeroHeuristic();
-            dijkstraParams params (zero_heuristic);
-            scene3Dpoint scene(m_distanceField);
-            actionType3Dpoint actions;
-            action_space = std::make_shared<actionSpace3Dpoint>(scene, actions);
-            dijkstra_planner = new dijkstra(params);
-
-            try {
-                dijkstra_planner->initializePlanner(action_space, goal_position_ind, goal_position_ind);
-            }
-            catch (std::exception& e){
-                std::cout << e.what() << std::endl;
-                throw std::runtime_error("failed to initialize planner");
-            }
-
-            if (!dijkstra_planner->exhaustPlan())
-                throw std::runtime_error("failed to look in the entire space");
-        }
-
-        bool getHeuristic(State* s1, State* s2, double& dist) override{
-                const auto& s1_state = s1->getState();
-                const auto& s2_state = s2->getState();
-                // Do forward kinematics to get the goal pose
-                kinematic_state->setJointGroupPositions(joint_model_group, s1_state);
-                auto ee_s1_state = kinematic_state->getGlobalLinkTransform(tip_link);
-
-                kinematic_state->setJointGroupPositions(joint_model_group, s2_state);
-                auto ee_s2_state = kinematic_state->getGlobalLinkTransform(tip_link);
-
-                auto s1_position = ee_s1_state.translation();
-                auto s2_position = ee_s2_state.translation();
-
-                int x1, y1, z1, x2, y2, z2;
-                m_distanceField->worldToGrid(s1_position.x(), s1_position.y(), s1_position.z(),
-                                             x1, y1, z1);
-                m_distanceField->worldToGrid(s2_position.x(), s2_position.y(), s2_position.z(),
-                                                x2, y2, z2);
-
-                StateType s1_pos {(double)x1, (double)y1, (double)z1};
-                StateType s2_pos {(double)x2, (double)y2, (double)z2};
-
-                size_t s1_ind_int, s2_ind_int;
-                if (!action_space->getStateByValue(s1_pos, s1_ind_int))
-                    return false;
-                if (!action_space->getStateByValue(s2_pos, s2_ind_int))
-                    return false;
-                else{
-                    dist = action_space->getState(s1_ind_int)->f - action_space->getState(s2_ind_int)->f;
-                    return true;
-                }
-            }
-
-        bool getHeuristic(State* s, double& dist) override{
-            if (goal_position_ind.empty())
-                return false;
-            else {
-                const auto& s_state = s->getState();
-                kinematic_state->setJointGroupPositions(joint_model_group, s_state);
-                auto ee_state = kinematic_state->getGlobalLinkTransform(tip_link);
-
-                auto s_position = ee_state.translation();
-                int x, y, z;
-                m_distanceField->worldToGrid(s_position.x(), s_position.y(), s_position.z(),
-                                             x, y, z);
-
-                StateType s_pos {(double)x, (double)y, (double)z};
-                size_t s_ind_int;
-                if (!action_space->getStateByValue(s_pos, s_ind_int))
-                    return false;
-                else {
-                    dist = action_space->getState(s_ind_int)->f;
-                    return true;
-                }
-
-
-            }
-        }
-
-        std::shared_ptr<distance_field::PropagationDistanceField> m_distanceField;
-        std::shared_ptr<moveit::planning_interface::MoveGroupInterface> move_group;
-
-        std::shared_ptr<actionSpace3Dpoint> action_space;
-
-        moveit::core::RobotModelConstPtr robot_model;
-        const moveit::core::JointModelGroup* joint_model_group;
-        moveit::core::RobotStatePtr kinematic_state;
-
-        StateType goal_position_ind;
-
-        dijkstra* dijkstra_planner = nullptr;
-
-        std::string tip_link;
-    };
+    /// TODO: Fix this?
+//    class DijkstraHeuristic : public BaseHeuristic{
+//    public:
+//        DijkstraHeuristic() : DijkstraHeuristic(getDistanceFieldMoveIt()){
+//        }
+//
+//        explicit DijkstraHeuristic(std::shared_ptr<distance_field::PropagationDistanceField> distance_field_,
+//                     const std::string& group_name = "manipulator_1"){
+//            m_distanceField = std::move(distance_field_);
+//            // setup robot move group and planning scene
+//            move_group = std::make_shared<moveit::planning_interface::MoveGroupInterface>(group_name);
+//            // robot model
+//            robot_model = move_group->getRobotModel();
+//            // joint model group
+//            joint_model_group = robot_model->getJointModelGroup(group_name);
+//
+//            kinematic_state = std::make_shared<moveit::core::RobotState>(robot_model);
+//
+//            // get the planning group tip link
+//            tip_link = joint_model_group->getLinkModelNames().back();
+//        }
+//
+//        void setGoal(StateType& goal) override{
+//            mGoal = goal;
+//
+//            kinematic_state->setJointGroupPositions(joint_model_group, goal);
+//
+//            auto end_effector_state = kinematic_state->getGlobalLinkTransform(tip_link);
+//
+//            auto goal_pose = end_effector_state.translation();
+//            goal_position_ind.resize(3);
+//            int x, y, z;
+//            m_distanceField->worldToGrid(goal_pose.x(), goal_pose.y(), goal_pose.z(),
+//                                         x, y, z);
+//            goal_position_ind[0] = x; goal_position_ind[1] = y; goal_position_ind[2] = z;
+//
+//            run_planner();
+//        }
+//
+//        bool run_planner(){
+//            auto* zero_heuristic = new ZeroHeuristic();
+//            dijkstraParams params (zero_heuristic);
+//            scene3Dpoint scene(m_distanceField);
+//            actionType3Dpoint actions;
+//            action_space = std::make_shared<actionSpace3Dpoint>(scene, actions);
+//            dijkstra_planner = new dijkstra(params);
+//
+//            try {
+//                dijkstra_planner->initializePlanner(action_space, goal_position_ind, goal_position_ind);
+//            }
+//            catch (std::exception& e){
+//                std::cout << e.what() << std::endl;
+//                throw std::runtime_error("failed to initialize planner");
+//            }
+//
+//            if (!dijkstra_planner->exhaustPlan())
+//                throw std::runtime_error("failed to look in the entire space");
+//        }
+//
+//        bool getHeuristic(StateType& s1, StateType& s2, double& dist) override{
+//                // Do forward kinematics to get the goal pose
+//                kinematic_state->setJointGroupPositions(joint_model_group, s1);
+//                auto ee_s1_state = kinematic_state->getGlobalLinkTransform(tip_link);
+//
+//                kinematic_state->setJointGroupPositions(joint_model_group, s2);
+//                auto ee_s2_state = kinematic_state->getGlobalLinkTransform(tip_link);
+//
+//                auto s1_position = ee_s1_state.translation();
+//                auto s2_position = ee_s2_state.translation();
+//
+//                int x1, y1, z1, x2, y2, z2;
+//                m_distanceField->worldToGrid(s1_position.x(), s1_position.y(), s1_position.z(),
+//                                             x1, y1, z1);
+//                m_distanceField->worldToGrid(s2_position.x(), s2_position.y(), s2_position.z(),
+//                                                x2, y2, z2);
+//
+//                StateType s1_pos {(double)x1, (double)y1, (double)z1};
+//                StateType s2_pos {(double)x2, (double)y2, (double)z2};
+//
+//                size_t s1_ind_int, s2_ind_int;
+//                if (!action_space->getStateByValue(s1_pos, s1_ind_int))
+//                    return false;
+//                if (!action_space->getStateByValue(s2_pos, s2_ind_int))
+//                    return false;
+//                else{
+//                    dist = action_space->getState(s1_ind_int)->f - action_space->getState(s2_ind_int)->f;
+//                    return true;
+//                }
+//            }
+//
+//        bool getHeuristic(State* s, double& dist) override{
+//            if (goal_position_ind.empty())
+//                return false;
+//            else {
+//                const auto& s_state = s->getState();
+//                kinematic_state->setJointGroupPositions(joint_model_group, s_state);
+//                auto ee_state = kinematic_state->getGlobalLinkTransform(tip_link);
+//
+//                auto s_position = ee_state.translation();
+//                int x, y, z;
+//                m_distanceField->worldToGrid(s_position.x(), s_position.y(), s_position.z(),
+//                                             x, y, z);
+//
+//                StateType s_pos {(double)x, (double)y, (double)z};
+//                size_t s_ind_int;
+//                if (!action_space->getStateByValue(s_pos, s_ind_int))
+//                    return false;
+//                else {
+//                    dist = action_space->getState(s_ind_int)->f;
+//                    return true;
+//                }
+//
+//
+//            }
+//        }
+//
+//        std::shared_ptr<distance_field::PropagationDistanceField> m_distanceField;
+//        std::shared_ptr<moveit::planning_interface::MoveGroupInterface> move_group;
+//
+//        std::shared_ptr<actionSpace3Dpoint> action_space;
+//
+//        moveit::core::RobotModelConstPtr robot_model;
+//        const moveit::core::JointModelGroup* joint_model_group;
+//        moveit::core::RobotStatePtr kinematic_state;
+//
+//        StateType goal_position_ind;
+//
+//        dijkstra* dijkstra_planner = nullptr;
+//
+//        std::string tip_link;
+//    };
 
 
     class BFSHeuristic : public BaseHeuristic{
@@ -304,9 +305,8 @@ namespace ims {
             m_cost_per_cell = cost_per_cell;
         }
 
-        void setGoal(State* goal) override{
-            const auto& goal_state = goal->getState();
-            kinematic_state->setJointGroupPositions(joint_model_group, goal_state);
+        void setGoal(StateType& goal) override{
+            kinematic_state->setJointGroupPositions(joint_model_group, goal);
             auto ee_goal_state = kinematic_state->getGlobalLinkTransform(tip_link);
 
             auto goal_position = ee_goal_state.translation();
@@ -322,10 +322,9 @@ namespace ims {
         }
 
 
-        bool getHeuristic(State* s1, State* s2, double& dist) override{
+        bool getHeuristic(StateType& s1, StateType& s2, double& dist) override{
             // check if s2 is a goal state
-            const auto& s_check = s2->getState();
-            kinematic_state->setJointGroupPositions(joint_model_group, s_check);
+            kinematic_state->setJointGroupPositions(joint_model_group, s2);
             auto ee_check_state = kinematic_state->getGlobalLinkTransform(tip_link);
 
             auto check_position = ee_check_state.translation();
@@ -345,12 +344,11 @@ namespace ims {
             return false;
         }
 
-        bool getHeuristic(State* s, double& dist) override{
+        bool getHeuristic(StateType& s, double& dist) override{
             if (m_goal_cells.empty())
                 return false;
 
-            const auto& s_state = s->getState();
-            kinematic_state->setJointGroupPositions(joint_model_group, s_state);
+            kinematic_state->setJointGroupPositions(joint_model_group, s);
             auto ee_state = kinematic_state->getGlobalLinkTransform(tip_link);
 
             auto s_position = ee_state.translation();
@@ -418,20 +416,20 @@ namespace ims {
     /// @brief SE(3) distance heuristic using hopf coordinates
     struct SE3HeuristicHopf : public BaseHeuristic {
 
-        bool getHeuristic(State* s1, State* s2,
+        bool getHeuristic(StateType& s1, StateType& s2,
                           double& dist) override {
             // check id the states are the same size
-            if (s1->getState().size() != s2->getState().size()) {
+            if (s1.size() != s2.size()) {
                 std::cout << "Error: The states are not the same size!" << std::endl;
                 return false;
             } else {
                 // get the position of the states
-                Eigen::Vector3d pos1 {s1->getState()[0], s1->getState()[1], s1->getState()[2]};
-                Eigen::Vector3d pos2 {s2->getState()[0], s2->getState()[1], s2->getState()[2]};
+                Eigen::Vector3d pos1 {s1[0], s1[1], s1[2]};
+                Eigen::Vector3d pos2 {s2[0], s2[1], s2[2]};
                 // get the orientation of the states
                 Eigen::Quaterniond quat1; Eigen::Quaterniond quat2;
-                hopfToQuaternion(Eigen::Vector3d{s1->getState()[3], s1->getState()[4], s1->getState()[5]}, quat1);
-                hopfToQuaternion(Eigen::Vector3d{s2->getState()[3], s2->getState()[4], s2->getState()[5]}, quat2);
+                hopfToQuaternion(Eigen::Vector3d{s1[3], s1[4], s1[5]}, quat1);
+                hopfToQuaternion(Eigen::Vector3d{s2[3], s2[4], s2[5]}, quat2);
                 // get the distance between the positions
                 dist = (pos1 - pos2).norm();
                 // get the distance between the orientations

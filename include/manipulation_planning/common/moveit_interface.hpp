@@ -49,9 +49,7 @@
 
 // project includes
 #include <search/common/types.hpp>
-#include <search/common/state.hpp>
 #include <search/common/scene_interface.hpp>
-#include <search/common/action_space.hpp>
 
 
 namespace ims{
