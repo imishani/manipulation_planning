@@ -98,8 +98,8 @@ namespace ims {
         bool getSuccessors(int curr_state_ind,
                            std::vector<int> &successors,
                            std::vector<double> &costs) override {
-            auto curr_state = this->getState(curr_state_ind);
-            auto curr_state_val = curr_state->state_;
+            auto curr_state = this->getRobotState(curr_state_ind);
+            auto curr_state_val = curr_state->state;
             auto actions = m_actions->getActions();
             for (int i{0}; i < m_actions->num_actions; i++) {
                 auto action = actions[i];
@@ -113,7 +113,7 @@ namespace ims {
                     continue;
                 }
                 if (isStateValid(next_state_val)) {
-                    int next_state_ind = getOrCreateState(next_state_val);
+                    int next_state_ind = getOrCreateRobotState(next_state_val);
                     successors.push_back(next_state_ind);
                     costs.push_back(m_actions->action_costs[i]);
                 }
@@ -127,7 +127,7 @@ namespace ims {
         /// \return True if the state exists, false otherwise
         bool getStateByValue(const StateType& state_val, size_t& state_ind) {
             // check if the state exists
-            auto curr_state = new RobotState; curr_state->state_ = state_val;
+            auto curr_state = new RobotState; curr_state->state = state_val;
             auto it = state_to_id_.find(curr_state);
             if(it == state_to_id_.end()){
                 delete curr_state;

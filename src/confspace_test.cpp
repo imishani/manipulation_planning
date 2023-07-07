@@ -44,6 +44,7 @@ int main(int argc, char** argv) {
 //    auto* heuristic = new ims::BFSHeuristic(df, "manipulator");
     auto* heuristic = new ims::JointAnglesHeuristic;
     double weight = 10.0;
+
     ims::wAStarParams params(heuristic, weight);
 
     ims::MoveitInterface scene_interface("manipulator_1");
@@ -67,14 +68,14 @@ int main(int argc, char** argv) {
     StateType goal_state = start_state;
 
     // change the goal state
-    goal_state[0] = 0;
-    goal_state[1] = 0;
-    goal_state[2] = 0;
-    goal_state[3] = 0;
-    goal_state[4] = 0;
-    goal_state[5] = 0;
-//    goal_state[0] = -36; goal_state[1] = -118; goal_state[2] = 152;
-//    goal_state[3] = -207; goal_state[4] = -90; goal_state[5] = 200;
+//    goal_state[0] = 0;
+//    goal_state[1] = 0;
+//    goal_state[2] = 0;
+//    goal_state[3] = 0;
+//    goal_state[4] = 0;
+//    goal_state[5] = 0;
+    goal_state[0] = 71; goal_state[1] = -58; goal_state[2] = 40;
+    goal_state[3] = -55; goal_state[4] = 29; goal_state[5] = 72;
 
 
     ims::deg2rad(start_state); ims::deg2rad(goal_state);

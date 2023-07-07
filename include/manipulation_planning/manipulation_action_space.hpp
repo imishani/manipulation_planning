@@ -512,8 +512,8 @@ namespace ims
                                      std::vector<double> &costs)
         {
             // get the current state
-            auto curr_state = this->getState(curr_state_ind);
-            auto curr_state_val = curr_state->state_;
+            auto curr_state = this->getRobotState(curr_state_ind);
+            auto curr_state_val = curr_state->state;
             // get the actions
             auto actions = mManipulationType->getActions();
             // convert to quaternion
@@ -544,7 +544,7 @@ namespace ims
                 //            if (isStateToStateValid(curr_state_val, new_state_val)) {
                 bool succ;
                 StateType mapped_state;
-                if (curr_state->state_mapped_.empty())
+                if (curr_state->state_mapped.empty())
                 {
                     //                    ROS_INFO("No mapped state, using IK without seed");
                     succ = isStateValid(new_state_val,
@@ -552,14 +552,14 @@ namespace ims
                 }
                 else
                     succ = isStateValid(new_state_val,
-                                        curr_state->state_mapped_,
+                                        curr_state->state_mapped,
                                         mapped_state);
                 if (succ)
                 {
                     // create a new state
-                    int next_state_ind = getOrCreateState(new_state_val);
-                    auto new_state = this->getState(next_state_ind);
-                    new_state->state_mapped_ = mapped_state;
+                    int next_state_ind = getOrCreateRobotState(new_state_val);
+                    auto new_state = this->getRobotState(next_state_ind);
+                    new_state->state_mapped = mapped_state;
                     // add the state to the successors
                     successors.push_back(next_state_ind);
                     // add the cost
@@ -583,8 +583,8 @@ namespace ims
                                      std::vector<double> &costs)
         {
             // get the current state
-            auto curr_state = this->getState(curr_state_ind);
-            auto curr_state_val = curr_state->state_;
+            auto curr_state = this->getRobotState(curr_state_ind);
+            auto curr_state_val = curr_state->state;
             // get the actions
             auto actions = mManipulationType->getActions();
             // get the successors
@@ -619,7 +619,7 @@ namespace ims
                 if (isStateValid(new_state_val) && !discontinuity)
                 {
                     // create a new state
-                    int next_state_ind = getOrCreateState(new_state_val);
+                    int next_state_ind = getOrCreateRobotState(new_state_val);
                     // add the state to the successors
                     successors.push_back(next_state_ind);
                     // add the cost
