@@ -306,6 +306,7 @@ namespace ims {
         }
 
         void setGoal(StateType& goal) override{
+            mGoal = goal;
             kinematic_state->setJointGroupPositions(joint_model_group, goal);
             auto ee_goal_state = kinematic_state->getGlobalLinkTransform(tip_link);
 
@@ -319,6 +320,47 @@ namespace ims {
             m_goal_cells.emplace_back(x, y, z);
 
             m_bfs->run(x, y, z);
+        }
+
+        void setStart(StateType& start) override{
+            mStart = start;
+            kinematic_state->setJointGroupPositions(joint_model_group, start);
+            auto ee_start_state = kinematic_state->getGlobalLinkTransform(tip_link);
+
+            auto start_position = ee_start_state.translation();
+            m_distanceField->worldToGrid(start_position.x(), start_position.y(), start_position.z(),
+                                         start_cells[0], start_cells[1], start_cells[2]);
+//            if (!m_bfs->inBounds(x, y, z))
+//                throw std::runtime_error("start is out of bounds");
+        }
+
+
+        /// @brief Get the metric distance to the goal state
+        /// @param x The x position of the state
+        /// @param y The y position of the state
+        /// @param z The z position of the state
+        /// @return The distance to the goal state
+        double getMetricGoalDistance(double x, double y, double z) const
+        {
+            int gx, gy, gz;
+            m_distanceField->worldToGrid(x, y, z, gx, gy, gz);
+            if (!m_bfs->inBounds(gx, gy, gz))
+                return (double)smpl::BFS_3D::WALL * m_distanceField->getResolution();
+            else
+                return (double)m_bfs->getDistance(gx, gy, gz) * m_distanceField->getResolution();
+        }
+
+        /// @brief Get the metric distance to the start state
+        /// @param x The x position of the state
+        /// @param y The y position of the state
+        /// @param z The z position of the state
+        /// @return The distance to the start state
+        double getMetricStartDistance(double x, double y, double z)
+        {
+            int sx, sy, sz;
+            m_distanceField->worldToGrid(x, y, z, sx, sy, sz);
+            // manhattan distance
+            return (std::abs(sx - start_cells[0]) + std::abs(sy - start_cells[1]) + std::abs(sz - start_cells[2])) * m_distanceField->getResolution();
         }
 
 
@@ -365,6 +407,7 @@ namespace ims {
         std::unique_ptr<smpl::BFS_3D> m_bfs;
         double m_inflation_radius = 0.02;
         int m_cost_per_cell = 100;
+        int start_cells[3]{};
 
         struct CellCoord
         {

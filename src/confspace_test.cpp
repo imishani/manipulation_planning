@@ -41,8 +41,8 @@ int main(int argc, char** argv) {
     planning_scene->checkCollision(collision_request, collision_result, *current_state);
 
     auto df = ims::getDistanceFieldMoveIt();
-//    auto* heuristic = new ims::BFSHeuristic(df, "manipulator");
-    auto* heuristic = new ims::JointAnglesHeuristic;
+    auto* heuristic = new ims::BFSHeuristic(df, "manipulator_1");
+//    auto* heuristic = new ims::JointAnglesHeuristic;
     double weight = 10.0;
 
     ims::wAStarParams params(heuristic, weight);
@@ -54,10 +54,10 @@ int main(int argc, char** argv) {
     ims::deg2rad(discretization);
     action_type.Discretization(discretization);
 
-    std::shared_ptr<ims::ManipulationActionSpace> action_space = std::make_shared<ims::ManipulationActionSpace>(scene_interface, action_type);
+    std::shared_ptr<ims::ManipulationActionSpace> action_space = std::make_shared<ims::ManipulationActionSpace>(scene_interface, action_type,
+                                                                                                                heuristic);
 
     StateType start_state {0, 0, 0, 0, 0, 0};
-    // auto joint_names = move_group.getVariableNames(); // NOTE(yoraish): Is the method below the same in Noetic? NOTE(imishani):YES
     const std::vector<std::string>& joint_names = move_group.getVariableNames();
     for (int i = 0; i < 6; i++) {
         start_state[i] = current_state->getVariablePosition(joint_names[i]);
@@ -74,8 +74,8 @@ int main(int argc, char** argv) {
 //    goal_state[3] = 0;
 //    goal_state[4] = 0;
 //    goal_state[5] = 0;
-    goal_state[0] = 71; goal_state[1] = -58; goal_state[2] = 40;
-    goal_state[3] = -55; goal_state[4] = 29; goal_state[5] = 72;
+    goal_state[0] = 0; goal_state[1] = 90; goal_state[2] = 180;
+    goal_state[3] = -90; goal_state[4] = 0; goal_state[5] = 52;
 
 
     ims::deg2rad(start_state); ims::deg2rad(goal_state);

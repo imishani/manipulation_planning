@@ -27,7 +27,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 /*!
- * \file   actionSpace.hpp
+ * \file   moveit_interface.hpp
  * \author Itamar Mishani (imishani@cmu.edu)
  * \date   4/3/23
 */
@@ -50,6 +50,7 @@
 // project includes
 #include <search/common/types.hpp>
 #include <search/common/scene_interface.hpp>
+#include <manipulation_planning/common/utils.hpp>
 
 
 namespace ims{
@@ -127,7 +128,7 @@ namespace ims{
             m_kinematic_state->setToRandomPositions(joint_model_group);
             // update
             mPlanningSceneMonitor->updateFrameTransforms();
-            mPlanningSceneMonitor->updateSceneWithCurrentState();
+            mPlanningSceneMonitor->updateSceneWithCurrentState(); // TODO: Is this needed?
             // set the pose
             if (m_kinematic_state->setFromIK(joint_model_group, pose, timeout)) {
                 // get the joint values
@@ -149,7 +150,7 @@ namespace ims{
         bool calculateIK(const geometry_msgs::Pose &pose,
                          const StateType &seed,
                          StateType &joint_state,
-                         double consistency_limit = 0.5,
+                         double consistency_limit = 0.3,
                          double timeout = 0.05) {
             // resize the joint state
             joint_state.resize(num_joints);
@@ -166,7 +167,7 @@ namespace ims{
             tf::poseMsgToEigen(pose, pose_eigen);
 
             if (m_kinematic_state->setFromIK(joint_model_group, pose_eigen,
-                                             tip_link, //consistency_limits,
+                                             tip_link, consistency_limits,
                                              timeout)) {
                 m_kinematic_state->copyJointGroupPositions(joint_model_group, joint_state);
                 return true;
@@ -174,6 +175,31 @@ namespace ims{
                 ROS_INFO("No IK solution found using seed");
                 return false;
             }
+        }
+
+        /// @brief Calculate FK for a given joint state
+        /// @param joint_state The joint state to calculate FK for
+        /// @param pose The pose to store the FK solution
+        /// @return True if FK was found, false otherwise
+        bool calculateFK(const StateType &joint_state,
+                         StateType &pose) {
+            // set the joint state
+            m_kinematic_state->setJointGroupPositions(joint_model_group, joint_state);
+            // update
+            mPlanningSceneMonitor->updateFrameTransforms();
+            mPlanningSceneMonitor->updateSceneWithCurrentState();
+            // get the tip link
+            const std::string &tip_link = joint_model_group->getLinkModelNames().back();
+            // get the pose
+            const Eigen::Isometry3d &end_effector_state = m_kinematic_state->getGlobalLinkTransform(tip_link);
+            // push to pose as a vector of x, y, z, r, p, y
+            pose.resize(6);
+            pose[0] = end_effector_state.translation().x();
+            pose[1] = end_effector_state.translation().y();
+            pose[2] = end_effector_state.translation().z();
+            ims::get_euler_zyx(end_effector_state.rotation(), pose[5], pose[4], pose[3]);
+            ims::normalize_euler_zyx(pose[5], pose[4], pose[3]);
+            return true;
         }
 
         /// @brief get the joint limits
