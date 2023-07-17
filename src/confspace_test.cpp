@@ -1,6 +1,36 @@
-//
-// Created by itamar on 4/3/23.
-//
+/*
+ * Copyright (C) 2023, Itamar Mishani
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ *     * Redistributions of source code must retain the above copyright
+ *       notice, this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *     * Neither the name of the Carnegie Mellon University nor the names of its
+ *       contributors may be used to endorse or promote products derived from
+ *       this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+/*!
+ * \file   confspace_test.cpp
+ * \author Itamar Mishani (imishani@cmu.edu)
+ * \date   4/18/23
+*/
 
 #include <memory>
 
@@ -41,9 +71,13 @@ int main(int argc, char** argv) {
     planning_scene->checkCollision(collision_request, collision_result, *current_state);
 
     auto df = ims::getDistanceFieldMoveIt();
-    auto* heuristic = new ims::BFSHeuristic(df, "manipulator_1");
-//    auto* heuristic = new ims::JointAnglesHeuristic;
-    double weight = 10.0;
+    // show the bounding box of the distance field
+    ros::Publisher bb_pub = nh.advertise<visualization_msgs::Marker>("bb_marker", 10);
+    // get the planning frame
+    ims::visualizeBoundingBox(df, bb_pub, move_group.getPlanningFrame());
+//    auto* heuristic = new ims::BFSHeuristic(df, "manipulator_1");
+    auto* heuristic = new ims::JointAnglesHeuristic;
+    double weight = 100.0;
 
     ims::wAStarParams params(heuristic, weight);
 
@@ -54,8 +88,9 @@ int main(int argc, char** argv) {
     ims::deg2rad(discretization);
     action_type.Discretization(discretization);
 
-    std::shared_ptr<ims::ManipulationActionSpace> action_space = std::make_shared<ims::ManipulationActionSpace>(scene_interface, action_type,
-                                                                                                                heuristic);
+    std::shared_ptr<ims::ManipulationActionSpace> action_space = std::make_shared<ims::ManipulationActionSpace>(scene_interface, action_type);
+//    std::shared_ptr<ims::ManipulationActionSpace> action_space = std::make_shared<ims::ManipulationActionSpace>(scene_interface, action_type,
+//                                                                                                                heuristic);
 
     StateType start_state {0, 0, 0, 0, 0, 0};
     const std::vector<std::string>& joint_names = move_group.getVariableNames();
@@ -76,6 +111,9 @@ int main(int argc, char** argv) {
 //    goal_state[5] = 0;
     goal_state[0] = 0; goal_state[1] = 90; goal_state[2] = 180;
     goal_state[3] = -90; goal_state[4] = 0; goal_state[5] = 52;
+
+//    goal_state[0] = -8; goal_state[1] = -90; goal_state[2] = 130;
+//    goal_state[3] = -220; goal_state[4] = -90; goal_state[5] = 180;
 
 
     ims::deg2rad(start_state); ims::deg2rad(goal_state);

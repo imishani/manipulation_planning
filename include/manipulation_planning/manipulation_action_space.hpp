@@ -181,6 +181,7 @@ namespace ims
                 {
                     long_mprim_.push_back(line_);
                 }
+                i++;
             }
         }
 
@@ -310,7 +311,7 @@ namespace ims
         struct MotionPrimitiveActiveType
         {
             std::pair<bool, double> short_dist = std::make_pair(true, 0.1);
-            std::pair<bool, double> long_dist = std::make_pair(true, 0.6);
+            std::pair<bool, double> long_dist = std::make_pair(true, 0.4);
             std::pair<bool, double> snap_xyz = std::make_pair(false, 0.2);
             std::pair<bool, double> snap_rpy = std::make_pair(false, 0.2);
             std::pair<bool, double> snap_xyzrpy = std::make_pair(true, 0.4);
@@ -524,7 +525,7 @@ namespace ims
         /// @param resolution The resolution of the path (default: 0.005 rad)
         /// @return The interpolated path
         static PathType interpolatePath(const StateType &start, const StateType &end,
-                                        const double resolution = 0.02)
+                                        const double resolution = 0.2)
         {
             // TODO: Currently only works for configuration space
             assert(start.size() == end.size());
@@ -724,10 +725,11 @@ namespace ims
                 StateType new_state_val{};
                 new_state_val.resize(curr_state_val.size());
                 std::fill(new_state_val.begin(), new_state_val.end(), 0.0);
-
+                bool goal_state_set{false};
                 // check if actions are all zero, if so, replace them with the goal state
-                if (std::all_of(action.begin(), action.end(), [](double i){return i == 0;})){
+                if ((bfs_heuristic_ != nullptr) && std::all_of(action.begin(), action.end(), [](double i){return i == 0;})){
                     new_state_val = bfs_heuristic_->mGoal;
+                    goal_state_set = true;
                 } else{
                     for (int i{0}; i < curr_state_val.size(); i++) {
                         new_state_val[i] = curr_state_val[i] + action[i];
@@ -745,6 +747,8 @@ namespace ims
                     if (fabs(new_state_val[i] - curr_state_val[i]) > 20.0 * mManipulationType->max_action_)
                     {
                         discontinuity = true;
+                        if (goal_state_set)
+                            std::cout << "Goal state set FAILED due to Discontinuity" << std::endl;
                         break;
                     }
                 }
@@ -765,6 +769,10 @@ namespace ims
 //                    }
 //                    costs.push_back(sqrt(norm));
                     costs.push_back(1000);
+                }
+                else {
+                    if (goal_state_set)
+                        std::cout << "Goal state set FAILED" << std::endl;
                 }
             }
             return true;

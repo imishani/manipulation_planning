@@ -288,9 +288,10 @@ namespace ims {
             joint_model_group = robot_model->getJointModelGroup(group_name);
 
             kinematic_state = std::make_shared<moveit::core::RobotState>(robot_model);
-
+            auto names = joint_model_group->getLinkModelNames();
             // get the planning group tip link
             tip_link = joint_model_group->getLinkModelNames().back();
+//            tip_link = names.at(5);
 
             syncGridAndBfs();
         }
@@ -401,6 +402,7 @@ namespace ims {
             dist = getBfsCostToGoal(*m_bfs, x, y, z);
             return true;
         }
+
 
     private:
         std::shared_ptr<distance_field::PropagationDistanceField> m_distanceField;

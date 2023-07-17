@@ -2,6 +2,7 @@ cmake-build-release/
 cmake-build-debug/
 cmake-build-relwithdebinfo/
 cmake-build-rosrelwithdebinfo/
+cmake-build-rosdebug/
 scripts/__pycache__/
 build/
 devel/
