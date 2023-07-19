@@ -1,10 +1,7 @@
-Motion_Primitives(degrees): 10 6 6
+Motion_Primitives(meters/degrees): 6 3 3
                             0.02 0 0 0 0 0
                             0 0.02 0 0 0 0
                             0 0 0.02 0 0 0
                             0 0 0 2 0 0
                             0 0 0 0 2 0
                             0 0 0 0 0 2
-                            0 0 0 5 0 0
-                            0 0 0 0 5 0
-                            0 0 0 0 0 5

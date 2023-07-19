@@ -65,7 +65,7 @@ namespace ims
                              space_type_(spaceType::ConfigurationSpace),
                              prim_file_name_("../config/manip.mprim"),
                              max_action_(0.0){
-            readMPfile();
+//            readMPfile();
         };
 
         /// @brief Constructor with motion primitives file given
@@ -77,8 +77,9 @@ namespace ims
                                   space_type_(spaceType::ConfigurationSpace),
                                   prim_file_name_(std::move(mprimFile)),
                                   max_action_(0.0){
-            readMPfile();
+//            readMPfile();
         };
+
 
         /// @brief Constructor with adaptive motion primitives given
 
@@ -139,49 +140,94 @@ namespace ims
             std::ifstream file(prim_file_name_);
             std::string line;
             std::vector<std::vector<double>> mprim;
-            int tot_prim {0}, dof{0}, num_short_prim{0};
-            int i{0};
-            while (std::getline(file, line))
-            {
-                if (i == 0)
-                {
-                    // First line being with: "Motion_Primitives(degrees): " and then three numbers. Make sure the line begins with the string and then get the numbers
-                    std::string first_line = "Motion_Primitives(degrees): ";
-                    // Check if the line begins with the string
-                    if (line.find(first_line) != 0)
+            switch (space_type_) {
+                case spaceType::ConfigurationSpace: {
+                    int tot_prim {0}, dof{0}, num_short_prim{0};
+                    int i{0};
+                    while (std::getline(file, line))
                     {
-                        ROS_ERROR_STREAM("The first line of the motion primitives file should begin with: " << first_line);
+                        if (i == 0)
+                        {
+                            // First line being with: "Motion_Primitives(degrees): " and then three numbers. Make sure the line begins with the string and then get the numbers
+                            std::string first_line = "Motion_Primitives(degrees): ";
+                            // Check if the line begins with the string
+                            if (line.find(first_line) != 0)
+                            {
+                                ROS_ERROR_STREAM("The first line of the motion primitives file should begin with: " << first_line);
+                            }
+                            // Get the numbers
+                            std::istringstream iss(line.substr(first_line.size()));
+                            if (!(iss >> tot_prim >> dof >> num_short_prim))
+                            {
+                                ROS_ERROR_STREAM("The first line of the motion primitives file should begin with: " << first_line);
+                            }
+                            i++;
+                            continue;
+                        }
+                        std::istringstream iss(line);
+                        std::vector<double> line_;
+                        double num;
+                        while (iss >> num)
+                        {
+                            line_.push_back(num);
+                            if (abs(num * M_PI / 180.0) > max_action_)
+                            {
+                                max_action_ = abs(num * M_PI / 180.0);
+                            }
+                        }
+                        // Check if short or long primitive (the last num_short_prim lines are short)
+                        if (i > tot_prim - num_short_prim)
+                        {
+                            short_mprim_.push_back(line_);
+                        }
+                        else
+                        {
+                            long_mprim_.push_back(line_);
+                        }
+                        i++;
                     }
-                    // Get the numbers
-                    std::istringstream iss(line.substr(first_line.size()));
-                    if (!(iss >> tot_prim >> dof >> num_short_prim))
+                }
+                    break;
+                case spaceType::WorkSpace: {
+                    int tot_ptim {0}, positions_prims {0}, orientations_prims {0};
+                    int i{0};
+                    while (std::getline(file, line))
                     {
-                        ROS_ERROR_STREAM("The first line of the motion primitives file should begin with: " << first_line);
+                        if (i == 0)
+                        {
+                            // First line being with: "Motion_Primitives(degrees): " and then three numbers. Make sure the line begins with the string and then get the numbers
+                            std::string first_line = "Motion_Primitives(meters/degrees): ";
+                            // Check if the line begins with the string
+                            if (line.find(first_line) != 0)
+                            {
+                                ROS_ERROR_STREAM("The first line of the motion primitives file should begin with: " << first_line);
+                            }
+                            // Get the numbers
+                            std::istringstream iss(line.substr(first_line.size()));
+                            if (!(iss >> tot_ptim >> positions_prims >> orientations_prims))
+                            {
+                                ROS_ERROR_STREAM("The first line of the motion primitives file should begin with: " << first_line);
+                            }
+                            i++;
+                            continue;
+                        }
+                        std::istringstream iss(line);
+                        std::vector<double> line_;
+                        double num;
+                        while (iss >> num)
+                        {
+                            line_.push_back(num);
+                            if (abs(num) > max_action_)
+                            {
+                                max_action_ = abs(num);
+                            }
+                        }
+                        // TODO: Currently I am using short_mprim_ to store the work space motion primitives. This is not correct.
+                        short_mprim_.push_back(line_);
+                        i++;
                     }
-                    i++;
-                    continue;
                 }
-                std::istringstream iss(line);
-                std::vector<double> line_;
-                double num;
-                while (iss >> num)
-                {
-                    line_.push_back(num);
-                    if (abs(num * M_PI / 180.0) > max_action_)
-                    {
-                        max_action_ = abs(num * M_PI / 180.0);
-                    }
-                }
-                // Check if short or long primitive (the last num_short_prim lines are short)
-                if (i > tot_prim - num_short_prim)
-                {
-                    short_mprim_.push_back(line_);
-                }
-                else
-                {
-                    long_mprim_.push_back(line_);
-                }
-                i++;
+
             }
         }
 
@@ -189,6 +235,10 @@ namespace ims
         /// @return A vector of all possible actions
         std::vector<Action> getActions() override
         {
+            if (short_mprim_.empty() && long_mprim_.empty())
+            {
+                readMPfile();
+            }
             if (actions_.empty()) {
                 switch (action_type_) {
                     case ActionType::MOVE:
