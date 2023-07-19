@@ -202,6 +202,13 @@ namespace ims{
             }
         }
 
+        
+        void updatePlanningSceneMonitor() {
+            mPlanningSceneMonitor->requestPlanningSceneState();
+            ros::Duration(1.0).sleep();
+        }
+
+
         planning_scene_monitor::PlanningSceneMonitorPtr mPlanningSceneMonitor;
         std::shared_ptr<planning_scene::PlanningScene> mPlanningScene;
         std::shared_ptr<moveit::planning_interface::PlanningSceneInterface> mPlanningSceneInterface;

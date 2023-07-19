@@ -50,6 +50,10 @@
 #include <manipulation_planning/common/MoveitInterface.hpp>
 #include <manipulation_planning/common/utils.hpp>
 
+#include <memory>
+#include <map>
+#include <manipulation_planning/common/utils.hpp>
+
 namespace ims {
 
     struct manipulationType : actionType {
@@ -226,6 +230,15 @@ namespace ims {
         std::vector<std::pair<double, double>> mJointLimits;
         /// @brief Joint states seed
 //    std::vector<double> mJointStatesSeed {0, 0, 0, 0, 0, 0};
+        ros::NodeHandle m_pnh;
+        ros::NodeHandle m_nh;
+        ros::Publisher m_vis_pub;
+        int m_vis_id = 0; // The next id to publish to
+        collision_detection::AllowedCollisionMatrix internal_acm;
+
+        // Create the move group pointer
+        std::unique_ptr<moveit::planning_interface::MoveGroupInterface> m_group;
+
 
     public:
         /// @brief Constructor
@@ -237,6 +250,9 @@ namespace ims {
             mManipulationType = std::make_shared<manipulationType>(actions_ptr);
             // get the joint limits
             mMoveitInterface->getJointLimits(mJointLimits);
+            m_pnh = ros::NodeHandle(env.mGroupName);
+            m_vis_pub = m_nh.advertise<visualization_msgs::Marker>( "visualization_marker", 10 );
+            m_group = std::make_unique<moveit::planning_interface::MoveGroupInterface>(mMoveitInterface->mGroupName);
         }
 
         /// @brief Set the manipulation space type
@@ -536,6 +552,136 @@ namespace ims {
                 return getSuccessorsWs(curr_state_ind, successors, costs);
             }
         }
+
+        /// @brief Function that creates the acm to be used by the getMinDistanceAlongPath function. Needs to be updated when the name of the object changes or when new objects are added
+        /// @param obj_name 
+        void initACM (std::string obj_name) {
+
+            // Format the allowed collision matrix
+            collision_detection::AllowedCollisionMatrix acm = mMoveitInterface->mPlanningScene->getAllowedCollisionMatrixNonConst();
+            std::vector<std::string> acm_names;
+            acm.getAllEntryNames(acm_names);
+            collision_detection::AllowedCollisionMatrix new_acm(acm_names, true); // Create a new acm with the names from the old one that allows all collisions
+            
+            // Update acm to allow collisions with all objects
+            std::vector<std::string> world_obj_names = mMoveitInterface->mPlanningScene->getWorld()->getObjectIds();
+            //std::vector<std::string> world_obj_names = mMoveitInterface->mPlanningSceneInterface->getKnownObjectNames();
+            for (auto name : world_obj_names) {
+                new_acm.setEntry(name, true);
+            }
+            
+            // Set it so that only pairs with the object will be computed
+            new_acm.setEntry(obj_name, false);
+            
+            // Modify the new acm so that collisions between the attached object and the manipulator aren't counted
+            std::string prefix = m_group->getLinkNames()[0].substr(0,5); // Get prefix ex "arm_1"
+            std::vector<std::string> arm_link_names;
+            for (const auto& name : acm_names) {
+                if (name.compare(0, prefix.size(), prefix) == 0) {
+                    arm_link_names.push_back(name);
+                }
+            }
+            new_acm.setEntry(obj_name, arm_link_names, true); // Set it so that pairs between the object and it's manipulator will not be computed
+
+            internal_acm = new_acm;
+        }
+
+        /// @brief Get the minimum distance at each point along a trajectory between the attached object and all other collision objects in the space
+        /// @param path 
+        /// @param obj_name 
+        /// @return minimum distance pair
+        collision_detection::DistanceResultsData getMinDistanceAlongPath(pathType& path, std::string obj_name, bool visualize) {
+
+            // Initialize the internal acm
+            initACM(obj_name);
+            
+            // Update the planning state monitor
+            mMoveitInterface->updatePlanningSceneMonitor();
+
+            // Create a distance request and result for robot-world pairs
+            collision_detection::DistanceRequest world_distance_request;
+            //world_distance_request.type = collision_detection::DistanceRequestType::SINGLE; // Used to compute distances between all pairs
+            world_distance_request.type = collision_detection::DistanceRequestType::GLOBAL;
+            world_distance_request.enable_signed_distance = true;
+            world_distance_request.enable_nearest_points = true;
+            world_distance_request.distance_threshold = 1.0;
+            //distance_request.group_name = m_group->getName(); // When this is included, no distance map is computed (guessing it has to do with the allowed collision matrix?)
+            world_distance_request.acm = &internal_acm;
+            world_distance_request.enableGroup(m_group->getRobotModel());
+            
+
+            // Create a distance request and result for robot-robot pairs
+            collision_detection::DistanceRequest self_distance_request;
+            //self_distance_request.type = collision_detection::DistanceRequestType::SINGLE; // Used to compute distances between all pairs
+            self_distance_request.type = collision_detection::DistanceRequestType::GLOBAL;
+            self_distance_request.enable_signed_distance = true;
+            self_distance_request.enable_nearest_points = true;
+            self_distance_request.distance_threshold = 1.0;
+            self_distance_request.acm = &internal_acm;
+            self_distance_request.enableGroup(m_group->getRobotModel());
+            
+
+            // Keep track of the minimum distance pair
+            collision_detection::DistanceResultsData min_distance_pair;
+            min_distance_pair.distance = std::numeric_limits<double>::infinity();
+
+            // Loop through each possible joint value along the path
+            for (const auto& joint_values : path) {
+
+                // Create a robot state based on the joint values
+                m_group->setStartStateToCurrentState();
+                robot_state::RobotState path_state = mMoveitInterface->mPlanningScene->getCurrentStateNonConst();
+                path_state.setJointGroupPositions(m_group->getName(), joint_values);
+                path_state.update();
+
+                // Create the results structures
+                collision_detection::DistanceResult world_distance_result;
+                collision_detection::DistanceResult self_distance_result;
+
+
+                // Make a request to compute the distances for robot-world and robot-robot pairs
+                mMoveitInterface->mPlanningScene->getCollisionEnv()->distanceRobot(world_distance_request, world_distance_result, path_state);
+                mMoveitInterface->mPlanningScene->getCollisionEnv()->distanceSelf(self_distance_request, self_distance_result, path_state);
+
+                // Get the distance data for the robot-world pairs and robot-robot pairs
+                collision_detection::DistanceMap world_distance_map, self_distance_map;
+                world_distance_map = world_distance_result.distances;
+                self_distance_map = self_distance_result.distances;
+
+                // Update the minimum distance pair if there is a closer pair
+                if (world_distance_result.minimum_distance < min_distance_pair) min_distance_pair = world_distance_result.minimum_distance;
+                if (self_distance_result.minimum_distance < min_distance_pair) min_distance_pair = self_distance_result.minimum_distance;
+                
+                if (visualize) {
+                    // Visualize the lines between the two points in space
+                    std_msgs::ColorRGBA line_color;
+                    line_color.b = 1.0;
+                    line_color.a = 0.2;
+                    visualizeLine(world_distance_result.minimum_distance.nearest_points, m_vis_pub, mMoveitInterface->mPlanningScene->getPlanningFrame(), line_color, m_vis_id++);
+                    visualizeLine(self_distance_result.minimum_distance.nearest_points, m_vis_pub, mMoveitInterface->mPlanningScene->getPlanningFrame(), line_color, m_vis_id++);
+
+
+                    // Vizualize the minimum distances
+                    if (min_distance_pair.distance < 0) {
+                        line_color.r = 1.0;
+                        line_color.a = 0.5;
+                    } else {
+                        line_color.r = 0.5;
+                        line_color.b = 0.5;
+                        line_color.a = 0.2;
+                    }
+                    visualizeLine(min_distance_pair.nearest_points, m_vis_pub, mMoveitInterface->mPlanningScene->getPlanningFrame(), line_color, m_vis_id++);
+                }
+            }
+            
+            return min_distance_pair;
+        }
+
+        void clearLines() {
+            ims::clearLines(m_vis_pub, mMoveitInterface->mPlanningScene->getPlanningFrame());
+        }
+
+
     };
 }
 

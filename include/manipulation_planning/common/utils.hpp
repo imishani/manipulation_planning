@@ -24,6 +24,82 @@
 
 #include <common/types.hpp>
 
+namespace htf {
+
+    // Utility functions for converting pose representations
+    inline geometry_msgs::Pose vectorToGeometryPose(std::vector<double> pose) {
+        geometry_msgs::Pose pose_;
+        if (pose.size() == 7) {
+            pose_.position.x = pose[0];
+            pose_.position.y = pose[1];
+            pose_.position.z = pose[2];
+            pose_.orientation.x = pose[3];
+            pose_.orientation.y = pose[4];
+            pose_.orientation.z = pose[5];
+            pose_.orientation.w = pose[6];
+        }
+        return pose_;
+    }
+
+    inline Eigen::Isometry3d vectorToEigenPose(std::vector<double> pose) {
+        Eigen::Isometry3d pose_ = Eigen::Isometry3d::Identity();
+        if (pose.size() == 7) {
+            Eigen::Vector3d translation(pose[0], pose[1], pose[2]);
+            pose_.translation() = translation;
+            Eigen::Quaterniond quaternion(pose[6], pose[3], pose[4], pose[5]);
+            pose_.linear() = quaternion.toRotationMatrix();
+        }
+        return pose_;
+    }
+
+    inline std::vector<double> geometryToVectorPose(const geometry_msgs::Pose& pose) {
+        std::vector<double> pose_;
+        return {pose.position.x, pose.position.y, pose.position.z, pose.orientation.x, 
+                pose.orientation.y, pose.orientation.z, pose.orientation.w};
+    }
+
+    inline std::vector<double> eigenToVectorPose(const Eigen::Isometry3d& pose) {
+        std::vector<double> pose_;
+        const Eigen::Vector3d translation = pose.translation();
+        pose_.push_back(translation.x());
+        pose_.push_back(translation.y());
+        pose_.push_back(translation.z());
+        const Eigen::Quaterniond quaternion(pose.rotation());
+        pose_.push_back(quaternion.x());
+        pose_.push_back(quaternion.y());
+        pose_.push_back(quaternion.z());
+        pose_.push_back(quaternion.w());
+        return pose_;
+    }
+
+    inline geometry_msgs::Pose eigenToGeometryPose(const Eigen::Isometry3d& pose) {
+        geometry_msgs::Pose pose_;
+        pose_.position.x = pose.translation().x();
+        pose_.position.y = pose.translation().y();
+        pose_.position.z = pose.translation().z();
+        Eigen::Quaterniond quaternion(pose.rotation());
+        pose_.orientation.x = quaternion.x();
+        pose_.orientation.y = quaternion.y();
+        pose_.orientation.z = quaternion.z();
+        pose_.orientation.w = quaternion.w();
+        return pose_;
+    }
+
+    inline Eigen::Isometry3d geometryToEigenPose(const geometry_msgs::Pose& pose) {
+        Eigen::Isometry3d pose_ = Eigen::Isometry3d::Identity();
+        pose_.translation().x() = pose.position.x;
+        pose_.translation().y() = pose.position.y;
+        pose_.translation().z() = pose.position.z;
+        Eigen::Quaterniond quaternion(
+            pose.orientation.w,
+            pose.orientation.x,
+            pose.orientation.y,
+            pose.orientation.z
+        );
+        pose_.linear() = quaternion.toRotationMatrix();
+        return pose_;
+    }
+}
 
 
 namespace ims {
@@ -500,6 +576,59 @@ namespace ims {
         }
         ROS_DEBUG_STREAM("Added " << num_occupied_cells << " occupied cells to the marker array" << std::endl);
         publisher.publish(marker);
+    }
+
+    /// @brief Create a line between two points in space
+    /// @param points 
+    /// @param publisher 
+    /// @param frame_id 
+    /// @param line_color 
+    /// @param id 
+    inline void visualizeLine(const Eigen::Vector3d points[], const ros::Publisher &publisher, const std::string &frame_id, std_msgs::ColorRGBA &line_color, int id, std::string ns = "line") {
+
+        visualization_msgs::Marker line_marker;
+        line_marker.header.frame_id = frame_id;
+        line_marker.header.stamp = ros::Time();
+        line_marker.ns = ns;
+        line_marker.id = id;
+        line_marker.type = visualization_msgs::Marker::LINE_STRIP;
+        line_marker.action = visualization_msgs::Marker::ADD;
+        line_marker.pose.orientation.w = 1.0;
+        line_marker.scale.x = 0.01;
+        line_marker.scale.y = 0.01;
+        line_marker.scale.z = 0.01;
+        line_marker.color = line_color;
+
+        geometry_msgs::Point p1;
+        p1.x = points[0].x();
+        p1.y = points[0].y();
+        p1.z = points[0].z();
+
+        geometry_msgs::Point p2;
+        p2.x = points[1].x();
+        p2.y = points[1].y();
+        p2.z = points[1].z();
+
+        line_marker.points.push_back(p1);
+        line_marker.points.push_back(p2);
+
+        publisher.publish(line_marker);
+    }
+
+    /// @brief Clear all of the past lines that have been made so far up to the current id (not including the current id)
+    /// @param publisher 
+    /// @param frame_id 
+    /// @param id 
+    /// @param ns 
+    inline void clearLines(const ros::Publisher &publisher, const std::string &frame_id, std::string ns = "line") {
+
+        visualization_msgs::Marker clear_marker;
+        clear_marker.header.frame_id = frame_id;
+        clear_marker.header.stamp = ros::Time();
+        clear_marker.ns = ns;
+        clear_marker.action = visualization_msgs::Marker::DELETEALL;
+        
+        publisher.publish(clear_marker);
     }
 
     /// \brief Visualize the distance field bounding box in rviz
