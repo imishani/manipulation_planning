@@ -14,132 +14,130 @@
 #include <moveit/distance_field/propagation_distance_field.h>
 
 // search includes
-#include <search/common/scene_interface.hpp>
+#include <search/planners/bfs3d.h>
+
 #include <search/common/action_space.hpp>
+#include <search/common/scene_interface.hpp>
 #include <search/common/types.hpp>
 #include <search/planners/dijkstra.hpp>
-#include <search/planners/bfs3d.h>
 
 // project includes
 #include <manipulation_planning/common/utils.hpp>
 
 namespace ims {
 
-    class scene3Dpoint : public SceneInterface {
-    public:
-        explicit scene3Dpoint(std::shared_ptr<distance_field::PropagationDistanceField> &map_) : SceneInterface() {
-            this->df_map = map_;
-        }
+class scene3Dpoint : public SceneInterface {
+public:
+    explicit scene3Dpoint(std::shared_ptr<distance_field::PropagationDistanceField>& map_) : SceneInterface() {
+        this->df_map = map_;
+    }
 
-        std::shared_ptr<distance_field::PropagationDistanceField> df_map;
-    };
+    std::shared_ptr<distance_field::PropagationDistanceField> df_map;
+};
 
-    struct actionType3Dpoint : public ActionType {
-
-        actionType3Dpoint() : ActionType() {
-            this->num_actions = 26;
-            this->action_costs = std::vector<double>(num_actions, 1);
-            this->action_deltas = std::vector<std::vector<double>>(num_actions, std::vector<double>(3, 0));
-            int i{0};
-            for (int x{-1}; x <= 1; x++) {
-                for (int y{-1}; y <= 1; y++) {
-                    for (int z{-1}; z <= 1; z++) {
-                        if (x == 0 && y == 0 && z == 0) {
-                            continue;
-                        }
-                        action_deltas[i][0] = x;
-                        action_deltas[i][1] = y;
-                        action_deltas[i][2] = z;
-
-                        action_costs[i] = std::sqrt(x * x + y * y + z * z);
-                        i++;
+struct actionType3Dpoint : public ActionType {
+    actionType3Dpoint() : ActionType() {
+        this->num_actions = 26;
+        this->action_costs = std::vector<double>(num_actions, 1);
+        this->action_deltas = std::vector<std::vector<double>>(num_actions, std::vector<double>(3, 0));
+        int i{0};
+        for (int x{-1}; x <= 1; x++) {
+            for (int y{-1}; y <= 1; y++) {
+                for (int z{-1}; z <= 1; z++) {
+                    if (x == 0 && y == 0 && z == 0) {
+                        continue;
                     }
+                    action_deltas[i][0] = x;
+                    action_deltas[i][1] = y;
+                    action_deltas[i][2] = z;
+
+                    action_costs[i] = std::sqrt(x * x + y * y + z * z);
+                    i++;
                 }
             }
-
         }
+    }
 
-        std::vector<Action> getActions() override {
-            return this->action_deltas;
-        }
+    std::vector<Action> getActions() override {
+        return this->action_deltas;
+    }
 
-        void Discretization(StateType &state_des) override {
-            state_discretization_ = state_des;
-        }
+    void Discretization(StateType& state_des) override {
+        state_discretization_ = state_des;
+    }
 
-        int num_actions;
-        std::vector<double> action_costs;
-        std::vector<std::vector<double>> action_deltas;
+    int num_actions;
+    std::vector<double> action_costs;
+    std::vector<std::vector<double>> action_deltas;
+};
 
-    };
+class actionSpace3Dpoint : public ActionSpace {
+private:
+    std::shared_ptr<scene3Dpoint> m_env;
+    std::shared_ptr<actionType3Dpoint> m_actions;
 
-    class actionSpace3Dpoint : public ActionSpace {
+public:
+    actionSpace3Dpoint(const scene3Dpoint& env,
+                       const actionType3Dpoint& actions_ptr) : ActionSpace() {
+        this->m_env = std::make_shared<scene3Dpoint>(env);
+        this->m_actions = std::make_shared<actionType3Dpoint>(actions_ptr);
+    }
 
-    private:
-        std::shared_ptr<scene3Dpoint> m_env;
-        std::shared_ptr<actionType3Dpoint> m_actions;
+    bool isStateValid(const StateType& state_val) override {
+        return m_env->df_map->getCell(state_val[0], state_val[1], state_val[2]).distance_square_ > 0;
+    }
 
-    public:
-        actionSpace3Dpoint(const scene3Dpoint &env,
-                           const actionType3Dpoint &actions_ptr) : ActionSpace() {
-            this->m_env = std::make_shared<scene3Dpoint>(env);
-            this->m_actions = std::make_shared<actionType3Dpoint>(actions_ptr);
-        }
+    bool isPathValid(const PathType& path) override {
+        return std::all_of(path.begin(), path.end(),
+                           [this](const StateType& state_val) { return isStateValid(state_val); });
+    }
 
-        bool isStateValid(const StateType &state_val) override {
-            return m_env->df_map->getCell(state_val[0], state_val[1], state_val[2]).distance_square_ > 0;
-        }
-
-        bool isPathValid(const PathType &path) override {
-            return std::all_of(path.begin(), path.end(),
-                               [this](const StateType &state_val) { return isStateValid(state_val); });
-        }
-
-        bool getSuccessors(int curr_state_ind,
-                           std::vector<int> &successors,
-                           std::vector<double> &costs) override {
-            auto curr_state = this->getRobotState(curr_state_ind);
-            auto curr_state_val = curr_state->state;
-            auto actions = m_actions->getActions();
-            for (int i{0}; i < m_actions->num_actions; i++) {
-                auto action = actions[i];
-                auto next_state_val = StateType(curr_state_val.size());
-                std::transform(curr_state_val.begin(), curr_state_val.end(), action.begin(), next_state_val.begin(),
-                               std::plus<>());
-                // Check if state is outside the map
-                if (next_state_val[0] < 0 || next_state_val[0] >= m_env->df_map->getXNumCells() ||
-                    next_state_val[1] < 0 || next_state_val[1] >= m_env->df_map->getYNumCells() ||
-                    next_state_val[2] < 0 || next_state_val[2] >= m_env->df_map->getZNumCells()) {
-                    continue;
-                }
-                if (isStateValid(next_state_val)) {
-                    int next_state_ind = getOrCreateRobotState(next_state_val);
-                    successors.push_back(next_state_ind);
-                    costs.push_back(m_actions->action_costs[i]);
-                }
+    bool getSuccessors(int curr_state_ind,
+                       std::vector<int>& successors,
+                       std::vector<double>& costs) override {
+        auto curr_state = this->getRobotState(curr_state_ind);
+        auto curr_state_val = curr_state->state;
+        auto actions = m_actions->getActions();
+        for (int i{0}; i < m_actions->num_actions; i++) {
+            auto action = actions[i];
+            auto next_state_val = StateType(curr_state_val.size());
+            std::transform(curr_state_val.begin(), curr_state_val.end(), action.begin(), next_state_val.begin(),
+                           std::plus<>());
+            // Check if state is outside the map
+            if (next_state_val[0] < 0 || next_state_val[0] >= m_env->df_map->getXNumCells() ||
+                next_state_val[1] < 0 || next_state_val[1] >= m_env->df_map->getYNumCells() ||
+                next_state_val[2] < 0 || next_state_val[2] >= m_env->df_map->getZNumCells()) {
+                continue;
             }
-            return true;
-        }
-
-        /// \brief Get state by value (if not exist, DO NOT create it)
-        /// \param state_val The state value
-        /// \param state_ind The state index to be returned
-        /// \return True if the state exists, false otherwise
-        bool getStateByValue(const StateType& state_val, size_t& state_ind) {
-            // check if the state exists
-            auto curr_state = new RobotState; curr_state->state = state_val;
-            auto it = state_to_id_.find(curr_state);
-            if(it == state_to_id_.end()){
-                delete curr_state;
-                return false;
+            if (isStateValid(next_state_val)) {
+                int next_state_ind = getOrCreateRobotState(next_state_val);
+                successors.push_back(next_state_ind);
+                costs.push_back(m_actions->action_costs[i]);
             }
-            state_ind = it->second;
+        }
+        return true;
+    }
+
+    /// \brief Get state by value (if not exist, DO NOT create it)
+    /// \param state_val The state value
+    /// \param state_ind The state index to be returned
+    /// \return True if the state exists, false otherwise
+    bool getStateByValue(const StateType& state_val, size_t& state_ind) {
+        // check if the state exists
+        auto curr_state = new RobotState;
+        curr_state->state = state_val;
+        auto it = state_to_id_.find(curr_state);
+        if (it == state_to_id_.end()) {
             delete curr_state;
-            return true;
+            return false;
         }
-    };
+        state_ind = it->second;
+        delete curr_state;
+        return true;
+    }
+};
 
-    /// TODO: Fix this?
+/// TODO: Fix this?
 //    class DijkstraHeuristic : public BaseHeuristic{
 //    public:
 //        DijkstraHeuristic() : DijkstraHeuristic(getDistanceFieldMoveIt()){
@@ -271,219 +269,245 @@ namespace ims {
 //        std::string tip_link;
 //    };
 
+class BFSHeuristic : public BaseHeuristic {
+public:
+    BFSHeuristic() : BFSHeuristic(getDistanceFieldMoveIt()) {
+    }
 
-    class BFSHeuristic : public BaseHeuristic{
-    public:
-        BFSHeuristic() : BFSHeuristic(getDistanceFieldMoveIt()){
-        }
+    explicit BFSHeuristic(std::shared_ptr<distance_field::PropagationDistanceField> distance_field_,
+                          const std::string& group_name = "manipulator_1") {
+        m_distanceField = std::move(distance_field_);
+        // setup robot move group and planning scene
+        move_group = std::make_shared<moveit::planning_interface::MoveGroupInterface>(group_name);
+        // robot model
+        robot_model = move_group->getRobotModel();
+        // joint model group
+        joint_model_group = robot_model->getJointModelGroup(group_name);
 
-        explicit BFSHeuristic(std::shared_ptr<distance_field::PropagationDistanceField> distance_field_,
-                              const std::string& group_name = "manipulator_1"){
-            m_distanceField = std::move(distance_field_);
-            // setup robot move group and planning scene
-            move_group = std::make_shared<moveit::planning_interface::MoveGroupInterface>(group_name);
-            // robot model
-            robot_model = move_group->getRobotModel();
-            // joint model group
-            joint_model_group = robot_model->getJointModelGroup(group_name);
+        kinematic_state = std::make_shared<moveit::core::RobotState>(robot_model);
+        auto names = joint_model_group->getLinkModelNames();
+        // get the planning group tip link
+        tip_link = joint_model_group->getLinkModelNames().back();
+        //            tip_link = names.at(5);
 
-            kinematic_state = std::make_shared<moveit::core::RobotState>(robot_model);
-            auto names = joint_model_group->getLinkModelNames();
-            // get the planning group tip link
-            tip_link = joint_model_group->getLinkModelNames().back();
-//            tip_link = names.at(5);
+        syncGridAndBfs();
+    }
 
-            syncGridAndBfs();
-        }
+    void setInflationRadius(double radius) {
+        m_inflation_radius = radius;
+    }
 
-        void setInflationRadius(double radius)
-        {
-            m_inflation_radius = radius;
-        }
+    void setCostPerCell(int cost_per_cell) {
+        m_cost_per_cell = cost_per_cell;
+    }
 
-        void setCostPerCell(int cost_per_cell)
-        {
-            m_cost_per_cell = cost_per_cell;
-        }
+    void setGoal(StateType& goal) override {
+        mGoal = goal;
+        kinematic_state->setJointGroupPositions(joint_model_group, goal);
+        auto ee_goal_state = kinematic_state->getGlobalLinkTransform(tip_link);
 
-        void setGoal(StateType& goal) override{
-            mGoal = goal;
-            kinematic_state->setJointGroupPositions(joint_model_group, goal);
-            auto ee_goal_state = kinematic_state->getGlobalLinkTransform(tip_link);
+        auto goal_position = ee_goal_state.translation();
+        int x, y, z;
+        m_distanceField->worldToGrid(goal_position.x(), goal_position.y(), goal_position.z(),
+                                     x, y, z);
+        if (!m_bfs->inBounds(x, y, z))
+            throw std::runtime_error("goal is out of bounds");
 
-            auto goal_position = ee_goal_state.translation();
-            int x, y, z;
-            m_distanceField->worldToGrid(goal_position.x(), goal_position.y(), goal_position.z(),
-                                         x, y, z);
-            if (!m_bfs->inBounds(x, y, z))
-                throw std::runtime_error("goal is out of bounds");
+        m_goal_cells.emplace_back(x, y, z);
 
-            m_goal_cells.emplace_back(x, y, z);
+        m_bfs->run(x, y, z);
+    }
 
-            m_bfs->run(x, y, z);
-        }
+    void setStart(StateType& start) override {
+        mStart = start;
+        kinematic_state->setJointGroupPositions(joint_model_group, start);
+        auto ee_start_state = kinematic_state->getGlobalLinkTransform(tip_link);
 
-        void setStart(StateType& start) override{
-            mStart = start;
-            kinematic_state->setJointGroupPositions(joint_model_group, start);
-            auto ee_start_state = kinematic_state->getGlobalLinkTransform(tip_link);
+        auto start_position = ee_start_state.translation();
+        m_distanceField->worldToGrid(start_position.x(), start_position.y(), start_position.z(),
+                                     start_cells[0], start_cells[1], start_cells[2]);
+        //            if (!m_bfs->inBounds(x, y, z))
+        //                throw std::runtime_error("start is out of bounds");
+    }
 
-            auto start_position = ee_start_state.translation();
-            m_distanceField->worldToGrid(start_position.x(), start_position.y(), start_position.z(),
-                                         start_cells[0], start_cells[1], start_cells[2]);
-//            if (!m_bfs->inBounds(x, y, z))
-//                throw std::runtime_error("start is out of bounds");
-        }
+    /// @brief Get the metric distance to the goal state
+    /// @param x The x position of the state
+    /// @param y The y position of the state
+    /// @param z The z position of the state
+    /// @return The distance to the goal state
+    double getMetricGoalDistance(double x, double y, double z) const {
+        int gx, gy, gz;
+        m_distanceField->worldToGrid(x, y, z, gx, gy, gz);
+        if (!m_bfs->inBounds(gx, gy, gz))
+            return (double)smpl::BFS_3D::WALL * m_distanceField->getResolution();
+        else
+            return (double)m_bfs->getDistance(gx, gy, gz) * m_distanceField->getResolution();
+    }
 
+    /// @brief Get the metric distance to the start state
+    /// @param x The x position of the state
+    /// @param y The y position of the state
+    /// @param z The z position of the state
+    /// @return The distance to the start state
+    double getMetricStartDistance(double x, double y, double z) {
+        int sx, sy, sz;
+        m_distanceField->worldToGrid(x, y, z, sx, sy, sz);
+        // manhattan distance
+        return (std::abs(sx - start_cells[0]) + std::abs(sy - start_cells[1]) + std::abs(sz - start_cells[2])) * m_distanceField->getResolution();
+    }
 
-        /// @brief Get the metric distance to the goal state
-        /// @param x The x position of the state
-        /// @param y The y position of the state
-        /// @param z The z position of the state
-        /// @return The distance to the goal state
-        double getMetricGoalDistance(double x, double y, double z) const
-        {
-            int gx, gy, gz;
-            m_distanceField->worldToGrid(x, y, z, gx, gy, gz);
-            if (!m_bfs->inBounds(gx, gy, gz))
-                return (double)smpl::BFS_3D::WALL * m_distanceField->getResolution();
-            else
-                return (double)m_bfs->getDistance(gx, gy, gz) * m_distanceField->getResolution();
-        }
+    bool getHeuristic(const StateType& s1, const StateType& s2, double& dist) override {
+        // check if s2 is a goal state
+        kinematic_state->setJointGroupPositions(joint_model_group, s2);
+        auto ee_check_state = kinematic_state->getGlobalLinkTransform(tip_link);
 
-        /// @brief Get the metric distance to the start state
-        /// @param x The x position of the state
-        /// @param y The y position of the state
-        /// @param z The z position of the state
-        /// @return The distance to the start state
-        double getMetricStartDistance(double x, double y, double z)
-        {
-            int sx, sy, sz;
-            m_distanceField->worldToGrid(x, y, z, sx, sy, sz);
-            // manhattan distance
-            return (std::abs(sx - start_cells[0]) + std::abs(sy - start_cells[1]) + std::abs(sz - start_cells[2])) * m_distanceField->getResolution();
-        }
-
-
-        bool getHeuristic(StateType& s1, StateType& s2, double& dist) override{
-            // check if s2 is a goal state
-            kinematic_state->setJointGroupPositions(joint_model_group, s2);
-            auto ee_check_state = kinematic_state->getGlobalLinkTransform(tip_link);
-
-            auto check_position = ee_check_state.translation();
-            int x, y, z;
-            m_distanceField->worldToGrid(check_position.x(), check_position.y(), check_position.z(),
-                                         x, y, z);
-            // check if s2 is a goal state
-            for (const auto& goal_cell : m_goal_cells)
-            {
-                if (goal_cell.x == x && goal_cell.y == y && goal_cell.z == z)
-                {
-                    return getHeuristic(s1, dist);
-                }
+        auto check_position = ee_check_state.translation();
+        int x, y, z;
+        m_distanceField->worldToGrid(check_position.x(), check_position.y(), check_position.z(),
+                                     x, y, z);
+        // check if s2 is a goal state
+        for (const auto& goal_cell : m_goal_cells) {
+            if (goal_cell.x == x && goal_cell.y == y && goal_cell.z == z) {
+                return getHeuristic(s1, dist);
             }
+        }
 
-            std::cout << "getHeuristic between two random states with BFS is not supported!" << std::endl;
+        std::cout << "getHeuristic between two random states with BFS is not supported!" << std::endl;
+        return false;
+    }
+
+    bool getHeuristic(const StateType& s, double& dist) override {
+        if (m_goal_cells.empty())
             return false;
-        }
 
-        bool getHeuristic(StateType& s, double& dist) override{
-            if (m_goal_cells.empty())
-                return false;
+        kinematic_state->setJointGroupPositions(joint_model_group, s);
+        auto ee_state = kinematic_state->getGlobalLinkTransform(tip_link);
 
-            kinematic_state->setJointGroupPositions(joint_model_group, s);
-            auto ee_state = kinematic_state->getGlobalLinkTransform(tip_link);
+        auto s_position = ee_state.translation();
+        int x, y, z;
+        m_distanceField->worldToGrid(s_position.x(), s_position.y(), s_position.z(),
+                                     x, y, z);
 
-            auto s_position = ee_state.translation();
-            int x, y, z;
-            m_distanceField->worldToGrid(s_position.x(), s_position.y(), s_position.z(),
-                                         x, y, z);
+        dist = getBfsCostToGoal(*m_bfs, x, y, z);
+        return true;
+    }
 
-            dist = getBfsCostToGoal(*m_bfs, x, y, z);
-            return true;
-        }
+protected:
+    std::shared_ptr<distance_field::PropagationDistanceField> m_distanceField;
+    std::unique_ptr<smpl::BFS_3D> m_bfs;
+    double m_inflation_radius = 0.02;
+    int m_cost_per_cell = 100;
+    int start_cells[3]{};
 
+    struct CellCoord {
+        int x, y, z;
+        CellCoord() = default;
+        CellCoord(int x, int y, int z) : x(x), y(y), z(z) {}
+    };
+    std::vector<CellCoord> m_goal_cells;
 
-    private:
-        std::shared_ptr<distance_field::PropagationDistanceField> m_distanceField;
-        std::unique_ptr<smpl::BFS_3D> m_bfs;
-        double m_inflation_radius = 0.02;
-        int m_cost_per_cell = 100;
-        int start_cells[3]{};
-
-        struct CellCoord
-        {
-            int x, y, z;
-            CellCoord() = default;
-            CellCoord(int x, int y, int z) : x(x), y(y), z(z) { }
-        };
-        std::vector<CellCoord> m_goal_cells;
-
-        void syncGridAndBfs(){
-            const int xc = m_distanceField->getXNumCells();
-            const int yc = m_distanceField->getYNumCells();
-            const int zc = m_distanceField->getZNumCells();
-            m_bfs = std::make_unique<smpl::BFS_3D>(xc, yc, zc);
-            const int cell_count = xc * yc * zc;
-            int wall_count = 0;
-            for (int x = 0; x < xc; ++x) {
-                for (int y = 0; y < yc; ++y) {
-                    for (int z = 0; z < zc; ++z) {
-                        const double radius = m_inflation_radius;
-                        if (m_distanceField->getDistance(x, y, z) <= radius) {
-                            m_bfs->setWall(x, y, z);
-                            ++wall_count;
-                        }
+    void syncGridAndBfs() {
+        const int xc = m_distanceField->getXNumCells();
+        const int yc = m_distanceField->getYNumCells();
+        const int zc = m_distanceField->getZNumCells();
+        m_bfs = std::make_unique<smpl::BFS_3D>(xc, yc, zc);
+        const int cell_count = xc * yc * zc;
+        int wall_count = 0;
+        for (int x = 0; x < xc; ++x) {
+            for (int y = 0; y < yc; ++y) {
+                for (int z = 0; z < zc; ++z) {
+                    const double radius = m_inflation_radius;
+                    if (m_distanceField->getDistance(x, y, z) <= radius) {
+                        m_bfs->setWall(x, y, z);
+                        ++wall_count;
                     }
                 }
             }
-
-            std::cout << wall_count << " " << cell_count << " " << 100.0 * (double)wall_count / cell_count << " walls in the bfs heuristic" << std::endl;
-
         }
 
-        int getBfsCostToGoal(const smpl::BFS_3D& bfs, int x, int y, int z) const{
-            if (!bfs.inBounds(x, y, z) || bfs.getDistance(x, y, z) == smpl::BFS_3D::WALL)
-                return Infinity;
-            else {
-                return m_cost_per_cell * bfs.getDistance(x, y, z);
-            }
+        std::cout << wall_count << " " << cell_count << " " << 100.0 * (double)wall_count / cell_count << " walls in the bfs heuristic" << std::endl;
+    }
+
+    int getBfsCostToGoal(const smpl::BFS_3D& bfs, int x, int y, int z) const {
+        if (!bfs.inBounds(x, y, z) || bfs.getDistance(x, y, z) == smpl::BFS_3D::WALL)
+            return Infinity;
+        else {
+            return m_cost_per_cell * bfs.getDistance(x, y, z);
         }
+    }
 
-        std::string tip_link;
-        std::shared_ptr<moveit::planning_interface::MoveGroupInterface> move_group;
-        moveit::core::RobotModelConstPtr robot_model;
-        const moveit::core::JointModelGroup* joint_model_group;
-        moveit::core::RobotStatePtr kinematic_state;
+    std::string tip_link;
+    std::shared_ptr<moveit::planning_interface::MoveGroupInterface> move_group;
+    moveit::core::RobotModelConstPtr robot_model;
+    const moveit::core::JointModelGroup* joint_model_group;
+    moveit::core::RobotStatePtr kinematic_state;
+};
 
-    };
-
-    /// @brief SE(3) distance heuristic using hopf coordinates
-    struct SE3HeuristicHopf : public BaseHeuristic {
-
-        bool getHeuristic(StateType& s1, StateType& s2,
-                          double& dist) override {
-            // check id the states are the same size
-            if (s1.size() != s2.size()) {
-                std::cout << "Error: The states are not the same size!" << std::endl;
-                return false;
-            } else {
-                // get the position of the states
-                Eigen::Vector3d pos1 {s1[0], s1[1], s1[2]};
-                Eigen::Vector3d pos2 {s2[0], s2[1], s2[2]};
-                // get the orientation of the states
-                Eigen::Quaterniond quat1; Eigen::Quaterniond quat2;
-                hopfToQuaternion(Eigen::Vector3d{s1[3], s1[4], s1[5]}, quat1);
-                hopfToQuaternion(Eigen::Vector3d{s2[3], s2[4], s2[5]}, quat2);
-                // get the distance between the positions
-                dist = (pos1 - pos2).norm();
-                // get the distance between the orientations
-                dist += 2 * std::acos(std::min(1.0, std::abs(quat1.dot(quat2))));
-                return true;
-            }
+/// @brief SE(3) distance heuristic using hopf coordinates
+struct SE3HeuristicHopf : public BaseHeuristic {
+    bool getHeuristic(const StateType& s1, const StateType& s2,
+                      double& dist) override {
+        // check id the states are the same size
+        if (s1.size() != s2.size()) {
+            std::cout << "Error: The states are not the same size!" << std::endl;
+            return false;
         }
-    };
-}
+        else {
+            // get the position of the states
+            Eigen::Vector3d pos1{s1[0], s1[1], s1[2]};
+            Eigen::Vector3d pos2{s2[0], s2[1], s2[2]};
+            // get the orientation of the states
+            Eigen::Quaterniond quat1;
+            Eigen::Quaterniond quat2;
+            hopfToQuaternion(Eigen::Vector3d{s1[3], s1[4], s1[5]}, quat1);
+            hopfToQuaternion(Eigen::Vector3d{s2[3], s2[4], s2[5]}, quat2);
+            // get the distance between the positions
+            dist = (pos1 - pos2).norm();
+            // get the distance between the orientations
+            dist += 2 * std::acos(std::min(1.0, std::abs(quat1.dot(quat2))));
+            return true;
+        }
+    }
+};
+
+/// @brief Same as the BFS Heuristic, but with states that include time in thier last element of the state vector. The methods here remove the time component and call the BFS heuristic methods as normal.
+class BFSRemoveTimeHeuristic : public BFSHeuristic {
+public:
+    BFSRemoveTimeHeuristic() : BFSHeuristic() {
+    }
+
+    explicit BFSRemoveTimeHeuristic(std::shared_ptr<distance_field::PropagationDistanceField> distance_field_,
+                                    const std::string& group_name = "panda0_arm") : BFSHeuristic(distance_field_, group_name) {
+    }
+
+    void setGoal(StateType& goal) override {
+        goal.pop_back();
+        BFSHeuristic::setGoal(goal);
+    }
+
+    void setStart(StateType& start) override {
+        start.pop_back();
+        BFSHeuristic::setStart(start);
+    }
+
+    bool getHeuristic(const StateType& s1, const StateType& s2, double& dist) override {
+        StateType s1_no_time = s1;
+        s1_no_time.pop_back();
+        StateType s2_no_time = s2;
+        s2_no_time.pop_back();
+        return BFSHeuristic::getHeuristic(s1_no_time, s2_no_time, dist);
+    }
+
+    bool getHeuristic(const StateType& s, double& dist) override {
+        StateType s_no_time = s;
+        s_no_time.pop_back();
+        return BFSHeuristic::getHeuristic(s_no_time, dist);
+    }
+};
 
 
-#endif //MANIPULATION_PLANNING_MANIPHEURISTICS_HPP
+
+
+}  // namespace ims
+
+#endif  // MANIPULATION_PLANNING_MANIPHEURISTICS_HPP

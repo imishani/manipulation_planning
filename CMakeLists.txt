@@ -20,13 +20,8 @@ find_package(catkin REQUIRED
 
 find_package(search REQUIRED)
 
-#set(search_INCLUDE_DIR ${search_DIR}/include)
-# print search package include directories
-#message("search include directories: ${search_INCLUDE_DIRS}")
-#message("search include directories: ${search_INCLUDE_DIR}")
-#message("search library directories: ${search_LIBRARIES}")
-## System dependencies are found with CMake's conventions
-# find_package(Boost REQUIRED COMPONENTS system)
+# Below is a hack to avoid `sudo make install` when debugging Search Lib jointly with manipulation planning.
+# set(search_INCLUDE_DIRS /home/yoraish/code/mramp/mramp_ws/src/search/include)
 
 # find eigen
 find_package(Eigen3 REQUIRED)
@@ -151,6 +146,7 @@ include_directories(
 add_library(${PROJECT_NAME}
         src/confspace_test.cpp
         include/manipulation_planning/manipulation_action_space.hpp
+        include/manipulation_planning/panda_action_space.hpp
         include/manipulation_planning/common/moveit_interface.hpp
         include/manipulation_planning/heuristics/manip_heuristics.hpp
         include/manipulation_planning/common/utils.hpp
@@ -173,6 +169,14 @@ target_link_libraries(${PROJECT_NAME}
 add_executable(${PROJECT_NAME}_node src/confspace_test.cpp)
 
 target_link_libraries(${PROJECT_NAME}_node
+        ${catkin_LIBRARIES}
+        ${eigen_LIBRARIES}
+        /usr/local/lib/${search_LIBRARIES}
+        )
+
+add_executable(${PROJECT_NAME}_cbs_test src/cbs_test.cpp)
+
+target_link_libraries(${PROJECT_NAME}_cbs_test
         ${catkin_LIBRARIES}
         ${eigen_LIBRARIES}
         /usr/local/lib/${search_LIBRARIES}

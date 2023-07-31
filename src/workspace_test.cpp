@@ -39,11 +39,11 @@ int main(int argc, char** argv) {
     ims::wAStarParams params(heuristic, weight);
 
     ims::MoveitInterface scene_interface ("manipulator_1");
-    ims::manipulationType action_type(path_mprim);
+    ims::ManipulationType action_type(path_mprim);
 
     StateType discretization {0.02, 0.02, 0.02, M_PI/180, M_PI/180, M_PI/180};
     action_type.Discretization(discretization);
-    action_type.setSpaceType(ims::manipulationType::spaceType::WorkSpace);
+    action_type.setSpaceType(ims::ManipulationType::SpaceType::WorkSpace);
 
     std::shared_ptr<ims::ManipulationActionSpace> action_space = std::make_shared<ims::ManipulationActionSpace>(scene_interface, action_type);
 
