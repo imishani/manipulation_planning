@@ -122,7 +122,7 @@ namespace ims{
         /// @return True if IK was found, false otherwise
         bool calculateIK(const geometry_msgs::Pose &pose,
                          stateType &joint_state,
-                         double timeout = 0.1) {
+                         double timeout = 1.0) {
             // resize the joint state
             joint_state.resize(num_joints);
             // set joint model group as random, only the relevant kinematic group
@@ -152,7 +152,7 @@ namespace ims{
                          const stateType &seed,
                          stateType &joint_state,
                          double consistency_limit = 0.5,
-                         double timeout = 0.05) {
+                         double timeout = 1.0) {
             // resize the joint state
             joint_state.resize(num_joints);
             // set the pose
@@ -206,6 +206,27 @@ namespace ims{
         void updatePlanningSceneMonitor() {
             mPlanningSceneMonitor->requestPlanningSceneState();
             ros::Duration(1.0).sleep();
+        }
+
+        /// NOTE: This is a temporary fix
+        void updateACM(std::string obj_name, std::string prefix) {
+
+            // Get the acm and add in entries for the object
+            collision_detection::AllowedCollisionMatrix acm = mPlanningScene->getAllowedCollisionMatrixNonConst();
+            acm.setEntry(obj_name, false);
+
+            // Update the acm so that collision between the attached object and the arm are allowed
+            std::vector<std::string> arm_link_names;
+            std::vector<std::string> acm_names;
+            acm.getAllEntryNames(acm_names);
+            for (const auto& name : acm_names) {
+                if (name.compare(0, prefix.size(), prefix) == 0) {
+                    arm_link_names.push_back(name);
+                }
+            }
+            acm.setEntry(obj_name, arm_link_names, true); // Set it so that pairs between the object and it's manipulator will not be computed
+
+            mPlanningSceneMonitor->updatesScene(mPlanningScene);
         }
 
 

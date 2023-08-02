@@ -24,6 +24,10 @@
 
 #include <common/types.hpp>
 
+#include <moveit_msgs/DisplayRobotState.h>
+#include <moveit/robot_state/robot_state.h>
+#include <moveit/robot_state/conversions.h>
+
 namespace htf {
 
     // Utility functions for converting pose representations
@@ -41,13 +45,17 @@ namespace htf {
         return pose_;
     }
 
+    // {tx, ty, tz, qx, qy, qz, qw}
     inline Eigen::Isometry3d vectorToEigenPose(std::vector<double> pose) {
         Eigen::Isometry3d pose_ = Eigen::Isometry3d::Identity();
         if (pose.size() == 7) {
             Eigen::Vector3d translation(pose[0], pose[1], pose[2]);
             pose_.translation() = translation;
             Eigen::Quaterniond quaternion(pose[6], pose[3], pose[4], pose[5]);
+            //quaternion.normalize();
             pose_.linear() = quaternion.toRotationMatrix();
+        } else {
+            ROS_ERROR("Invalid vector pose");
         }
         return pose_;
     }
@@ -64,7 +72,7 @@ namespace htf {
         pose_.push_back(translation.x());
         pose_.push_back(translation.y());
         pose_.push_back(translation.z());
-        const Eigen::Quaterniond quaternion(pose.rotation());
+        const Eigen::Quaterniond quaternion(pose.linear());
         pose_.push_back(quaternion.x());
         pose_.push_back(quaternion.y());
         pose_.push_back(quaternion.z());
@@ -77,7 +85,7 @@ namespace htf {
         pose_.position.x = pose.translation().x();
         pose_.position.y = pose.translation().y();
         pose_.position.z = pose.translation().z();
-        Eigen::Quaterniond quaternion(pose.rotation());
+        Eigen::Quaterniond quaternion(pose.linear());
         pose_.orientation.x = quaternion.x();
         pose_.orientation.y = quaternion.y();
         pose_.orientation.z = quaternion.z();
@@ -579,11 +587,11 @@ namespace ims {
     }
 
     /// @brief Create a line between two points in space
-    /// @param points 
-    /// @param publisher 
-    /// @param frame_id 
-    /// @param line_color 
-    /// @param id 
+    /// @param points The points that we want to connect with a line
+    /// @param publisher The ros publisher that we want to publish to
+    /// @param frame_id The frame within which our coordinates sit
+    /// @param line_color The color of the line
+    /// @param id The id of the object
     inline void visualizeLine(const Eigen::Vector3d points[], const ros::Publisher &publisher, const std::string &frame_id, std_msgs::ColorRGBA &line_color, int id, std::string ns = "line") {
 
         visualization_msgs::Marker line_marker;
@@ -615,6 +623,37 @@ namespace ims {
         publisher.publish(line_marker);
     }
 
+    /// @brief Create a small point in space
+    /// @param point The point that we want to highlight
+    /// @param publisher The ros publisher that we want to publish to
+    /// @param frame_id The frame within which our coordinates sit
+    /// @param point_color The color of the point
+    /// @param id The id of the object
+    inline void visualizePoint(const Eigen::Vector3d point, const ros::Publisher &publisher, const std::string &frame_id, std_msgs::ColorRGBA &point_color, int id, std::string ns = "point") {
+
+        visualization_msgs::Marker point_marker;
+        point_marker.header.frame_id = frame_id;
+        point_marker.header.stamp = ros::Time();
+        point_marker.ns = ns;
+        point_marker.id = id;
+        point_marker.type = visualization_msgs::Marker::SPHERE;
+        point_marker.action = visualization_msgs::Marker::ADD;
+        point_marker.pose.orientation.w = 1.0;
+        point_marker.scale.x = 0.02;
+        point_marker.scale.y = 0.02;
+        point_marker.scale.z = 0.02;
+        point_marker.color = point_color;
+
+        geometry_msgs::Point p;
+        p.x = point.x();
+        p.y = point.y();
+        p.z = point.z();
+
+        point_marker.points.push_back(p);
+
+        publisher.publish(point_marker);
+    }
+
     /// @brief Clear all of the past lines that have been made so far up to the current id (not including the current id)
     /// @param publisher 
     /// @param frame_id 
@@ -629,6 +668,18 @@ namespace ims {
         clear_marker.action = visualization_msgs::Marker::DELETEALL;
         
         publisher.publish(clear_marker);
+    }
+
+    inline void publishState(const ros::Publisher &publisher, robot_state::RobotState& robot_state) {
+
+        // Create a DisplayRobotState message
+        moveit_msgs::DisplayRobotState display_robot_state;
+
+        // Update the message with the current robot state
+        robot_state::robotStateToRobotStateMsg(robot_state, display_robot_state.state);
+
+        // Publish the message
+        publisher.publish(display_robot_state);
     }
 
     /// \brief Visualize the distance field bounding box in rviz
