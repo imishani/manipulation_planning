@@ -919,6 +919,10 @@ namespace ims {
         void publishState(robot_state::RobotState& robot_state) {
             ims::publishState(robot_state_pub, robot_state);
         }
+
+        void publishCurrentState() {
+            ims::publishState(robot_state_pub, mMoveitInterface->mPlanningScene->getCurrentStateNonConst());
+        }
     };
 }
 
