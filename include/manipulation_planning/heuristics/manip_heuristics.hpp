@@ -15,7 +15,7 @@
 
 // search includes
 #include <search/common/scene_interface.hpp>
-#include <search/common/action_space.hpp>
+#include <search/action_space/action_space.hpp>
 #include <search/common/types.hpp>
 #include <search/planners/dijkstra.hpp>
 #include <search/planners/bfs3d.h>
@@ -59,7 +59,7 @@ namespace ims {
 
         }
 
-        std::vector<Action> getActions() override {
+        std::vector<Action> getPrimActions() override {
             return this->action_deltas;
         }
 
@@ -86,6 +86,26 @@ namespace ims {
             this->m_actions = std::make_shared<actionType3Dpoint>(actions_ptr);
         }
 
+        void getActions(int state_id,
+                        std::vector<ActionSequence> &actions_seq,
+                        bool check_validity) override {
+            auto actions = m_actions->getPrimActions();
+            for (int i {0} ; i < m_actions->num_actions ; i++){
+                auto action = actions[i];
+                if (check_validity){
+                    auto curr_state = this->getRobotState(state_id);
+                    auto next_state_val = StateType(curr_state->state.size());
+                    std::transform(curr_state->state.begin(), curr_state->state.end(), action.begin(), next_state_val.begin(), std::plus<>());
+                    if (!isStateValid(next_state_val)){
+                        continue;
+                    }
+                }
+                ActionSequence action_seq;
+                action_seq.push_back(action);
+                actions_seq.push_back(action_seq);
+            }
+        }
+
         bool isStateValid(const StateType &state_val) override {
             return m_env->df_map->getCell(state_val[0], state_val[1], state_val[2]).distance_square_ > 0;
         }
@@ -100,9 +120,10 @@ namespace ims {
                            std::vector<double> &costs) override {
             auto curr_state = this->getRobotState(curr_state_ind);
             auto curr_state_val = curr_state->state;
-            auto actions = m_actions->getActions();
-            for (int i{0}; i < m_actions->num_actions; i++) {
-                auto action = actions[i];
+            std::vector<ActionSequence> actions;
+            getActions(curr_state_ind, actions, false);
+            for (int i {0} ; i < actions.size() ; i++){
+                auto action = actions[i][0];
                 auto next_state_val = StateType(curr_state_val.size());
                 std::transform(curr_state_val.begin(), curr_state_val.end(), action.begin(), next_state_val.begin(),
                                std::plus<>());
@@ -365,7 +386,7 @@ namespace ims {
         }
 
 
-        bool getHeuristic(StateType& s1, StateType& s2, double& dist) override{
+        bool getHeuristic(const StateType& s1, const StateType& s2, double& dist) override{
             // check if s2 is a goal state
             kinematic_state->setJointGroupPositions(joint_model_group, s2);
             auto ee_check_state = kinematic_state->getGlobalLinkTransform(tip_link);
@@ -387,7 +408,7 @@ namespace ims {
             return false;
         }
 
-        bool getHeuristic(StateType& s, double& dist) override{
+        bool getHeuristic(const StateType& s, double& dist) override{
             if (m_goal_cells.empty())
                 return false;
 
@@ -444,7 +465,7 @@ namespace ims {
 
         int getBfsCostToGoal(const smpl::BFS_3D& bfs, int x, int y, int z) const{
             if (!bfs.inBounds(x, y, z) || bfs.getDistance(x, y, z) == smpl::BFS_3D::WALL)
-                return Infinity;
+                return INF_INT;
             else {
                 return m_cost_per_cell * bfs.getDistance(x, y, z);
             }
@@ -458,10 +479,11 @@ namespace ims {
 
     };
 
+
     /// @brief SE(3) distance heuristic using hopf coordinates
     struct SE3HeuristicHopf : public BaseHeuristic {
 
-        bool getHeuristic(StateType& s1, StateType& s2,
+        bool getHeuristic(const StateType& s1, const StateType& s2,
                           double& dist) override {
             // check id the states are the same size
             if (s1.size() != s2.size()) {

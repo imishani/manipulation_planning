@@ -2,8 +2,8 @@
 // Created by itamar on 4/3/23.
 //
 
-#include <manipulation_planning/manipulation_action_space.hpp>
-#include <manipulation_planning/common/moveit_interface.hpp>
+#include <manipulation_planning/action_space/manipulation_action_space.hpp>
+#include <manipulation_planning/common/moveit_scene_interface.hpp>
 #include <search/planners/astar.hpp>
 #include <search/planners/wastar.hpp>
 #include <search/heuristics/standard_heuristics.hpp>

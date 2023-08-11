@@ -47,10 +47,10 @@
 #include <tf/transform_datatypes.h>
 
 // project includes
-#include <manipulation_planning/common/moveit_interface.hpp>
-#include <manipulation_planning/common/utils.hpp>
-#include <manipulation_planning/heuristics/manip_heuristics.hpp>
-#include <search/common/action_space.hpp>
+#include "manipulation_planning/common/moveit_scene_interface.hpp"
+#include "manipulation_planning/common/utils.hpp"
+#include "manipulation_planning/heuristics/manip_heuristics.hpp"
+#include <search/action_space/action_space.hpp>
 
 
 namespace ims
@@ -233,7 +233,7 @@ namespace ims
 
         /// @brief Get the possible actions
         /// @return A vector of all possible actions
-        std::vector<Action> getActions() override
+        std::vector<Action> getPrimActions() override
         {
             if (short_mprim_.empty() && long_mprim_.empty())
             {
@@ -244,7 +244,9 @@ namespace ims
                     case ActionType::MOVE:
                         switch (space_type_) {
                             case spaceType::ConfigurationSpace: {
+                                // TODO: Add snap option
                                 std::vector<std::vector<double>> mprim;
+                                mprim.insert(mprim.end(), long_mprim_.begin(), long_mprim_.end());
                                 mprim.insert(mprim.end(), short_mprim_.begin(), short_mprim_.end());
                                 for (auto &action_ : mprim) {
                                     // convert from degrees to radians
@@ -322,6 +324,10 @@ namespace ims
         /// @param goal_dist The distance from the goal
         /// @return A vector of actions
         std::vector<Action> getAdaptiveActions(double &start_dist, double &goal_dist) {
+            if (short_mprim_.empty() && long_mprim_.empty())
+            {
+                readMPfile();
+            }
             actions_.clear();
             if (mprim_active_type_.long_dist.first) // insert long distance primitive and convert to radians
                 for (auto &action_ : long_mprim_) {
@@ -347,11 +353,10 @@ namespace ims
                 actions_.push_back({0, 0, 0, 0, 0, 0, 0});  // TODO: Fix this to make it better designed
             if (mprim_active_type_.snap_rpy.first && goal_dist < mprim_active_type_.snap_rpy.second)
                 actions_.push_back({0, 0, 0, 0, 0, 0, 0});  // TODO: Fix this to make it better designed
-            if (mprim_active_type_.snap_xyzrpy.first && goal_dist < mprim_active_type_.snap_xyzrpy.second)
-                {
+            if (mprim_active_type_.snap_xyzrpy.first && goal_dist < mprim_active_type_.snap_xyzrpy.second) {
                 actions_.push_back({0, 0, 0, 0, 0, 0, 0});  // TODO: Fix this to make it better designed
-                ROS_INFO_NAMED("adaptive_mprim", "snap xyzrpy");
-                ROS_INFO_STREAM("goal_dist: " << goal_dist);
+                ROS_DEBUG_NAMED("adaptive_mprim", "snap xyzrpy");
+                ROS_DEBUG_STREAM("goal_dist: " << goal_dist);
                 }
             return actions_;
         }
@@ -418,6 +423,12 @@ namespace ims
             mMoveitInterface->getJointLimits(mJointLimits);
             m_vis_pub = m_nh.advertise<visualization_msgs::Marker>( "visualization_marker", 0 );
 
+        }
+
+        void getActions(int state_id,
+                        std::vector<ActionSequence> &actions_seq,
+                        bool check_validity) override {
+            // TODO
         }
 
         /// @brief Set the manipulation space type
@@ -656,7 +667,7 @@ namespace ims
             auto curr_state = this->getRobotState(curr_state_ind);
             auto curr_state_val = curr_state->state;
             // get the actions
-            auto actions = mManipulationType->getActions();
+            auto actions = mManipulationType->getPrimActions();
             // convert to quaternion
             Eigen::Quaterniond q_curr;
             from_euler_zyx(curr_state_val[5], curr_state_val[4], curr_state_val[3], q_curr);
@@ -719,30 +730,6 @@ namespace ims
             return true;
         }
 
-        /// @brief Visualize a state point in rviz for debugging
-        /// @param state_id The state id
-        /// @param type The type of state (greedy, attractor, etc)
-        void VisualizePoint(double x, double y, double z) {
-            visualization_msgs::Marker marker;
-            marker.header.frame_id = mMoveitInterface->mPlanningScene->getPlanningFrame();
-            marker.header.stamp = ros::Time();
-            marker.ns = "graph";
-            marker.id = m_vis_id;
-            marker.type = visualization_msgs::Marker::SPHERE;
-            marker.action = visualization_msgs::Marker::ADD;
-            marker.pose.position.x = x; marker.pose.position.y = y; marker.pose.position.z = z;
-            marker.pose.orientation.x = 0.0; marker.pose.orientation.y = 0.0;
-            marker.pose.orientation.z = 0.0; marker.pose.orientation.w = 1.0;
-
-            marker.scale.x = 0.02; marker.scale.y = 0.02; marker.scale.z = 0.02;
-            // green
-            marker.color.r = 0.0; marker.color.g = 1.0; marker.color.b = 0.0;
-            marker.color.a = 0.5;
-            // visualize
-            m_vis_pub.publish(marker);
-            m_vis_id++;
-        }
-
         virtual bool getSuccessorsCs(int curr_state_ind,
                                      std::vector<int>& successors,
                                      std::vector<double> &costs)
@@ -752,7 +739,7 @@ namespace ims
             auto curr_state_val = curr_state->state;
             std::vector<Action> actions;
             if (bfs_heuristic_ == nullptr){
-                 actions = mManipulationType->getActions();
+                 actions = mManipulationType->getPrimActions();
             }
             // get the actions
             else {
@@ -794,7 +781,8 @@ namespace ims
                 // check for maximum absolute action
                 for (int i{0}; i < curr_state_val.size(); i++)
                 {
-                    if (fabs(new_state_val[i] - curr_state_val[i]) > 20.0 * mManipulationType->max_action_)
+//                    if (fabs(new_state_val[i] - curr_state_val[i]) > 20.0 * mManipulationType->max_action_)
+                    if (new_state_val[i] < mJointLimits[i].first || new_state_val[i] > mJointLimits[i].second)
                     {
                         discontinuity = true;
                         if (goal_state_set)
@@ -840,6 +828,30 @@ namespace ims
             {
                 return getSuccessorsWs(curr_state_ind, successors, costs);
             }
+        }
+
+        /// @brief Visualize a state point in rviz for debugging
+        /// @param state_id The state id
+        /// @param type The type of state (greedy, attractor, etc)
+        void VisualizePoint(double x, double y, double z) {
+            visualization_msgs::Marker marker;
+            marker.header.frame_id = mMoveitInterface->mPlanningScene->getPlanningFrame();
+            marker.header.stamp = ros::Time();
+            marker.ns = "graph";
+            marker.id = m_vis_id;
+            marker.type = visualization_msgs::Marker::SPHERE;
+            marker.action = visualization_msgs::Marker::ADD;
+            marker.pose.position.x = x; marker.pose.position.y = y; marker.pose.position.z = z;
+            marker.pose.orientation.x = 0.0; marker.pose.orientation.y = 0.0;
+            marker.pose.orientation.z = 0.0; marker.pose.orientation.w = 1.0;
+
+            marker.scale.x = 0.02; marker.scale.y = 0.02; marker.scale.z = 0.02;
+            // green
+            marker.color.r = 0.0; marker.color.g = 1.0; marker.color.b = 0.0;
+            marker.color.a = 0.5;
+            // visualize
+            m_vis_pub.publish(marker);
+            m_vis_id++;
         }
     };
 }

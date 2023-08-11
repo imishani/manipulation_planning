@@ -27,7 +27,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 /*!
- * \file   moveit_interface.hpp
+ * \file   moveit_scene_interface.hpp
  * \author Itamar Mishani (imishani@cmu.edu)
  * \date   4/3/23
 */
@@ -150,8 +150,8 @@ namespace ims{
         bool calculateIK(const geometry_msgs::Pose &pose,
                          const StateType &seed,
                          StateType &joint_state,
-                         double consistency_limit = 0.3,
-                         double timeout = 0.05) {
+                         double consistency_limit = 1.0,
+                         double timeout = 0.1) {
             // resize the joint state
             joint_state.resize(num_joints);
             // set the pose

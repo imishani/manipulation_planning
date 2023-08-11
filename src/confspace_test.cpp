@@ -34,8 +34,8 @@
 
 #include <memory>
 
-#include <manipulation_planning/manipulation_action_space.hpp>
-#include <manipulation_planning/common/moveit_interface.hpp>
+#include <manipulation_planning/action_space/manipulation_action_space.hpp>
+#include <manipulation_planning/common/moveit_scene_interface.hpp>
 #include <search/planners/astar.hpp>
 #include <search/planners/wastar.hpp>
 #include <manipulation_planning/heuristics/manip_heuristics.hpp>
@@ -75,8 +75,8 @@ int main(int argc, char** argv) {
     ros::Publisher bb_pub = nh.advertise<visualization_msgs::Marker>("bb_marker", 10);
     // get the planning frame
     ims::visualizeBoundingBox(df, bb_pub, move_group.getPlanningFrame());
-//    auto* heuristic = new ims::BFSHeuristic(df, "manipulator_1");
-    auto* heuristic = new ims::JointAnglesHeuristic;
+    auto* heuristic = new ims::BFSHeuristic(df, "manipulator_1");
+//    auto* heuristic = new ims::JointAnglesHeuristic;
     double weight = 100.0;
 
     ims::wAStarParams params(heuristic, weight);
