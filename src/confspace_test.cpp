@@ -60,9 +60,9 @@ int main(int argc, char** argv) {
     bool save_experience = false;
 
     if (argc == 0) {
-        ROS_INFO_STREAM(BOLDMAGENTA << "No arguments given: using default values" << std::endl);
-        ROS_INFO_STREAM("<group_name(string)> <discretization(int)> <save_experience(bool int)>" << std::endl);
-        ROS_INFO_STREAM("Using default values: manipulator_1 1 0" << RESET << std::endl);
+        ROS_INFO_STREAM(BOLDMAGENTA << "No arguments given: using default values");
+        ROS_INFO_STREAM("<group_name(string)> <discretization(int)> <save_experience(bool int)>");
+        ROS_INFO_STREAM("Using default values: manipulator_1 1 0" << RESET);
     } else if (argc == 2) {
         group_name = argv[1];
     } else if (argc == 3) {
@@ -73,9 +73,9 @@ int main(int argc, char** argv) {
         discret = std::stod(argv[2]);
         save_experience = std::stoi(argv[3]);
     } else {
-        ROS_INFO_STREAM(BOLDMAGENTA << "No arguments given: using default values" << std::endl);
-        ROS_INFO_STREAM("<group_name(string)> <discretization(int)> <save_experience(bool int)>"  << std::endl);
-        ROS_INFO_STREAM("Using default values: manipulator_1 1 0" << RESET << std::endl);
+        ROS_INFO_STREAM(BOLDMAGENTA << "No arguments given: using default values");
+        ROS_INFO_STREAM("<group_name(string)> <discretization(int)> <save_experience(bool int)>" );
+        ROS_INFO_STREAM("Using default values: manipulator_1 1 0" << RESET);
     }
 
     auto full_path = boost::filesystem::path(__FILE__).parent_path().parent_path();
@@ -129,7 +129,7 @@ int main(int argc, char** argv) {
     StateType goal_state = start_state;
 
     // change the goal state
-    goal_state[0] = 0;// 78; //0;
+    goal_state[0] = 5;// 78; //0;
     goal_state[1] = 30; //25; //30;
     goal_state[2] = -39; //-18; //-30;
     goal_state[3] = 0; //-147; //0;
@@ -157,20 +157,20 @@ int main(int argc, char** argv) {
 
     std::vector<StateType> path_;
     if (!planner.plan(path_)) {
-        ROS_INFO_STREAM(RED << "No path found" << RESET << std::endl);
+        ROS_INFO_STREAM(RED << "No path found" << RESET);
         return 0;
     }
     else {
-        ROS_INFO_STREAM(GREEN << "Path found" << RESET << std::endl);
+        ROS_INFO_STREAM(GREEN << "Path found" << RESET);
         if (save_experience) {
             ROS_INFO("Saving path as experience");
             // check if the directory exists
             boost::filesystem::path dir(full_path.string() + "/data/experiences/" + group_name);
             if (boost::filesystem::is_directory(dir)) {
-                ROS_INFO_STREAM("Directory " << dir << " exists" << std::endl);
+                ROS_INFO_STREAM("Directory " << dir << " exists");
             } else {
-                ROS_INFO_STREAM("Directory " << dir << " does not exist" << std::endl);
-                ROS_INFO_STREAM("Creating directory " << dir << std::endl);
+                ROS_INFO_STREAM("Directory " << dir << " does not exist");
+                ROS_INFO_STREAM("Creating directory " << dir);
                 boost::filesystem::create_directory(dir);
             }
             // check how many experiences in the directory
@@ -208,11 +208,11 @@ int main(int argc, char** argv) {
 
     // report stats
     PlannerStats stats = planner.reportStats();
-    std::cout << GREEN << "Planning time: " << stats.time << " sec" << std::endl;
-    std::cout << "cost: " << stats.cost << std::endl;
-    std::cout << "Path length: " << path_.size() << std::endl;
-    std::cout << "Number of nodes expanded: " << stats.num_expanded << std::endl;
-    std::cout << "Suboptimality: " << stats.suboptimality << RESET << std::endl;
+    ROS_INFO_STREAM("\n" << GREEN << "\t Planning time: " << stats.time << " sec" << std::endl
+                    << "\t cost: " << stats.cost << std::endl
+                    << "\t Path length: " << path_.size() << std::endl
+                    << "\t Number of nodes expanded: " << stats.num_expanded << std::endl
+                    << "\t Suboptimality: " << stats.suboptimality << RESET);
 
     // profile and execute the path
     // @{
@@ -227,7 +227,7 @@ int main(int argc, char** argv) {
                       move_group,
                       trajectory);
 
-    std::cout << "Executing trajectory" << std::endl;
+    ROS_INFO("Executing trajectory");
     move_group.execute(trajectory);
     // @}
     return 0;
