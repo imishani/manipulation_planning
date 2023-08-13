@@ -61,22 +61,20 @@ namespace ims
 
         /// @brief Constructor
         /// @param[in] bfs_heuristic A pointer to a BFSHeuristic object. Default = nullptr
-        explicit manipulationType(BFSHeuristic* bfs_heuristic = nullptr) : action_type_(ActionType::MOVE),
-                             space_type_(spaceType::ConfigurationSpace),
-                             prim_file_name_("../config/manip.mprim"),
-                             max_action_(0.0){
+        explicit manipulationType() : action_type_(ActionType::MOVE),
+                                      space_type_(spaceType::ConfigurationSpace),
+                                      prim_file_name_("../config/manip_6dof.mprim"),
+                                      max_action_(0.0){
 //            readMPfile();
         };
 
         /// @brief Constructor with motion primitives file given
         /// @param[in] mprimFile The path to the motion primitives file
         /// @param[in] bfs_heuristic A pointer to a BFSHeuristic object
-        explicit manipulationType(std::string mprimFile,
-                                  BFSHeuristic* bfs_heuristic = nullptr) :
-                                  action_type_(ActionType::MOVE),
-                                  space_type_(spaceType::ConfigurationSpace),
-                                  prim_file_name_(std::move(mprimFile)),
-                                  max_action_(0.0){
+        explicit manipulationType(std::string mprimFile) : action_type_(ActionType::MOVE),
+                                                           space_type_(spaceType::ConfigurationSpace),
+                                                           prim_file_name_(std::move(mprimFile)),
+                                                           max_action_(0.0){
 //            readMPfile();
         };
 
@@ -350,11 +348,14 @@ namespace ims
                     actions_.push_back(action_rev);
                 }
             if (mprim_active_type_.snap_xyz.first && goal_dist < mprim_active_type_.snap_xyz.second)
-                actions_.push_back({0, 0, 0, 0, 0, 0, 0});  // TODO: Fix this to make it better designed
+                actions_.push_back({INF_DOUBLE, INF_DOUBLE, INF_DOUBLE,
+                                    INF_DOUBLE, INF_DOUBLE, INF_DOUBLE});  // TODO: Fix this to make it better designed
             if (mprim_active_type_.snap_rpy.first && goal_dist < mprim_active_type_.snap_rpy.second)
-                actions_.push_back({0, 0, 0, 0, 0, 0, 0});  // TODO: Fix this to make it better designed
+                actions_.push_back({INF_DOUBLE, INF_DOUBLE, INF_DOUBLE,
+                                    INF_DOUBLE, INF_DOUBLE, INF_DOUBLE});  // TODO: Fix this to make it better designed
             if (mprim_active_type_.snap_xyzrpy.first && goal_dist < mprim_active_type_.snap_xyzrpy.second) {
-                actions_.push_back({0, 0, 0, 0, 0, 0, 0});  // TODO: Fix this to make it better designed
+                actions_.push_back({INF_DOUBLE, INF_DOUBLE, INF_DOUBLE,
+                                    INF_DOUBLE, INF_DOUBLE, INF_DOUBLE});  // TODO: Fix this to make it better designed
                 ROS_DEBUG_NAMED("adaptive_mprim", "snap xyzrpy");
                 ROS_DEBUG_STREAM("goal_dist: " << goal_dist);
                 }
@@ -369,7 +370,7 @@ namespace ims
             std::pair<bool, double> long_dist = std::make_pair(true, 0.4);
             std::pair<bool, double> snap_xyz = std::make_pair(false, 0.2);
             std::pair<bool, double> snap_rpy = std::make_pair(false, 0.2);
-            std::pair<bool, double> snap_xyzrpy = std::make_pair(true, 0.4);
+            std::pair<bool, double> snap_xyzrpy = std::make_pair(true, 0.04);
         };
 
         ActionType action_type_;
@@ -428,7 +429,49 @@ namespace ims
         void getActions(int state_id,
                         std::vector<ActionSequence> &actions_seq,
                         bool check_validity) override {
-            // TODO
+
+            auto curr_state = this->getRobotState(state_id);
+            auto curr_state_val = curr_state->state;
+            if (bfs_heuristic_ == nullptr){
+                auto actions = mManipulationType->getPrimActions();
+                for (int i {0} ; i < actions.size() ; i++){
+                    auto action = actions[i];
+                    ActionSequence action_seq {curr_state_val};
+                    // push back the new state after the action
+                    StateType next_state_val(curr_state_val.size());
+                    std::transform(curr_state_val.begin(), curr_state_val.end(), action.begin(), next_state_val.begin(), std::plus<>());
+                    actions_seq.push_back(action_seq);
+                }
+            } else {
+                if (curr_state->state_mapped.empty()){
+                    mMoveitInterface->calculateFK(curr_state_val, curr_state->state_mapped);
+                    this->VisualizePoint(curr_state->state_mapped.at(0), curr_state->state_mapped.at(1), curr_state->state_mapped.at(2));
+                }
+                auto goal_dist = bfs_heuristic_->getMetricGoalDistance(curr_state->state_mapped.at(0),
+                                                                       curr_state->state_mapped.at(1),
+                                                                       curr_state->state_mapped.at(2));
+                auto start_dist = bfs_heuristic_->getMetricStartDistance(curr_state->state_mapped.at(0),
+                                                                         curr_state->state_mapped.at(1),
+                                                                         curr_state->state_mapped.at(2));
+                auto actions = mManipulationType->getAdaptiveActions(start_dist, goal_dist);
+
+                for (int i {0} ; i < actions.size() ; i++){
+                    auto action = actions[i];
+                    ActionSequence action_seq {curr_state_val};
+                    // if the action is snap, then the next state is the goal state
+                    // TODO: Add the option to have a goal state defined in ws even if planning in conf space
+                    if (action[0] == INF_DOUBLE){
+                        action_seq.push_back(bfs_heuristic_->mGoal); // TODO: It is wierd that I am using the heuristic here
+                    }
+                    else {
+                        // push back the new state after the action
+                        StateType next_state_val(curr_state_val.size());
+                        std::transform(curr_state_val.begin(), curr_state_val.end(), action.begin(), next_state_val.begin(), std::plus<>());
+                        action_seq.push_back(next_state_val);
+                    }
+                    actions_seq.push_back(action_seq);
+                }
+            }
         }
 
         /// @brief Set the manipulation space type
@@ -734,44 +777,14 @@ namespace ims
                                      std::vector<int>& successors,
                                      std::vector<double> &costs)
         {
-            // get the current state
-            auto curr_state = this->getRobotState(curr_state_ind);
-            auto curr_state_val = curr_state->state;
-            std::vector<Action> actions;
-            if (bfs_heuristic_ == nullptr){
-                 actions = mManipulationType->getPrimActions();
-            }
-            // get the actions
-            else {
-                if (curr_state->state_mapped.empty()){
-                    mMoveitInterface->calculateFK(curr_state_val, curr_state->state_mapped);
-                    this->VisualizePoint(curr_state->state_mapped.at(0), curr_state->state_mapped.at(1), curr_state->state_mapped.at(2));
-                }
-                auto goal_dist = bfs_heuristic_->getMetricGoalDistance(curr_state->state_mapped.at(0),
-                                                                       curr_state->state_mapped.at(1),
-                                                                       curr_state->state_mapped.at(2));
-                auto start_dist = bfs_heuristic_->getMetricStartDistance(curr_state->state_mapped.at(0),
-                                                                         curr_state->state_mapped.at(1),
-                                                                         curr_state->state_mapped.at(2));
-                actions = mManipulationType->getAdaptiveActions(start_dist, goal_dist);
-            }
+            std::vector<ActionSequence> actions;
+            getActions(curr_state_ind, actions, false);
             // get the successors
             for (auto &action : actions)
             {
-                // create a new state in the length of the current state
-                StateType new_state_val{};
-                new_state_val.resize(curr_state_val.size());
-                std::fill(new_state_val.begin(), new_state_val.end(), 0.0);
-                bool goal_state_set{false};
-                // check if actions are all zero, if so, replace them with the goal state
-                if ((bfs_heuristic_ != nullptr) && std::all_of(action.begin(), action.end(), [](double i){return i == 0;})){
-                    new_state_val = bfs_heuristic_->mGoal;
-                    goal_state_set = true;
-                } else{
-                    for (int i{0}; i < curr_state_val.size(); i++) {
-                        new_state_val[i] = curr_state_val[i] + action[i];
-                    }
-                }
+                // the first state is the current state and the last state is the successor
+                auto curr_state_val = action.front();
+                auto new_state_val = action.back();
                 // normalize the angles
                 normalizeAngles(new_state_val, mJointLimits);
                 // discretize the state
@@ -781,36 +794,21 @@ namespace ims
                 // check for maximum absolute action
                 for (int i{0}; i < curr_state_val.size(); i++)
                 {
-//                    if (fabs(new_state_val[i] - curr_state_val[i]) > 20.0 * mManipulationType->max_action_)
                     if (new_state_val[i] < mJointLimits[i].first || new_state_val[i] > mJointLimits[i].second)
                     {
                         discontinuity = true;
-                        if (goal_state_set)
-                            std::cout << "Goal state set FAILED due to Discontinuity" << std::endl;
                         break;
                     }
                 }
 
-                // if (isStateToStateValid(curr_state_val, new_state_val)) {
-                if (isStateToStateValid(curr_state_val, new_state_val) && !discontinuity)
+                if (!discontinuity && isStateToStateValid(curr_state_val, new_state_val))
                 {
                     // create a new state
                     int next_state_ind = getOrCreateRobotState(new_state_val);
                     // add the state to the successors
                     successors.push_back(next_state_ind);
                     // add the cost
-                    // TODO: change this to the real cost
-//                    double norm = 0;
-//                    for (double i : action)
-//                    {
-//                        norm += i * i;
-//                    }
-//                    costs.push_back(sqrt(norm));
                     costs.push_back(1000);
-                }
-                else {
-                    if (goal_state_set)
-                        std::cout << "Goal state set FAILED" << std::endl;
                 }
             }
             return true;

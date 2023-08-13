@@ -171,11 +171,11 @@ int main(int argc, char** argv) {
 //        waypoints.push_back(pose);
 //    }
 //    moveit_msgs::RobotTrajectory trajectory;
-//    double fraction = move_group.computeCartesianPath(waypoints, 0.01, 0.0, trajectory);
+//    double fraction = move_group_.computeCartesianPath(waypoints, 0.01, 0.0, trajectory);
 //    std::cout << "fraction: " << fraction << std::endl;
 //    moveit::planning_interface::MoveGroupInterface::Plan my_plan;
 //    my_plan.trajectory_ = trajectory;
-//    move_group.execute(my_plan);
+//    move_group_.execute(my_plan);
 
     // profile and execute the path
     // @{
@@ -183,16 +183,16 @@ int main(int argc, char** argv) {
 //    for (auto& state : path_) {
 //        // assert if the size of the mapped state is not equal to the size of the joint state
 //        std::cout << state->getMappedState().size() << std::endl;
-//        assert(state->getMappedState().size() == move_group.getJoints().size());
+//        assert(state->getMappedState().size() == move_group_.getJoints().size());
 //        traj.push_back(state->getMappedState());
 //    }
 //    moveit_msgs::RobotTrajectory trajectory;
 //    ims::profileTrajectory(start_state,
 //                           goal_state,
 //                           traj,
-//                           move_group,
+//                           move_group_,
 //                           trajectory);
-//    move_group.execute(trajectory);
+//    move_group_.execute(trajectory);
 //
 //    // rerport stats
 //    PlannerStats stats = planner.reportStats();
