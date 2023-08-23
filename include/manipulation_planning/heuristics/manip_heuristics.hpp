@@ -227,7 +227,7 @@ namespace ims {
             m_cost_per_cell = cost_per_cell;
         }
 
-        void setGoal(StateType& goal) override{
+        void setGoal(const StateType& goal) override{
             mGoal = goal;
             kinematic_state->setJointGroupPositions(joint_model_group, goal);
             auto ee_goal_state = kinematic_state->getGlobalLinkTransform(tip_link);
@@ -244,7 +244,7 @@ namespace ims {
             m_bfs->run(x, y, z);
         }
 
-        void setStart(StateType& start) override{
+        void setStart(const StateType& start) override{
             mStart = start;
             kinematic_state->setJointGroupPositions(joint_model_group, start);
             auto ee_start_state = kinematic_state->getGlobalLinkTransform(tip_link);
@@ -522,7 +522,7 @@ namespace ims {
             return 0;
         }
 
-        void setGoal(StateType& goal) override{
+        void setGoal(const StateType& goal) override{
             //////////* The assumption here is that the goal is in configuration spae //////////*/
             //////////* TODO: Fix this assumption in the future ////////////////////////////////*/
             kinematic_state_->setJointGroupPositions(joint_model_group_, goal);
@@ -580,7 +580,7 @@ namespace ims {
             open_heur_.push(c);
         }
 
-        void setStart(StateType& start) override{
+        void setStart(const StateType& start) override{
             mStart = start;
         }
 
