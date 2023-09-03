@@ -145,9 +145,9 @@ include_directories(
 ## Declare a C++ library
 add_library(${PROJECT_NAME}
         src/confspace_test.cpp
-        include/manipulation_planning/manipulation_action_space.hpp
-        include/manipulation_planning/panda_action_space.hpp
-        include/manipulation_planning/common/moveit_interface.hpp
+        include/manipulation_planning/action_space/manipulation_action_space.hpp
+        include/manipulation_planning/action_space/egraph_manipulation_action_space.hpp
+        include/manipulation_planning/common/moveit_scene_interface.hpp
         include/manipulation_planning/heuristics/manip_heuristics.hpp
         include/manipulation_planning/common/utils.hpp
 )
@@ -166,26 +166,17 @@ target_link_libraries(${PROJECT_NAME}
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 # add_executable(${PROJECT_NAME}_node src/manipulation_planning_node.cpp)
-add_executable(${PROJECT_NAME}_node src/confspace_test.cpp)
+add_executable(${PROJECT_NAME}_cspace_test src/confspace_test.cpp)
 
-target_link_libraries(${PROJECT_NAME}_node
+target_link_libraries(${PROJECT_NAME}_cspace_test
         ${catkin_LIBRARIES}
         ${eigen_LIBRARIES}
         /usr/local/lib/${search_LIBRARIES}
         )
 
-add_executable(${PROJECT_NAME}_cbs_test src/cbs_test.cpp)
+add_executable(${PROJECT_NAME}_wspace_test src/workspace_test.cpp)
 
-target_link_libraries(${PROJECT_NAME}_cbs_test
-        ${catkin_LIBRARIES}
-        ${eigen_LIBRARIES}
-        /usr/local/lib/${search_LIBRARIES}
-        )
-
-add_executable(${PROJECT_NAME}_ws_test src/workspace_test.cpp)
-
-
-target_link_libraries(${PROJECT_NAME}_ws_test
+target_link_libraries(${PROJECT_NAME}_wspace_test
         ${catkin_LIBRARIES}
         ${eigen_LIBRARIES}
         /usr/local/lib/${search_LIBRARIES}
@@ -195,6 +186,15 @@ add_executable(${PROJECT_NAME}_ocmap_test src/occupancy_map_test.cpp)
 
 
 target_link_libraries(${PROJECT_NAME}_ocmap_test
+        ${catkin_LIBRARIES}
+        ${eigen_LIBRARIES}
+        /usr/local/lib/${search_LIBRARIES}
+        )
+
+add_executable(${PROJECT_NAME}_egraph_test src/confspace_egraph_test.cpp)
+
+
+target_link_libraries(${PROJECT_NAME}_egraph_test
         ${catkin_LIBRARIES}
         ${eigen_LIBRARIES}
         /usr/local/lib/${search_LIBRARIES}

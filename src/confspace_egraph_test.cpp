@@ -27,18 +27,18 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 /*!
- * \file   confspace_test.cpp
+ * \file   confspace_egraph_test.cpp
  * \author Itamar Mishani (imishani@cmu.edu)
- * \date   4/18/23
+ * \date   8/12/23
 */
 
 // C++ includes
 #include <memory>
 
 // project includes
-#include <manipulation_planning/action_space/manipulation_action_space.hpp>
+#include <manipulation_planning/action_space/egraph_manipulation_action_space.hpp>
 #include <manipulation_planning/common/moveit_scene_interface.hpp>
-#include <search/planners/wastar.hpp>
+#include <search/planners/egraph_wastar.hpp>
 #include <manipulation_planning/heuristics/manip_heuristics.hpp>
 #include <manipulation_planning/common/utils.hpp>
 
@@ -57,25 +57,20 @@ int main(int argc, char** argv) {
 
     std::string group_name = "manipulator_1";
     double discret = 1;
-    bool save_experience = false;
 
     if (argc == 0) {
         ROS_INFO_STREAM(BOLDMAGENTA << "No arguments given: using default values");
-        ROS_INFO_STREAM("<group_name(string)> <discretization(int)> <save_experience(bool int)>");
-        ROS_INFO_STREAM("Using default values: manipulator_1 1 0" << RESET);
+        ROS_INFO_STREAM("<group_name(string)> <discretization(int)> ");
+        ROS_INFO_STREAM("Using default values: manipulator_1 1" << RESET);
     } else if (argc == 2) {
         group_name = argv[1];
     } else if (argc == 3) {
         group_name = argv[1];
         discret = std::stod(argv[2]);
-    } else if (argc == 4) {
-        group_name = argv[1];
-        discret = std::stod(argv[2]);
-        save_experience = std::stoi(argv[3]);
     } else {
         ROS_INFO_STREAM(BOLDMAGENTA << "No arguments given: using default values");
-        ROS_INFO_STREAM("<group_name(string)> <discretization(int)> <save_experience(bool int)>" );
-        ROS_INFO_STREAM("Using default values: manipulator_1 1 0" << RESET);
+        ROS_INFO_STREAM("<group_name(string)> <discretization(int)> ");
+        ROS_INFO_STREAM("Using default values: manipulator_1 1" << RESET);
     }
 
     auto full_path = boost::filesystem::path(__FILE__).parent_path().parent_path();
@@ -101,25 +96,28 @@ int main(int argc, char** argv) {
     ros::Publisher bb_pub = nh.advertise<visualization_msgs::Marker>("bb_marker", 10);
     // get the planning frame
     ims::visualizeBoundingBox(df, bb_pub, move_group.getPlanningFrame());
-    auto* heuristic = new ims::BFSHeuristic(df, group_name);
-//    auto* heuristic = new ims::JointAnglesHeuristic;
+
+    auto* heuristic = new ims::BFSHeuristicEgraph;
     double weight = 100.0;
 
-    ims::wAStarParams params(heuristic, weight);
+    ims::ExperienceWAStarParams params(heuristic, weight, 100.0,
+                                       full_path.string() + "/data/experiences/" + group_name);
 
     ims::MoveitInterface scene_interface(group_name);
 
-    ims::ManipulationType action_type (path_mprim);
+    ims::manipulationType action_type (path_mprim);
     StateType discretization(num_joints, discret);
     ims::deg2rad(discretization);
     action_type.Discretization(discretization);
 
 //    std::shared_ptr<ims::ManipulationActionSpace> action_space = std::make_shared<ims::ManipulationActionSpace>(scene_interface, action_type);
-    std::shared_ptr<ims::ManipulationActionSpace> action_space = std::make_shared<ims::ManipulationActionSpace>(scene_interface, action_type,
-                                                                                                                heuristic);
+    std::shared_ptr<ims::EgraphManipulationActionSpace> action_space =
+        std::make_shared<ims::EgraphManipulationActionSpace>(scene_interface, action_type,heuristic);
+
+    heuristic->init(action_space, df, group_name);
 
     StateType start_state {0, 0, 0, 0, 0, 0};
-    const std::vector<std::string>& joint_names = move_group.getJointNames();
+    const std::vector<std::string>& joint_names = move_group.getVariableNames();
     for (int i = 0; i < 6; i++) {
         start_state[i] = current_state->getVariablePosition(joint_names[i]);
         ROS_INFO_STREAM("Joint " << joint_names[i] << " is " << start_state[i]);
@@ -147,7 +145,7 @@ int main(int argc, char** argv) {
     ims::roundStateToDiscretization(start_state, action_type.state_discretization_);
     ims::roundStateToDiscretization(goal_state, action_type.state_discretization_);
 
-    ims::wAStar planner(params);
+    ims::ExperienceWAstar planner(params);
     try {
         planner.initializePlanner(action_space, start_state, goal_state);
     }
@@ -160,41 +158,8 @@ int main(int argc, char** argv) {
         ROS_INFO_STREAM(RED << "No path found" << RESET);
         return 0;
     }
-    else {
+    else
         ROS_INFO_STREAM(GREEN << "Path found" << RESET);
-        if (save_experience) {
-            ROS_INFO("Saving path as experience");
-            // check if the directory exists
-            boost::filesystem::path dir(full_path.string() + "/data/experiences/" + group_name);
-            if (boost::filesystem::is_directory(dir)) {
-                ROS_INFO_STREAM("Directory " << dir << " exists");
-            } else {
-                ROS_INFO_STREAM("Directory " << dir << " does not exist");
-                ROS_INFO_STREAM("Creating directory " << dir);
-                boost::filesystem::create_directory(dir);
-            }
-            // check how many experiences in the directory
-            int num_experiences = 0;
-            for (auto& p : boost::filesystem::directory_iterator(dir)) {
-                num_experiences++;
-            }
-            // Save the path to a file as csv
-            std::string path_file = dir.string() + "/path_" +
-                std::to_string(num_experiences + 1) + ".csv";
-
-            std::ofstream file(path_file);
-            // header line
-            file << "Experience," << path_.size() << "," << num_joints << std::endl;
-            // write the path
-            for (int j {0}; j < path_.size(); j++){
-                for (int i {0}; i < num_joints; i++) {
-                    file << path_[j][i] << ",";
-                }
-                file << std::endl;
-            }
-            file.close();
-        }
-    }
 
     // Print nicely the path
     int counter = 0;
@@ -208,11 +173,11 @@ int main(int argc, char** argv) {
 
     // report stats
     PlannerStats stats = planner.reportStats();
-    ROS_INFO_STREAM("\n" << GREEN << "\t Planning time: " << stats.time << " sec" << std::endl
-                    << "\t cost: " << stats.cost << std::endl
-                    << "\t Path length: " << path_.size() << std::endl
-                    << "\t Number of nodes expanded: " << stats.num_expanded << std::endl
-                    << "\t Suboptimality: " << stats.suboptimality << RESET);
+    ROS_INFO_STREAM("\n" << GREEN << "\t Planning time: " << stats.time << " sec" << std::endl <<
+                    "\t cost: " << stats.cost << std::endl <<
+                    "\t Path length: " << path_.size() << std::endl <<
+                    "\t Number of nodes expanded: " << stats.num_expanded << std::endl <<
+                    "\t Suboptimality: " << stats.suboptimality << RESET);
 
     // profile and execute the path
     // @{
@@ -222,10 +187,10 @@ int main(int argc, char** argv) {
     }
     moveit_msgs::RobotTrajectory trajectory;
     ims::profileTrajectory(start_state,
-                      goal_state,
-                      traj,
-                      move_group,
-                      trajectory);
+                           goal_state,
+                           traj,
+                           move_group,
+                           trajectory);
 
     ROS_INFO("Executing trajectory");
     move_group.execute(trajectory);
