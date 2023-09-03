@@ -105,7 +105,7 @@ int main(int argc, char** argv) {
 
     ims::MoveitInterface scene_interface(group_name);
 
-    ims::manipulationType action_type (path_mprim);
+    ims::ManipulationType action_type (path_mprim);
     StateType discretization(num_joints, discret);
     ims::deg2rad(discretization);
     action_type.Discretization(discretization);
@@ -117,8 +117,9 @@ int main(int argc, char** argv) {
     heuristic->init(action_space, df, group_name);
 
     StateType start_state {0, 0, 0, 0, 0, 0};
-    const std::vector<std::string>& joint_names = move_group.getVariableNames();
-    for (int i = 0; i < 6; i++) {
+    const std::vector<std::string>& joint_names = move_group.getJointNames();
+    int num_joints_ = (int)move_group.getVariableCount();
+    for (int i = 0; i < num_joints; i++) {
         start_state[i] = current_state->getVariablePosition(joint_names[i]);
         ROS_INFO_STREAM("Joint " << joint_names[i] << " is " << start_state[i]);
     }

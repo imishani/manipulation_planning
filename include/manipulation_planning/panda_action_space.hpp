@@ -207,7 +207,7 @@ public:
                 pose.orientation.y = q.y();
                 pose.orientation.z = q.z();
                 pose.orientation.w = q.w();
-                joint_state.resize(mMoveitInterface->num_joints);
+                joint_state.resize(mMoveitInterface->num_joints_);
                 bool succ = mMoveitInterface->calculateIK(pose, seed, joint_state);
                 normalizeAngles(joint_state);
                 if (!succ) {

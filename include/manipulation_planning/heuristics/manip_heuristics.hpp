@@ -33,7 +33,7 @@ namespace ims {
 
 class scene3Dpoint : public SceneInterface {
 public:
-    explicit scene3Dpoint(std::shared_ptr<distance_field::PropagationDistanceField>& map_) : SceneInterface() {
+    explicit scene3Dpoint(std::shared_ptr<distance_field::PropagationDistanceField> &map_) : SceneInterface() {
         this->df_map = map_;
     }
 
@@ -41,6 +41,7 @@ public:
 };
 
 struct actionType3Dpoint : public ActionType {
+
     actionType3Dpoint() : ActionType() {
         this->num_actions = 26;
         this->action_costs = std::vector<double>(num_actions, 1);
@@ -61,44 +62,47 @@ struct actionType3Dpoint : public ActionType {
                 }
             }
         }
+
     }
 
     std::vector<Action> getPrimActions() override {
         return this->action_deltas;
     }
 
-    void Discretization(StateType& state_des) override {
+    void Discretization(StateType &state_des) override {
         state_discretization_ = state_des;
     }
 
     int num_actions;
     std::vector<double> action_costs;
     std::vector<std::vector<double>> action_deltas;
+
 };
 
 class actionSpace3Dpoint : public ActionSpace {
+
 private:
     std::shared_ptr<scene3Dpoint> m_env;
     std::shared_ptr<actionType3Dpoint> m_actions;
 
 public:
-    actionSpace3Dpoint(const scene3Dpoint& env,
-                       const actionType3Dpoint& actions_ptr) : ActionSpace() {
+    actionSpace3Dpoint(const scene3Dpoint &env,
+                        const actionType3Dpoint &actions_ptr) : ActionSpace() {
         this->m_env = std::make_shared<scene3Dpoint>(env);
         this->m_actions = std::make_shared<actionType3Dpoint>(actions_ptr);
     }
 
     void getActions(int state_id,
-                    std::vector<ActionSequence>& actions_seq,
+                    std::vector<ActionSequence> &actions_seq,
                     bool check_validity) override {
         auto actions = m_actions->getPrimActions();
-        for (int i{0}; i < m_actions->num_actions; i++) {
+        for (int i {0} ; i < m_actions->num_actions ; i++){
             auto action = actions[i];
-            if (check_validity) {
+            if (check_validity){
                 auto curr_state = this->getRobotState(state_id);
                 auto next_state_val = StateType(curr_state->state.size());
                 std::transform(curr_state->state.begin(), curr_state->state.end(), action.begin(), next_state_val.begin(), std::plus<>());
-                if (!isStateValid(next_state_val)) {
+                if (!isStateValid(next_state_val)){
                     continue;
                 }
             }
@@ -108,27 +112,27 @@ public:
         }
     }
 
-    bool isStateValid(const StateType& state_val) override {
+    bool isStateValid(const StateType &state_val) override {
         return m_env->df_map->getCell((int)state_val[0], (int)state_val[1], (int)state_val[2]).distance_square_ > 0;
     }
 
-    bool isPathValid(const PathType& path) override {
+    bool isPathValid(const PathType &path) override {
         return std::all_of(path.begin(), path.end(),
-                           [this](const StateType& state_val) { return isStateValid(state_val); });
+                            [this](const StateType &state_val) { return isStateValid(state_val); });
     }
 
     bool getSuccessors(int curr_state_ind,
-                       std::vector<int>& successors,
-                       std::vector<double>& costs) override {
+                        std::vector<int> &successors,
+                        std::vector<double> &costs) override {
         auto curr_state = this->getRobotState(curr_state_ind);
         auto curr_state_val = curr_state->state;
         std::vector<ActionSequence> actions;
         getActions(curr_state_ind, actions, false);
-        for (int i{0}; i < actions.size(); i++) {
+        for (int i {0} ; i < actions.size() ; i++){
             auto action = actions[i][0];
             auto next_state_val = StateType(curr_state_val.size());
             std::transform(curr_state_val.begin(), curr_state_val.end(), action.begin(), next_state_val.begin(),
-                           std::plus<>());
+                            std::plus<>());
             // Check if state is outside the map
             if (next_state_val[0] < 0 || next_state_val[0] >= m_env->df_map->getXNumCells() ||
                 next_state_val[1] < 0 || next_state_val[1] >= m_env->df_map->getYNumCells() ||
@@ -150,82 +154,18 @@ public:
     /// \return True if the state exists, false otherwise
     bool getStateByValue(const StateType& state_val, size_t& state_ind) {
         // check if the state exists
-        auto curr_state = new RobotState;
-        curr_state->state = state_val;
+        auto curr_state = new RobotState; curr_state->state = state_val;
         auto it = state_to_id_.find(curr_state);
-        if (it == state_to_id_.end()) {
+        if(it == state_to_id_.end()){
             delete curr_state;
             return false;
-    };
-
-
-    class BFSHeuristic : public BaseHeuristic{
-    public:
-        BFSHeuristic() : BFSHeuristic(getDistanceFieldMoveIt()){
-        }
-
-        explicit BFSHeuristic(std::shared_ptr<distance_field::PropagationDistanceField> distance_field_,
-                              const std::string& group_name = "manipulator_1"){
-            m_distanceField = std::move(distance_field_);
-            // setup robot move group and planning scene
-            move_group = std::make_shared<moveit::planning_interface::MoveGroupInterface>(group_name);
-            // robot model
-            robot_model = move_group->getRobotModel();
-            // joint model group
-            joint_model_group = robot_model->getJointModelGroup(group_name);
-
-            kinematic_state = std::make_shared<moveit::core::RobotState>(robot_model);
-            auto names = joint_model_group->getLinkModelNames();
-            // get the planning group tip link
-            tip_link = joint_model_group->getLinkModelNames().back();
-    //            tip_link_ = names.at(5);
-
-            syncGridAndBfs();
-        }
-
-        void setInflationRadius(double radius)
-        {
-            m_inflation_radius = radius;
-        }
-
-        void setCostPerCell(int cost_per_cell)
-        {
-            m_cost_per_cell = cost_per_cell;
-        }
-
-        void setGoal(const StateType& goal) override{
-            mGoal = goal;
-            kinematic_state->setJointGroupPositions(joint_model_group, goal);
-            auto ee_goal_state = kinematic_state->getGlobalLinkTransform(tip_link);
-
-            auto goal_position = ee_goal_state.translation();
-            int x, y, z;
-            m_distanceField->worldToGrid(goal_position.x(), goal_position.y(), goal_position.z(),
-                                         x, y, z);
-            if (!m_bfs->inBounds(x, y, z))
-                throw std::runtime_error("goal is out of bounds");
-
-            m_goal_cells.emplace_back(x, y, z);
-
-            m_bfs->run(x, y, z);
-        }
-
-        void setStart(const StateType& start) override{
-            mStart = start;
-            kinematic_state->setJointGroupPositions(joint_model_group, start);
-            auto ee_start_state = kinematic_state->getGlobalLinkTransform(tip_link);
-
-            auto start_position = ee_start_state.translation();
-            m_distanceField->worldToGrid(start_position.x(), start_position.y(), start_position.z(),
-                                         start_cells[0], start_cells[1], start_cells[2]);
-    //            if (!bfs_->inBounds(x, y, z))
-    //                throw std::runtime_error("start is out of bounds");
         }
         state_ind = it->second;
         delete curr_state;
         return true;
     }
 };
+
 
 /// @brief SE(3) distance heuristic using hopf coordinates
 struct SE3HeuristicHopf : public BaseHeuristic {

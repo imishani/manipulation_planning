@@ -43,6 +43,7 @@
 #include <moveit/trajectory_processing/iterative_time_parameterization.h>
 #include <moveit/trajectory_processing/iterative_spline_parameterization.h>
 #include <moveit/trajectory_processing/time_optimal_trajectory_generation.h>
+#include <moveit/collision_detection/collision_common.h>
 
 #include <moveit/distance_field/voxel_grid.h>
 #include <moveit/distance_field/propagation_distance_field.h>
@@ -54,35 +55,88 @@
 #include <geometric_shapes/shape_operations.h>
 
 #include <search/common/types.hpp>
+#include <search/common/collisions.hpp>
 
 namespace ims {
 
     /// \brief A function that converts a state from radians to degrees
     /// \param state The state
     template <typename T>
-    void rad2deg(std::vector<T>& state) {
-        for (auto& val : state) {
-            val = val * 180 / M_PI;
+    void rad2deg(std::vector<T>& state, const std::vector<bool> & valid_mask = std::vector<bool>()){
+        bool is_valid_mask_passed = !valid_mask.empty();
+
+        for (size_t i = 0; i < state.size(); ++i) {
+            // If the valid mask is passed, then check if the dimension is valid.
+            if (is_valid_mask_passed){
+                if (!valid_mask[i]){
+                    continue;
+                }
+            }
+
+            // Convert the dimension, if it is valid according to the mask.
+            state[i] = state[i] * 180 / M_PI;
         }
     }
 
     /// \brief A function that converts a state from degrees to radians
     /// \param state The state
+    /// \param valid_mask The valid mask of the state. Dimensions that are true, get converted. Others are not.
     template <typename T>
-    void deg2rad(std::vector<T>& state) {
-        for (auto& val : state) {
-            val = val * M_PI / 180;
+    void deg2rad(std::vector<T>& state, const std::vector<bool> & valid_mask = std::vector<bool>()){
+
+        // If the mask is not passed, then all the dimensions are assumed to be valid.
+        bool is_valid_mask_passed = !valid_mask.empty();
+    
+        for (size_t i = 0; i < state.size(); ++i) {
+            // If the valid mask is passed, then check if the dimension is valid.
+            if (is_valid_mask_passed){
+                if (!valid_mask[i]){
+                    continue;
+                }
+            }
+
+            // Convert the dimension, if it is valid according to the mask.
+            state[i] = state[i] * M_PI / 180;
         }
     }
 
+    void negateState(StateType& state, const std::vector<bool> & valid_mask = std::vector<bool>()){
+        // If the mask is not passed, then all the dimensions are assumed to be valid.
+        bool is_valid_mask_passed = !valid_mask.empty();
+
+        for (size_t i = 0; i < state.size(); ++i) {
+            // If the valid mask is passed, then check if the dimension is valid.
+            if (is_valid_mask_passed){
+                if (!valid_mask[i]){
+                    continue;
+                }
+            }
+
+            // Convert the dimension, if it is valid according to the mask.
+            state[i] = -state[i];
+        }
+    } 
 
     /// \brief A function that dealing with the discontinuity of the joint angles
     /// \param state The state to check
     /// \param joint_limits The joint limits
+    /// \param valid_mask The valid mask of the state. Dimensions that are true, get normalized. Others are not.
     /// \return The state with the joint angles in the range of the joint limits
     template <typename T>
-    void normalizeAngles(std::vector<T>& state, std::vector<std::pair<T, T>>& joint_limits){
+    inline void normalizeAngles(std::vector<T>& state, std::vector<std::pair<T, T>>& joint_limits, const std::vector<bool> & valid_mask = std::vector<bool>()){
+        // If the mask is not passed, then all the dimensions are assumed to be valid.
+        bool is_valid_mask_passed = !valid_mask.empty();
+
+        // Iterate through the state and normalize the dimensions that are valid.
         for (int i = 0; i < state.size(); ++i) {
+            // If the valid mask is passed, then check if the dimension is valid.
+            if (is_valid_mask_passed){
+                if (!valid_mask[i]){
+                    continue;
+                }
+            }
+
+            // Normalize the dimension, if it is not in the range of the joint limits and it is valid according to the mask.
             if (state[i] > joint_limits[i].second){
                 state[i] = state[i] - 2*M_PI;
             }
@@ -95,10 +149,22 @@ namespace ims {
     /// \brief A function that dealing with the discontinuity of the joint angles
     /// \note This function assumes that the joint limits are [-pi, pi]
     /// \param state The state to check
+    /// \param valid_mask The valid mask of the state. Dimensions that are true, get normalized. Others are not.
     /// \return The state with the joint angles in the range of [-pi, pi]
     template <typename T>
-    void normalizeAngles(std::vector<T>& state){
+    inline void normalizeAngles(std::vector<T>& state, const std::vector<bool> & valid_mask = std::vector<bool>()){
+        bool is_valid_mask_passed = !valid_mask.empty();
+        // Iterate through the state and normalize the dimensions that are valid.
         for (int i = 0; i < state.size(); ++i) {
+
+            // If the valid mask is passed, then check if the dimension is valid.
+            if (is_valid_mask_passed){
+                if (!valid_mask[i]){
+                    continue;
+                }
+            }
+            
+            // Normalize the dimension, if it is not in the range of the joint limits and it is valid according to the mask.
             if (state[i] > M_PI){
                 state[i] = state[i] - 2*M_PI;
             }
@@ -107,6 +173,7 @@ namespace ims {
             }
         }
     }
+
 
     template <typename T>
     void checkFixGimbalLock(T y, T p, T r){
@@ -694,7 +761,38 @@ namespace ims {
         marker_pub.publish(marker);
 
     }
-}
+        
+    inline void moveitCollisionResultToCollisionsCollective(const collision_detection::CollisionResult& collision_result,
+                                                            CollisionsCollective& collisions)
+    {
+        collisions.clear();
+        for (const auto& collision_pair_and_contacts : collision_result.contacts)
+        {
+            const auto& contacts = collision_pair_and_contacts.second;
+            Collision c;
+            c.body_name_0 = collision_pair_and_contacts.first.first;
+            c.body_name_1 = collision_pair_and_contacts.first.second;
 
+            for (const auto& contact : contacts){
+                // Create a contact objects and add it to the collision object. Here, we need to change the body type from moveit to our new type.
+
+                c.contacts.emplace_back(Contact(contact.body_name_1, contact.body_name_2, contact.body_type_1, contact.body_type_2, contact.pos, contact.normal));
+
+                // Update the collision type of the collision object. This information is unfortunately only available in the contact object, so we take it from here.
+                if ((c.body_name_0 == c.contacts.back().body_name_0 && c.body_name_1 == c.contacts.back().body_name_1) || (c.body_name_0 == c.contacts.back().body_name_1 && c.body_name_1 == c.contacts.back().body_name_0))
+                {
+                    c.body_type_0 = c.contacts.back().body_type_0;
+                    c.body_type_1 = c.contacts.back().body_type_1;
+                }
+                else{
+                    // Raise exception.
+                    ROS_ERROR_STREAM("moveitCollisionResultToCollisionsCollective: The collision object names " << c.body_name_0 << " and " << c.body_name_1 << " do not match the contact object names " << c.contacts.back().body_name_0 << " and " << c.contacts.back().body_name_1 << ".");
+                }
+            }
+            collisions.addCollision(c);
+        }
+    }
+
+} // namespace ims
 
 #endif //MANIPULATION_PLANNING_UTILS_HPP
