@@ -51,6 +51,8 @@
 
 #include <moveit/planning_scene_interface/planning_scene_interface.h>
 #include <moveit/move_group_interface/move_group_interface.h>
+#include <moveit/planning_scene/planning_scene.h>
+
 #include <eigen_conversions/eigen_msg.h>
 #include <geometric_shapes/shape_operations.h>
 
@@ -214,6 +216,15 @@ namespace ims {
     }
 
     template <typename T>
+    void from_euler_zyx(T y, T p, T r, geometry_msgs::Pose& q)
+    {
+        Eigen::Matrix<T, 3, 3> R;
+        from_euler_zyx(y, p, r, R);
+        Eigen::Quaternion<T> quat(R);
+        tf::quaternionEigenToMsg(quat, q.orientation);
+    }
+
+    template <typename T>
     void normalize_euler_zyx(T& y, T& p, T& r)
     {
         Eigen::Matrix<T, 3, 3> rot;
@@ -345,7 +356,9 @@ namespace ims {
                                   const StateType & goal,
                                   const std::vector<StateType> & trajectory,
                                   const moveit::planning_interface::MoveGroupInterface & move_group_,
-                                  moveit_msgs::RobotTrajectory& trajectory_msg){
+                                  moveit_msgs::RobotTrajectory& trajectory_msg,
+                                  double velocity_scaling_factor = 0.2,
+                                  double acceleration_scaling_factor = 0.2){
 
         trajectory_msg.joint_trajectory.header.frame_id = move_group_.getPlanningFrame();
         trajectory_msg.joint_trajectory.joint_names = move_group_.getActiveJoints();
@@ -370,12 +383,77 @@ namespace ims {
         // Trajectory processing
         trajectory_processing::IterativeParabolicTimeParameterization time_param(true);
         // scale the velocity of the trajectory
-        if (!time_param.computeTimeStamps(robot_trajectory, 0.1, 0.1)){
+        // get the velocity scaling factor
+        if (!time_param.computeTimeStamps(robot_trajectory, velocity_scaling_factor,
+                                          acceleration_scaling_factor)){
             ROS_ERROR("Failed to compute timestamps for trajectory");
             return false;
         }
         robot_trajectory.getRobotTrajectoryMsg(trajectory_msg);
 
+        return true;
+    }
+
+    /// @brief Try to shortcut and smooth the path
+    /// @param path The path to shortcut and smooth
+    /// @param move_group The move group object
+    /// @return bool success
+    /// @TODO: Needs to be edited. Currently it is way too heavy to run.
+    inline bool ShortcutSmooth(PathType &path,
+                               const moveit::planning_interface::MoveGroupInterface &move_group,
+                               const planning_scene::PlanningScenePtr& planning_scene){
+        // iteratively moving further and further down the path, attempting to replace the original path with
+        // shortcut paths. The idea is that each action only moves one angle, and we want to move few angles together if possie
+        // to reduce the number of actions
+        if (path.empty())
+            return false;
+        PathType shortcut_path;
+        auto last_state = path.back();
+        auto current_state = path.front();
+//        shortcut_path.push_back(current_state);
+        // iteraticely try to connect the current state to the closest state to the last state
+        while (current_state != last_state) {
+            for (size_t i = path.size() -1; true ; i--) {
+                StateType state_to_shortcut = path[i];
+                if (state_to_shortcut == current_state){
+                    current_state = path[i+1];
+                    break;
+                }
+                // try to check if the current state can be connected to the state to shortcut by interpolating
+                PathType interpolated_path;
+                for (double alpha = 0.0; alpha <= 1.0; alpha += 0.05) {
+                    StateType interpolated_state;
+                    for (size_t j = 0; j < current_state.size(); j++) {
+                        interpolated_state.push_back(
+                            current_state[j] + alpha * (state_to_shortcut[j] - current_state[j]));
+
+                    }
+                    interpolated_path.push_back(interpolated_state);
+                }
+                // check if the interpolated path is valid
+                moveit_msgs::RobotTrajectory trajectory;
+                profileTrajectory(interpolated_path.front(),
+                                  interpolated_path.back(),
+                                  interpolated_path,
+                                  move_group,
+                                  trajectory);
+                moveit_msgs::RobotState start_state;
+                start_state.joint_state.name = move_group.getVariableNames();
+                start_state.joint_state.position = interpolated_path.front();
+                bool valid_path = planning_scene->isPathValid(start_state, trajectory, move_group.getName());
+                if (valid_path) {
+                    // if the path is valid then add the interpolated path to the shortcut path
+                    for (auto& state : interpolated_path) {
+                        shortcut_path.push_back(state);
+                    }
+                    // set the current state to the state to shortcut
+                    current_state = state_to_shortcut;
+                    break;
+                }
+            }
+        }
+        shortcut_path.push_back(last_state);
+        path = shortcut_path;
         return true;
     }
 
