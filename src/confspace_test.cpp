@@ -129,10 +129,10 @@ int main(int argc, char** argv) {
     StateType goal_state = start_state;
 
     // change the goal state
-    goal_state[0] = 5;// 78; //0;
-    goal_state[1] = 30; //25; //30;
-    goal_state[2] = -39; //-18; //-30;
-    goal_state[3] = 0; //-147; //0;
+    goal_state[0] = 1.5708*180/M_PI;// 78; //0;
+    goal_state[1] = 0.0698132*180/M_PI; //25; //30;
+    goal_state[2] = -0.9948*180/M_PI; //-18; //-30;
+    goal_state[3] = -1.5708*180/M_PI; //-147; //0;
     goal_state[4] = 0; //73; //0;
     goal_state[5] = 0;//-66; //0;
 
