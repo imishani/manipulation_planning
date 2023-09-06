@@ -1,0 +1,7 @@
+<launch>
+
+    <!-- Given the published joint states, publish tf for the robot links -->
+    <node name="cbs_test" pkg="manipulation_planning" type="manipulation_planning_cbs_test" output="screen"/>
+
+
+</launch>

@@ -7,4 +7,5 @@ scripts/__pycache__/
 build/
 devel/
 install/
+.vscode/*
 data/experiences/

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023, Itamar Mishani
+ * Copyright (C) 2023, Yorai Shaoul
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,64 +27,40 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 /*!
- * \file   confspace_egraph_test.cpp
- * \author Itamar Mishani (imishani@cmu.edu)
- * \date   8/12/23
-*/
+ * \file   cbs_test.cpp
+ * \author Yorai Shaoul (yorai@cmu.edu)
+ * \date   2023-07-26
+ */
 
-// C++ includes
-#include <memory>
-
-// project includes
-#include <manipulation_planning/action_space/egraph_manipulation_action_space.hpp>
-#include <manipulation_planning/common/moveit_scene_interface.hpp>
-#include <search/planners/egraph_wastar.hpp>
-#include <manipulation_planning/heuristics/manip_heuristics.hpp>
-#include <manipulation_planning/common/utils.hpp>
-
-// ROS includes
-#include <ros/ros.h>
 #include <moveit/collision_distance_field/collision_env_distance_field.h>
 #include <moveit/occupancy_map_monitor/occupancy_map_monitor.h>
+#include <ros/ros.h>
 
+#include <manipulation_planning/common/moveit_interface.hpp>
+#include <manipulation_planning/common/utils.hpp>
+#include <manipulation_planning/heuristics/manip_heuristics.hpp>
+#include <manipulation_planning/manipulation_action_space.hpp>
+#include <manipulation_planning/panda_action_space.hpp>
+#include <memory>
+#include <search/heuristics/standard_heuristics.hpp>
+#include <search/planners/astar.hpp>
+#include <search/planners/wastar.hpp>
 
 int main(int argc, char** argv) {
-
-    ros::init(argc, argv, "configuration_test");
+    ros::init(argc, argv, "manipulation_planning_cbs_test");
     ros::NodeHandle nh;
     ros::AsyncSpinner spinner(8);
     spinner.start();
 
-    std::string group_name = "manipulator_1";
-    double discret = 1;
-
-    if (argc == 0) {
-        ROS_INFO_STREAM(BOLDMAGENTA << "No arguments given: using default values");
-        ROS_INFO_STREAM("<group_name(string)> <discretization(int)> ");
-        ROS_INFO_STREAM("Using default values: manipulator_1 1" << RESET);
-    } else if (argc == 2) {
-        group_name = argv[1];
-    } else if (argc == 3) {
-        group_name = argv[1];
-        discret = std::stod(argv[2]);
-    } else {
-        ROS_INFO_STREAM(BOLDMAGENTA << "No arguments given: using default values");
-        ROS_INFO_STREAM("<group_name(string)> <discretization(int)> ");
-        ROS_INFO_STREAM("Using default values: manipulator_1 1" << RESET);
-    }
-
     auto full_path = boost::filesystem::path(__FILE__).parent_path().parent_path();
+    std::string path_mprim = full_path.string() + "/config/panda_manip.mprim";
 
     // Define Robot inteface to give commands and get info from moveit:
-    moveit::planning_interface::MoveGroupInterface move_group(group_name);
-    // get the number of joints
-    int num_joints = (int)move_group.getVariableCount();
-
-    std::string path_mprim = full_path.string() + "/config/manip_" + std::to_string(num_joints) + "dof.mprim";
+    moveit::planning_interface::MoveGroupInterface move_group("panda0_arm");
 
     moveit::core::RobotStatePtr current_state = move_group.getCurrentState();
 
-    // check for collision
+    // Check for collision
     planning_scene::PlanningScenePtr planning_scene;
     planning_scene.reset(new planning_scene::PlanningScene(move_group.getRobotModel()));
     collision_detection::CollisionRequest collision_request;
@@ -96,47 +72,48 @@ int main(int argc, char** argv) {
     ros::Publisher bb_pub = nh.advertise<visualization_msgs::Marker>("bb_marker", 10);
     // get the planning frame
     ims::visualizeBoundingBox(df, bb_pub, move_group.getPlanningFrame());
-
-    auto* heuristic = new ims::BFSHeuristicEgraph;
+    auto* heuristic = new ims::BFSRemoveTimeHeuristic(df, "panda0_arm");
+    // auto* heuristic = new ims::JointAnglesHeuristic;
     double weight = 100.0;
 
-    ims::ExperienceWAStarParams params(heuristic, weight, 100.0,
-                                       full_path.string() + "/data/experiences/" + group_name);
+    ims::wAStarParams params(heuristic, weight);
+    // params.verbose = true;
 
-    ims::MoveitInterface scene_interface(group_name);
+    ims::MoveitInterface scene_interface("panda0_arm");
 
-    ims::ManipulationType action_type (path_mprim);
-    StateType discretization(num_joints, discret);
+    ims::ManipulationType action_type(path_mprim);
+    StateType discretization{1, 1, 1, 1, 1, 1, 1, 1};  // TODO(yoraish): add time next.
     ims::deg2rad(discretization);
     action_type.Discretization(discretization);
 
-//    std::shared_ptr<ims::ManipulationActionSpace> action_space = std::make_shared<ims::ManipulationActionSpace>(scene_interface, action_type);
-    std::shared_ptr<ims::EgraphManipulationActionSpace> action_space =
-        std::make_shared<ims::EgraphManipulationActionSpace>(scene_interface, action_type,heuristic);
+    // std::shared_ptr<ims::ManipulationActionSpace> action_space = std::make_shared<ims::ManipulationActionSpace>(scene_interface, action_type);
+       std::shared_ptr<ims::PandaManipulationActionSpace> action_space = std::make_shared<ims::PandaManipulationActionSpace>(scene_interface, action_type,
+                                                                                                                   heuristic);
 
-    heuristic->init(action_space, df, group_name);
-
-    StateType start_state {0, 0, 0, 0, 0, 0};
+    StateType start_state{0, 0, 0, 0, 0, 0, 0, 0};
+    // Assign all joint angles to the initial state, leaving time at zero.
     const std::vector<std::string>& joint_names = move_group.getJointNames();
-    int num_joints_ = (int)move_group.getVariableCount();
-    for (int i = 0; i < num_joints; i++) {
+    for (int i = 0; i < 7; i++) {
         start_state[i] = current_state->getVariablePosition(joint_names[i]);
-        ROS_INFO_STREAM("Joint " << joint_names[i] << " is " << start_state[i]);
     }
-    // make a goal_state a copy of start_state
+
+    // Make a goal_state a copy of start_state.
     ims::rad2deg(start_state);
+
     StateType goal_state = start_state;
 
     // change the goal state
-    goal_state[0] = 5;// 78; //0;
-    goal_state[1] = 30; //25; //30;
-    goal_state[2] = -39; //-18; //-30;
-    goal_state[3] = 0; //-147; //0;
-    goal_state[4] = 0; //73; //0;
-    goal_state[5] = 0;//-66; //0;
+    goal_state[0] = 0;
+    goal_state[1] = -29;
+    goal_state[2] = 0;
+    goal_state[3] = -85;
+    goal_state[4] = 0;
+    goal_state[5] = 57;
+    goal_state[6] = 0;
+    goal_state[7] = -1;
 
-
-    ims::deg2rad(start_state); ims::deg2rad(goal_state);
+    ims::deg2rad(start_state);
+    ims::deg2rad(goal_state);
     // normalize the start and goal states
     // get the joint limits
     std::vector<std::pair<double, double>> joint_limits;
@@ -146,39 +123,31 @@ int main(int argc, char** argv) {
     ims::roundStateToDiscretization(start_state, action_type.state_discretization_);
     ims::roundStateToDiscretization(goal_state, action_type.state_discretization_);
 
-    ims::ExperienceWAstar planner(params);
-    try {
-        planner.initializePlanner(action_space, start_state, goal_state);
-    }
-    catch (std::exception& e) {
-        ROS_INFO_STREAM(e.what() << std::endl);
+    // Print the goal state in degrees.
+    for (int i = 0; i < 7; i++) {
+        ROS_INFO_STREAM("Joint " << joint_names[i] << " is " << start_state[i] / M_PI * 180);
+        ROS_INFO_STREAM("Goal Joint " << joint_names[i] << " is " << goal_state[i] / M_PI * 180);
     }
 
+    std::cout << "Initializing planner with action space." << std::endl;
+    ims::wAStar planner(params);
+    // try {
+        planner.initializePlanner(action_space, start_state, goal_state);
+    // }
+    // catch (std::exception& e) {
+    //     std::cout << e.what() << std::endl;
+    // }
+    std::cout << "Done initializing planner with action space." << std::endl;
+
+    std::cout << "Starting to plan." << std::endl;
     std::vector<StateType> path_;
     if (!planner.plan(path_)) {
-        ROS_INFO_STREAM(RED << "No path found" << RESET);
+        std::cout << "No path found" << std::endl;
         return 0;
     }
-    else
-        ROS_INFO_STREAM(GREEN << "Path found" << RESET);
-
-    // Print nicely the path
-    int counter = 0;
-    for (auto& state : path_) {
-        std::cout << "State: " << counter++ << ": ";
-        for (auto& val : state) {
-            std::cout << val << ", ";
-        }
-        std::cout << std::endl;
+    else {
+        std::cout << "Path found" << std::endl;
     }
-
-    // report stats
-    PlannerStats stats = planner.reportStats();
-    ROS_INFO_STREAM("\n" << GREEN << "\t Planning time: " << stats.time << " sec" << std::endl <<
-                    "\t cost: " << stats.cost << std::endl <<
-                    "\t Path length: " << path_.size() << std::endl <<
-                    "\t Number of nodes expanded: " << stats.num_expanded << std::endl <<
-                    "\t Suboptimality: " << stats.suboptimality << RESET);
 
     // profile and execute the path
     // @{
@@ -193,8 +162,26 @@ int main(int argc, char** argv) {
                            move_group,
                            trajectory);
 
-    ROS_INFO("Executing trajectory");
+    // Print the trajectory.
+    int counter = 0;
+    for (auto& state : traj) {
+        std::cout << "State: " << counter++ << ": ";
+        for (auto& val : state) {
+            std::cout << val / M_PI * 180 << ", ";
+        }
+        std::cout << std::endl;
+    }
+
+    std::cout << "Executing trajectory" << std::endl;
     move_group.execute(trajectory);
+
+    // rerport stats
+    PlannerStats stats = planner.reportStats();
+    std::cout << GREEN << "Planning time: " << stats.time << " sec" << std::endl;
+    std::cout << "cost: " << stats.cost << std::endl;
+    std::cout << "Path length: " << path_.size() << std::endl;
+    std::cout << "Number of nodes expanded: " << stats.num_expanded << std::endl;
+    std::cout << "Suboptimality: " << stats.suboptimality << RESET << std::endl;
     // @}
     return 0;
 }

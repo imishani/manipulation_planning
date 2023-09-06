@@ -56,13 +56,13 @@
 namespace ims
 {
 
-    struct manipulationType : ActionType
+    struct ManipulationType : ActionType
     {
 
         /// @brief Constructor
         /// @param[in] bfs_heuristic A pointer to a BFSHeuristic object. Default = nullptr
-        explicit manipulationType() : action_type_(ActionType::MOVE),
-                                      space_type_(spaceType::ConfigurationSpace),
+        explicit ManipulationType() : action_type_(ActionType::MOVE),
+                                      space_type_(SpaceType::ConfigurationSpace),
                                       prim_file_name_("../config/manip_6dof.mprim"),
                                       max_action_(0.0){
 //            readMPfile();
@@ -71,8 +71,8 @@ namespace ims
         /// @brief Constructor with motion primitives file given
         /// @param[in] mprimFile The path to the motion primitives file
         /// @param[in] bfs_heuristic A pointer to a BFSHeuristic object
-        explicit manipulationType(std::string mprimFile) : action_type_(ActionType::MOVE),
-                                                           space_type_(spaceType::ConfigurationSpace),
+        explicit ManipulationType(std::string mprimFile) : action_type_(ActionType::MOVE),
+                                                           space_type_(SpaceType::ConfigurationSpace),
                                                            prim_file_name_(std::move(mprimFile)),
                                                            max_action_(0.0){
 //            readMPfile();
@@ -83,7 +83,7 @@ namespace ims
 
 
         /// @brief Destructor
-        ~manipulationType() override = default;
+        ~ManipulationType() override = default;
 
         /// @brief The type of the action
         enum class ActionType
@@ -93,7 +93,7 @@ namespace ims
             RELEASE
         };
 
-        enum class spaceType
+        enum class SpaceType
         {
             ConfigurationSpace,
             WorkSpace
@@ -115,16 +115,16 @@ namespace ims
 
         /// @brief Get the space type
         /// @return The space type
-        spaceType getSpaceType() const
+        SpaceType getSpaceType() const
         {
             return space_type_;
         }
 
         /// @brief Set the space type
-        /// @param spaceType The space type
-        void setSpaceType(spaceType spaceType)
+        /// @param SpaceType The space type
+        void setSpaceType(SpaceType SpaceType)
         {
-            space_type_ = spaceType;
+            space_type_ = SpaceType;
         }
         /// @}
 
@@ -139,7 +139,7 @@ namespace ims
             std::string line;
             std::vector<std::vector<double>> mprim;
             switch (space_type_) {
-                case spaceType::ConfigurationSpace: {
+                case SpaceType::ConfigurationSpace: {
                     int tot_prim {0}, dof{0}, num_short_prim{0};
                     int i{0};
                     while (std::getline(file, line))
@@ -186,7 +186,7 @@ namespace ims
                     }
                 }
                     break;
-                case spaceType::WorkSpace: {
+                case SpaceType::WorkSpace: {
                     int tot_ptim {0}, positions_prims {0}, orientations_prims {0};
                     int i{0};
                     while (std::getline(file, line))
@@ -241,7 +241,7 @@ namespace ims
                 switch (action_type_) {
                     case ActionType::MOVE:
                         switch (space_type_) {
-                            case spaceType::ConfigurationSpace: {
+                            case SpaceType::ConfigurationSpace: {
                                 // TODO: Add snap option
                                 std::vector<std::vector<double>> mprim;
                                 mprim.insert(mprim.end(), long_mprim_.begin(), long_mprim_.end());
@@ -260,7 +260,7 @@ namespace ims
                                 }
                             }
                                 break;
-                            case spaceType::WorkSpace: {
+                            case SpaceType::WorkSpace: {
                                 std::vector<std::vector<double>> mprim;
                                 mprim.insert(mprim.end(), short_mprim_.begin(), short_mprim_.end());
                                 for (auto &action_ : mprim) {
@@ -362,6 +362,25 @@ namespace ims
             return actions_;
         }
 
+    
+    /// @brief Set values in the motion primitive active type.
+    /// @param short_dist The short distance threshold
+    /// @param long_dist The long distance threshold
+    /// @param snap_xyz The snap xyz threshold
+    /// @param snap_rpy The snap rpy threshold
+    /// @param snap_xyzrpy The snap xyzrpy threshold
+    void setMprimActiveType(std::pair<bool, double> short_dist,
+                            std::pair<bool, double> long_dist,
+                            std::pair<bool, double> snap_xyz,
+                            std::pair<bool, double> snap_rpy,
+                            std::pair<bool, double> snap_xyzrpy) {
+        mprim_active_type_.short_dist = short_dist;
+        mprim_active_type_.long_dist = long_dist;
+        mprim_active_type_.snap_xyz = snap_xyz;
+        mprim_active_type_.snap_rpy = snap_rpy;
+        mprim_active_type_.snap_xyzrpy = snap_xyzrpy;
+    }
+
         /// @brief Motion primitive active type: Used for adaptive motion primitives, given a few motion primitives,
         /// which one is active at a given time and it's threshold
         struct MotionPrimitiveActiveType
@@ -374,7 +393,7 @@ namespace ims
         };
 
         ActionType action_type_;
-        spaceType space_type_;
+        SpaceType space_type_;
         std::string prim_file_name_;
         MotionPrimitiveActiveType mprim_active_type_;
 
@@ -393,7 +412,7 @@ namespace ims
     {
     protected:
         /// @brief Manipulation type
-        std::shared_ptr<manipulationType> mManipulationType;
+        std::shared_ptr<ManipulationType> mManipulationType;
         /// @brief Moveit interface
         std::shared_ptr<MoveitInterface> mMoveitInterface;
         /// @brief joint limits
@@ -413,13 +432,13 @@ namespace ims
 
         /// @brief Constructor
         /// @param moveitInterface The moveit interface
-        /// @param manipulationType The manipulation type
+        /// @param ManipulationType The manipulation type
         ManipulationActionSpace(const MoveitInterface &env,
-                                const manipulationType &actions_ptr,
+                                const ManipulationType &actions_ptr,
                                 BFSHeuristic* bfs_heuristic = nullptr) : ActionSpace(), bfs_heuristic_(bfs_heuristic)
         {
             mMoveitInterface = std::make_shared<MoveitInterface>(env);
-            mManipulationType = std::make_shared<manipulationType>(actions_ptr);
+            mManipulationType = std::make_shared<ManipulationType>(actions_ptr);
             // get the joint limits
             mMoveitInterface->getJointLimits(mJointLimits);
             m_vis_pub = m_nh.advertise<visualization_msgs::Marker>( "visualization_marker", 0 );
@@ -475,13 +494,13 @@ namespace ims
         }
 
         /// @brief Set the manipulation space type
-        /// @param spaceType The manipulation type
-        void setManipActionType(manipulationType::spaceType spaceType)
+        /// @param SpaceType The manipulation type
+        void setManipActionType(ManipulationType::SpaceType SpaceType)
         {
-            mManipulationType->setSpaceType(spaceType);
+            mManipulationType->setSpaceType(SpaceType);
         }
 
-        manipulationType::spaceType getManipActionType()
+        ManipulationType::SpaceType getManipActionType()
         {
             return mManipulationType->getSpaceType();
         }
@@ -490,8 +509,8 @@ namespace ims
         /// @param joint_states The joint states
         void getCurrJointStates(StateType &joint_states)
         {
-            auto joints = mMoveitInterface->mPlanningScene->getCurrentState();
-            joints.copyJointGroupPositions(mMoveitInterface->mGroupName,
+            auto joints = mMoveitInterface->planning_scene_->getCurrentState();
+            joints.copyJointGroupPositions(mMoveitInterface->group_name_,
                                            joint_states);
         }
 
@@ -500,9 +519,9 @@ namespace ims
         void getCurrWorkspaceState(StateType &ws_state)
         {
             // get the tip link name
-            auto tip_link = mMoveitInterface->mPlanningScene->getRobotModel()->getJointModelGroup(mMoveitInterface->mGroupName)->getLinkModelNames().back();
+            auto tip_link = mMoveitInterface->planning_scene_->getRobotModel()->getJointModelGroup(mMoveitInterface->group_name_)->getLinkModelNames().back();
             // get the end-effector pose
-            auto ee_pose = mMoveitInterface->mPlanningScene->getCurrentState().getGlobalLinkTransform(tip_link);
+            auto ee_pose = mMoveitInterface->planning_scene_->getCurrentState().getGlobalLinkTransform(tip_link);
             // get the euler angles
             ws_state.resize(6);
             ws_state[0] = ee_pose.translation().x();
@@ -521,9 +540,9 @@ namespace ims
             // check if the state is valid
             switch (mManipulationType->getSpaceType())
             {
-            case manipulationType::spaceType::ConfigurationSpace:
+            case ManipulationType::SpaceType::ConfigurationSpace:
                 return mMoveitInterface->isStateValid(state_val);
-            case manipulationType::spaceType::WorkSpace:
+            case ManipulationType::SpaceType::WorkSpace:
                 // check if state exists with IK solution already
                 geometry_msgs::Pose pose;
                 pose.position.x = state_val[0];
@@ -559,9 +578,9 @@ namespace ims
         {
             switch (mManipulationType->getSpaceType())
             {
-            case manipulationType::spaceType::ConfigurationSpace:
+            case ManipulationType::SpaceType::ConfigurationSpace:
                 return mMoveitInterface->isStateValid(state_val);
-            case manipulationType::spaceType::WorkSpace:
+            case ManipulationType::SpaceType::WorkSpace:
                 geometry_msgs::Pose pose;
                 pose.position.x = state_val[0];
                 pose.position.y = state_val[1];
@@ -594,9 +613,9 @@ namespace ims
             // check if the state is valid
             switch (mManipulationType->getSpaceType())
             {
-            case manipulationType::spaceType::ConfigurationSpace:
+            case ManipulationType::SpaceType::ConfigurationSpace:
                 return mMoveitInterface->isStateValid(state_val);
-            case manipulationType::spaceType::WorkSpace:
+            case ManipulationType::SpaceType::WorkSpace:
                 geometry_msgs::Pose pose;
                 pose.position.x = state_val[0];
                 pose.position.y = state_val[1];
@@ -608,7 +627,7 @@ namespace ims
                 pose.orientation.y = q.y();
                 pose.orientation.z = q.z();
                 pose.orientation.w = q.w();
-                joint_state.resize(mMoveitInterface->num_joints);
+                joint_state.resize(mMoveitInterface->num_joints_);
                 bool succ = mMoveitInterface->calculateIK(pose, seed, joint_state);
                 normalizeAngles(joint_state);
                 if (!succ)
@@ -669,9 +688,9 @@ namespace ims
         {
             switch (mManipulationType->getSpaceType())
             {
-            case manipulationType::spaceType::ConfigurationSpace:
+            case ManipulationType::SpaceType::ConfigurationSpace:
                 return mMoveitInterface->isPathValid(path);
-            case manipulationType::spaceType::WorkSpace:
+            case ManipulationType::SpaceType::WorkSpace:
                 PathType poses;
                 for (auto &state : path)
                 {
@@ -818,7 +837,7 @@ namespace ims
                            std::vector<int> &successors,
                            std::vector<double> &costs) override
         {
-            if (mManipulationType->getSpaceType() == manipulationType::spaceType::ConfigurationSpace)
+            if (mManipulationType->getSpaceType() == ManipulationType::SpaceType::ConfigurationSpace)
             {
                 return getSuccessorsCs(curr_state_ind, successors, costs);
             }
@@ -833,7 +852,7 @@ namespace ims
         /// @param type The type of state (greedy, attractor, etc)
         void VisualizePoint(double x, double y, double z) {
             visualization_msgs::Marker marker;
-            marker.header.frame_id = mMoveitInterface->mPlanningScene->getPlanningFrame();
+            marker.header.frame_id = mMoveitInterface->planning_scene_->getPlanningFrame();
             marker.header.stamp = ros::Time();
             marker.ns = "graph";
             marker.id = m_vis_id;
@@ -855,3 +874,4 @@ namespace ims
 }
 
 #endif // MANIPULATION_PLANNING_MANIPULATIONACTIONSPACE_HPP
+
