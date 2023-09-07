@@ -117,7 +117,7 @@ int main(int argc, char** argv) {
     heuristic->init(action_space, df, group_name);
 
     StateType start_state {0, 0, 0, 0, 0, 0};
-    const std::vector<std::string>& joint_names = move_group.getJointNames();
+    const std::vector<std::string>& joint_names = move_group.getVariableNames();
     int num_joints_ = (int)move_group.getVariableCount();
     for (int i = 0; i < num_joints; i++) {
         start_state[i] = current_state->getVariablePosition(joint_names[i]);

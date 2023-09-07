@@ -102,7 +102,7 @@ namespace ims {
         }
     }
 
-    void negateState(StateType& state, const std::vector<bool> & valid_mask = std::vector<bool>()){
+    inline void negateState(StateType& state, const std::vector<bool> & valid_mask = std::vector<bool>()){
         // If the mask is not passed, then all the dimensions are assumed to be valid.
         bool is_valid_mask_passed = !valid_mask.empty();
 

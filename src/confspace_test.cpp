@@ -119,7 +119,7 @@ int main(int argc, char** argv) {
                                                                                                                 heuristic);
 
     StateType start_state {0, 0, 0, 0, 0, 0};
-    const std::vector<std::string>& joint_names = move_group.getJointNames();
+    const std::vector<std::string>& joint_names = move_group.getVariableNames();
     for (int i = 0; i < 6; i++) {
         start_state[i] = current_state->getVariablePosition(joint_names[i]);
         ROS_INFO_STREAM("Joint " << joint_names[i] << " is " << start_state[i]);
