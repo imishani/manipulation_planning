@@ -9,6 +9,7 @@
 #include <memory>
 #include <utility>
 #include <vector>
+#include <eigen3/Eigen/Dense>
 
 // moveit and ros includes
 #include <moveit/distance_field/propagation_distance_field.h>
@@ -195,6 +196,10 @@ struct SE3HeuristicHopf : public BaseHeuristic {
 };
 
 class BFSHeuristic : public BaseHeuristic {
+protected:
+    // The full pose of the goal EE. Orientation and translation.
+    Eigen::Isometry3d goal_pose_ee_;
+
 public:
     BFSHeuristic() : BFSHeuristic(getDistanceFieldMoveIt()) {
     }
@@ -213,9 +218,11 @@ public:
         auto names = joint_model_group->getLinkModelNames();
         // get the planning group tip link
         tip_link = joint_model_group->getLinkModelNames().back();
-        //            tip_link_ = names.at(5);
 
         syncGridAndBfs();
+
+        // Flag for whether the goal is set.
+        is_goal_set = false;
     }
 
     void setInflationRadius(double radius) {
@@ -227,11 +234,14 @@ public:
     }
 
     void setGoal(const StateType& goal) override {
+        // The goal is specified in configuration space.
         mGoal = goal;
+        
+        // Compute the goal position in world space.
         kinematic_state->setJointGroupPositions(joint_model_group, goal);
-        auto ee_goal_state = kinematic_state->getGlobalLinkTransform(tip_link);
+        goal_pose_ee_ = kinematic_state->getGlobalLinkTransform(tip_link);
 
-        auto goal_position = ee_goal_state.translation();
+        auto goal_position = goal_pose_ee_.translation();
         int x, y, z;
         m_distanceField->worldToGrid(goal_position.x(), goal_position.y(), goal_position.z(),
                                      x, y, z);
@@ -240,7 +250,10 @@ public:
 
         m_goal_cells.emplace_back(x, y, z);
 
-        m_bfs->run(x, y, z);
+        m_bfs->run(x, y, z); // TODO(yoraish): does this take other _robots_ into account too? Or only static obstacles.
+
+        // Flag for whether the goal is set.
+        is_goal_set = true;
     }
 
     void setStart(const StateType& start) override {
@@ -302,20 +315,51 @@ public:
     }
 
     bool getHeuristic(const StateType& s, double& dist) override {
-        if (m_goal_cells.empty()) {
+        if (m_goal_cells.empty() || !is_goal_set) {
+            std::cout << "Goal is not set in BFS heuristic! It must be set prior to calling getHeuristic" << std::endl;
             return false;
         }
 
         kinematic_state->setJointGroupPositions(joint_model_group, s);
-        auto ee_state = kinematic_state->getGlobalLinkTransform(tip_link);
+        auto pose_ee = kinematic_state->getGlobalLinkTransform(tip_link);
 
-        auto s_position = ee_state.translation();
+        auto s_position = pose_ee.translation();
         int x, y, z;
         m_distanceField->worldToGrid(s_position.x(), s_position.y(), s_position.z(),
                                      x, y, z);
 
         dist = getBfsCostToGoal(*m_bfs, x, y, z);
+
+        // // TEST
+        // // Find the distance between the two orientations. Do this with quaternions.
+        // Eigen::Quaterniond q1(pose_ee.rotation());
+        // Eigen::Quaterniond q2(goal_pose_ee_.rotation());
+        // double dot_product = q1.dot(q2);
+        // // Make sure the dot product is clamped to [-1, 1] to avoid issues with acos.
+        // dot_product = std::max(-1.0, std::min(1.0, dot_product));
+        // double angular_distance = 2.0 * acos(fabs(dot_product));
+        // dist += 1000*angular_distance;
+        // // END TEST
+
         return true;
+    }
+
+    Eigen::Isometry3d getGoalPoseEE() const {
+        return goal_pose_ee_;
+    }
+
+    StateType getGoalPoseEExyzrpy() const{
+        // Get the goal pose in a vector containing the xyz (meters) and rpy (radians) of the goal pose.
+        StateType goal_pose_ee_xyzrpy(6);
+        goal_pose_ee_xyzrpy[0] = goal_pose_ee_.translation().x();
+        goal_pose_ee_xyzrpy[1] = goal_pose_ee_.translation().y();
+        goal_pose_ee_xyzrpy[2] = goal_pose_ee_.translation().z();
+        // The stored Isometry3d uses zyx euler angles.
+        goal_pose_ee_xyzrpy[3] = goal_pose_ee_.rotation().eulerAngles(2, 1, 0).z();
+        goal_pose_ee_xyzrpy[4] = goal_pose_ee_.rotation().eulerAngles(2, 1, 0).y();
+        goal_pose_ee_xyzrpy[5] = goal_pose_ee_.rotation().eulerAngles(2, 1, 0).x();
+        
+        return goal_pose_ee_xyzrpy;
     }
 
 private:
@@ -324,6 +368,9 @@ private:
     double m_inflation_radius = 0.02;
     int m_cost_per_cell = 100;
     int start_cells[3]{};
+
+    // Flag for whether the goal is set.
+    bool is_goal_set = false;
 
     struct CellCoord {
         int x, y, z;
@@ -407,6 +454,10 @@ public:
 };
 
 class BFSHeuristicEgraph : public EGraphHeuristicBase {
+protected:
+    // The full pose of the goal EE. Orientation and translation.
+    Eigen::Isometry3d goal_pose_ee_;
+
 public:
     void init(std::shared_ptr<EGraphActionSpace> action_space,
               std::shared_ptr<distance_field::PropagationDistanceField> distance_field,
@@ -553,9 +604,9 @@ public:
         //////////* The assumption here is that the goal is in configuration spae //////////*/
         //////////* TODO: Fix this assumption in the future ////////////////////////////////*/
         kinematic_state_->setJointGroupPositions(joint_model_group_, goal);
-        auto ee_goal_state = kinematic_state_->getGlobalLinkTransform(tip_link_);
+        goal_pose_ee_ = kinematic_state_->getGlobalLinkTransform(tip_link_);
 
-        auto goal_position = ee_goal_state.translation();
+        auto goal_position = goal_pose_ee_.translation();
         mGoal = goal;
         goal_ws_ = {goal_position.x(), goal_position.y(), goal_position.z()};
         int x_goal, y_goal, z_goal;

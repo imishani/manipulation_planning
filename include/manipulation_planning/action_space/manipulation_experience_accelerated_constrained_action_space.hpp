@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023, Itamar Mishani, Yorai Shaoul
+ * Copyright (C) 2023, Yorai Shaoul
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,11 +29,11 @@
 /*!
  * \file   manipulation_constrained_action_space.hpp
  * \author Yorai Shaoul (yorai@cmu.edu)
- * \date   Aug 6 2023
+ * \date   Sept 6 2023
  */
 
-#ifndef MANIPULATION_PLANNING_MANIPULATIONCONSTRAINEDACTIONSPACE_HPP
-#define MANIPULATION_PLANNING_MANIPULATIONCONSTRAINEDACTIONSPACE_HPP
+#ifndef MANIPULATION_PLANNING_MANIPULATION_EXPERIENCE_ACCELERATED_CONSTRAINEDACTIONSPACE_HPP
+#define MANIPULATION_PLANNING_MANIPULATION_EXPERIENCE_ACCELERATED_CONSTRAINEDACTIONSPACE_HPP
 
 // include standard libraries
 #include <iostream>
@@ -50,16 +50,16 @@
 #include <manipulation_planning/common/moveit_scene_interface.hpp>
 #include <manipulation_planning/common/utils.hpp>
 #include <manipulation_planning/heuristics/manip_heuristics.hpp>
-#include <search/action_space/constrained_action_space.hpp>
+#include <search/action_space/experience_accelerated_constrained_action_space.hpp>
 #include <manipulation_planning/action_space/manipulation_action_space.hpp>
 
 namespace ims {
 
-/// @class ManipulationConstrainedActionSpace
-/// @brief A class that implements the ConstrainedActionSpace for Moveit. This class borrows many function implementations from the ManipulationConstrainedActionSpace class.
-/// @class ManipulationConstrainedActionSpace
+/// @class ManipulationExperienceAcceleratedConstrainedActionSpace
+/// @brief A class that implements the ConstrainedActionSpace for Moveit. This class borrows many function implementations from the ManipulationExperienceAcceleratedConstrainedActionSpace class.
+/// @class ManipulationExperienceAcceleratedConstrainedActionSpace
 /// @brief A class that implements the ActionSpace for Moveit
-class ManipulationConstrainedActionSpace : public ConstrainedActionSpace {
+class ManipulationExperienceAcceleratedConstrainedActionSpace : public ExperienceAcceleratedConstrainedActionSpace {
 protected:
     /// @brief Manipulation type
     std::shared_ptr<ManipulationType> manipulation_type_;
@@ -85,9 +85,9 @@ public:
     /// @brief Constructor
     /// @param moveitInterface The moveit interface
     /// @param ManipulationType The manipulation type
-    ManipulationConstrainedActionSpace(const MoveitInterface &env,
+    ManipulationExperienceAcceleratedConstrainedActionSpace(const MoveitInterface &env,
                             const ManipulationType &actions_ptr,
-                            BFSHeuristic *bfs_heuristic = nullptr) : bfs_heuristic_(bfs_heuristic), ConstrainedActionSpace() {
+                            BFSHeuristic *bfs_heuristic = nullptr) : bfs_heuristic_(bfs_heuristic), ExperienceAcceleratedConstrainedActionSpace() {
         moveit_interface_ = std::make_shared<MoveitInterface>(env);
         manipulation_type_ = std::make_shared<ManipulationType>(actions_ptr);
         
@@ -295,4 +295,4 @@ public:
 };
 }  // namespace ims
 
-#endif  // MANIPULATION_PLANNING_MANIPULATIONCONSTRAINEDACTIONSPACE_HPP
+#endif  // MANIPULATION_PLANNING_MANIPULATION_EXPERIENCE_ACCELERATED_CONSTRAINEDACTIONSPACE_HPP

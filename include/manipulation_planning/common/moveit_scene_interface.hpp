@@ -107,7 +107,6 @@ namespace ims{
             }
         };
 
-
         /// @brief Constructor with the option to set the planning scene.
         explicit MoveitInterface(const std::string &group_name, planning_scene::PlanningScenePtr &planning_scene) {
             // planning scene monitor
@@ -116,7 +115,7 @@ namespace ims{
             planning_scene_monitor_->startStateMonitor();
             planning_scene_monitor_->startWorldGeometryMonitor();
             planning_scene_monitor_->requestPlanningSceneState();
-            ros::Duration(0.1).sleep();
+            ros::Duration(1.0).sleep();
             planning_scene_ = planning_scene;
             group_name_ = group_name;
 
@@ -130,6 +129,32 @@ namespace ims{
 
             // Store the joint limits.
             getJointLimits(joint_limits_);
+
+            // // TEST
+            // std::vector<moveit_msgs::CollisionObject> object_msgs;
+            // std::vector<SphereWorldObject> spheres;
+            // spheres.emplace_back(Eigen::Vector3d(0.0, -0.42, 0.83), 0.12);
+            // // spheres.emplace_back(Eigen::Vector3d(0.0, 0.42, 0.83), 0.12);
+            // spheres.emplace_back(Eigen::Vector3d(0.0, 0.0, 0.83), 0.12);
+            // spheres.emplace_back(Eigen::Vector3d(-0.5, 0.0, 0.53), 0.12);
+
+            // // Add spheres in x=1, -1 for all y in -1,1 and z 0, 0.5, 1.0.
+            // for (double y = -1.0; y <= 1.0; y += 0.5) {
+            //     for (double z = 0.3; z <= 1.0; z += 0.2) {
+            //         spheres.emplace_back(Eigen::Vector3d(0.8, y, z), 0.05);
+            //         spheres.emplace_back(Eigen::Vector3d(-0.8, y, z), 0.05);
+            //     }
+            // }
+            // for (double x = -1.0; x <= 1.0; x += 0.5) {
+            //     for (double z = 0.3; z <= 1.0; z += 0.2) {
+            //         spheres.emplace_back(Eigen::Vector3d(x, 0.8, z), 0.05);
+            //         spheres.emplace_back(Eigen::Vector3d(x, -0.8, z), 0.05);
+            //     }
+            // }
+
+            // addSpheresToScene(spheres, object_msgs);
+
+            // // END TEST
 
             auto object_names = planning_scene_->getWorld()->getObjectIds();
 
@@ -375,119 +400,137 @@ namespace ims{
     }
 
 
-        /// @brief Calculate IK for a given pose
-        /// @param pose The pose to calculate IK for
-        /// @param joint_state The joint state to store the IK solution
-        /// @param timeout The timeout for the IK calculation
-        /// @return True if IK was found, false otherwise
-        bool calculateIK(const geometry_msgs::Pose &pose,
+    /// @brief Calculate IK for a given pose
+    /// @param pose The pose to calculate IK for
+    /// @param joint_state_seed The joint state to use as a seed.
+    /// @param joint_state The joint state to store the IK solution
+    /// @param timeout The timeout for the IK calculation
+    /// @return True if IK was found, false otherwise
+    bool calculateIK(const Eigen::Isometry3d &pose,
+                        const StateType & joint_state_seed,
                         StateType &joint_state,
                         double timeout = 0.1) {
-            // resize the joint state
-            joint_state.resize(num_joints_);
-            // set joint model group as random, only the relevant kinematic group
-            kinematic_state_->setToRandomPositions(joint_model_group);
-            // update
-            planning_scene_monitor_->updateFrameTransforms();
-            planning_scene_monitor_->updateSceneWithCurrentState();  // TODO: Is this needed?
-            // set the pose
-            if (kinematic_state_->setFromIK(joint_model_group, pose, timeout)) {
-                // get the joint values
-                kinematic_state_->copyJointGroupPositions(joint_model_group, joint_state);
-                return true;
-            }
-            else {
-                ROS_INFO("No IK solution found without using seed");
-                return false;
-            }
-        }
+        // Convert the input to a geometry_msgs::Pose.
+        geometry_msgs::Pose pose_msg;
+        tf::poseEigenToMsg(pose, pose_msg);
 
+        // Call the other calculateIK function.
+        return calculateIK(pose_msg, joint_state_seed, joint_state, 1.0, timeout);
+    }
 
-        /// @brief Calculate IK for a given pose and a given seed
-        /// @param pose The pose to calculate IK for
-        /// @param seed The seed to use for the IK
-        /// @param joint_state The joint state to store the IK solution
-        /// @param consistency_limit The consistency limit to use for the IK
-        /// @param timeout The timeout for the IK calculation
-        /// @return True if IK was found, false otherwise
-        bool calculateIK(const geometry_msgs::Pose &pose,
-                         const StateType &seed,
-                         StateType &joint_state,
-                         double consistency_limit = 1.0,
-                         double timeout = 0.1) {
-            // resize the joint state
-            joint_state.resize(num_joints_);
-            // set the pose
-            kinematic_state_->setJointGroupPositions(joint_model_group,seed);
-            // update
-            planning_scene_monitor_->updateFrameTransforms();
-            planning_scene_monitor_->updateSceneWithCurrentState();
-            // add a consistency_limits of 0.1 to the seed
-            std::vector<double> consistency_limits(num_joints_, consistency_limit);
-            // get the tip link
-            const std::string &tip_link = joint_model_group->getLinkModelNames().back();
-            Eigen::Isometry3d pose_eigen;
-            tf::poseMsgToEigen(pose, pose_eigen);
-
-            if (kinematic_state_->setFromIK(joint_model_group, pose_eigen,
-                                             tip_link, consistency_limits,
-                                             timeout)) {
-                kinematic_state_->copyJointGroupPositions(joint_model_group, joint_state);
-                return true;
-            } else {
-                ROS_INFO("No IK solution found using seed");
-                return false;
-            }
-        }
-
-        /// @brief Calculate FK for a given joint state
-        /// @param joint_state The joint state to calculate FK for
-        /// @param pose The pose to store the FK solution
-        /// @return True if FK was found, false otherwise
-        bool calculateFK(const StateType &joint_state,
-                         StateType &pose) {
-            // set the joint state
-            kinematic_state_->setJointGroupPositions(joint_model_group, joint_state);
-            // update
-            planning_scene_monitor_->updateFrameTransforms();
-            planning_scene_monitor_->updateSceneWithCurrentState();
-            // get the tip link
-            const std::string &tip_link = joint_model_group->getLinkModelNames().back();
-            // get the pose
-            const Eigen::Isometry3d &end_effector_state = kinematic_state_->getGlobalLinkTransform(tip_link);
-            // push to pose as a vector of x, y, z, r, p, y
-            pose.resize(6);
-            pose[0] = end_effector_state.translation().x();
-            pose[1] = end_effector_state.translation().y();
-            pose[2] = end_effector_state.translation().z();
-            ims::get_euler_zyx(end_effector_state.rotation(), pose[5], pose[4], pose[3]);
-            ims::normalize_euler_zyx(pose[5], pose[4], pose[3]);
+    /// @brief Calculate IK for a given pose
+    /// @param pose The pose to calculate IK for
+    /// @param joint_state The joint state to store the IK solution
+    /// @param timeout The timeout for the IK calculation
+    /// @return True if IK was found, false otherwise
+    bool calculateIK(const geometry_msgs::Pose &pose,
+                    StateType &joint_state,
+                    double timeout = 0.1) {
+        // resize the joint state
+        joint_state.resize(num_joints_);
+        // set joint model group as random, only the relevant kinematic group
+        kinematic_state_->setToRandomPositions(joint_model_group);
+        // update
+        planning_scene_monitor_->updateFrameTransforms();
+        planning_scene_monitor_->updateSceneWithCurrentState();  // TODO: Is this needed?
+        // set the pose
+        if (kinematic_state_->setFromIK(joint_model_group, pose, timeout)) {
+            // get the joint values
+            kinematic_state_->copyJointGroupPositions(joint_model_group, joint_state);
             return true;
         }
+        else {
+            ROS_INFO("No IK solution found without using seed");
+            return false;
+        }
+    }
 
-        /// @brief get the joint limits
-        /// @param joint_limits The joint limits to store the limits
-        void getJointLimits(std::vector<std::pair<double, double>> &joint_limits) const { // TODO: check if this is the right way to do it
-            const auto &bounds = joint_model_group->getActiveJointModelsBounds();
-            std::vector<double> min_vals, max_vals;
-            for(int i = 0; i < num_joints_;i++)
+
+    /// @brief Calculate IK for a given pose and a given seed
+    /// @param pose The pose to calculate IK for
+    /// @param seed The seed to use for the IK
+    /// @param joint_state The joint state to store the IK solution
+    /// @param consistency_limit The consistency limit to use for the IK
+    /// @param timeout The timeout for the IK calculation
+    /// @return True if IK was found, false otherwise
+    bool calculateIK(const geometry_msgs::Pose &pose,
+                        const StateType &seed,
+                        StateType &joint_state,
+                        double consistency_limit = 1.0,
+                        double timeout = 0.1) {
+        // resize the joint state
+        joint_state.resize(num_joints_);
+        // set the pose
+        kinematic_state_->setJointGroupPositions(joint_model_group,seed);
+        // update
+        planning_scene_monitor_->updateFrameTransforms();
+        planning_scene_monitor_->updateSceneWithCurrentState();
+        // add a consistency_limits of 0.1 to the seed
+        std::vector<double> consistency_limits(num_joints_, consistency_limit);
+        // get the tip link
+        const std::string &tip_link = joint_model_group->getLinkModelNames().back();
+        Eigen::Isometry3d pose_eigen;
+        tf::poseMsgToEigen(pose, pose_eigen);
+
+        if (kinematic_state_->setFromIK(joint_model_group, pose_eigen,
+                                            tip_link, consistency_limits,
+                                            timeout)) {
+            kinematic_state_->copyJointGroupPositions(joint_model_group, joint_state);
+            return true;
+        } else {
+            ROS_INFO("No IK solution found using seed");
+            return false;
+        }
+    }
+
+    /// @brief Calculate FK for a given joint state
+    /// @param joint_state The joint state to calculate FK for
+    /// @param pose The pose to store the FK solution
+    /// @return True if FK was found, false otherwise
+    bool calculateFK(const StateType &joint_state,
+                        StateType &pose) {
+        // set the joint state
+        kinematic_state_->setJointGroupPositions(joint_model_group, joint_state);
+        // update
+        planning_scene_monitor_->updateFrameTransforms();
+        planning_scene_monitor_->updateSceneWithCurrentState();
+        // get the tip link
+        const std::string &tip_link = joint_model_group->getLinkModelNames().back();
+        // get the pose
+        const Eigen::Isometry3d &end_effector_state = kinematic_state_->getGlobalLinkTransform(tip_link);
+        // push to pose as a vector of x, y, z, r, p, y
+        pose.resize(6);
+        pose[0] = end_effector_state.translation().x();
+        pose[1] = end_effector_state.translation().y();
+        pose[2] = end_effector_state.translation().z();
+        ims::get_euler_zyx(end_effector_state.rotation(), pose[5], pose[4], pose[3]);
+        ims::normalize_euler_zyx(pose[5], pose[4], pose[3]);
+        return true;
+    }
+
+    /// @brief get the joint limits
+    /// @param joint_limits The joint limits to store the limits
+    void getJointLimits(std::vector<std::pair<double, double>> &joint_limits) const { // TODO: check if this is the right way to do it
+        const auto &bounds = joint_model_group->getActiveJointModelsBounds();
+        std::vector<double> min_vals, max_vals;
+        for(int i = 0; i < num_joints_;i++)
+        {
+            const auto *jb = bounds[i];
+            for(auto& b: *jb)
             {
-                const auto *jb = bounds[i];
-                for(auto& b: *jb)
-                {
-                    max_vals.push_back(b.max_position_);
-                    min_vals.push_back(b.min_position_);
-                }
-            }
-            // resize the joint limits
-            joint_limits.resize(num_joints_);
-            // assert if the number of joint is not equal to the size of the bounds
-            assert(num_joints_ == min_vals.size());
-            for(int i = 0; i < num_joints_;i++)
-            {
-                joint_limits[i] = std::make_pair(min_vals[i], max_vals[i]);
+                max_vals.push_back(b.max_position_);
+                min_vals.push_back(b.min_position_);
             }
         }
+        // resize the joint limits
+        joint_limits.resize(num_joints_);
+        // assert if the number of joint is not equal to the size of the bounds
+        assert(num_joints_ == min_vals.size());
+        for(int i = 0; i < num_joints_;i++)
+        {
+            joint_limits[i] = std::make_pair(min_vals[i], max_vals[i]);
+        }
+    }
     
     bool isStateWithinJointLimits(const StateType &state) const {
         for (int i = 0; i < num_joints_; i++) {
