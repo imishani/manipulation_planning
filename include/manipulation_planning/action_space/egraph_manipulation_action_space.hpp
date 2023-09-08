@@ -98,7 +98,7 @@ namespace ims {
                     mMoveitInterface->calculateFK(curr_state_val, curr_state->state_mapped);
                 }
 //                std::vector<double> ws_state_check(6);
-//                mMoveitInterface->calculateFK(curr_state_val, ws_state_check);
+//                moveit_interface_->calculateFK(curr_state_val, ws_state_check);
                 VisualizePoint(curr_state->state_mapped.at(0), curr_state->state_mapped.at(1), curr_state->state_mapped.at(2));
 //                std::cout << BOLDCYAN << "Visualized state: " << state_id << RESET << std::endl;
                 auto goal_dist = bfs_heuristic_->getMetricGoalDistance(curr_state->state_mapped.at(0),
