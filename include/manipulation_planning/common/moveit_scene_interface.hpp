@@ -193,8 +193,12 @@ namespace ims{
             return false;
         }
 
-        // Set the state of the ego robot.
+        // Set the state of the ego robot and reset the states of all others.
         robot_state::RobotState &current_scene_state = planning_scene_->getCurrentStateNonConst();
+        // Reset the scene.
+        current_scene_state.setToDefaultValues();
+
+        // Set the state of the ego robot.
         current_scene_state.setJointGroupPositions(group_name_, state);
 
         // Check if this configuration is in collision. Whether any robot collides with any other.
@@ -204,7 +208,6 @@ namespace ims{
         collision_request.max_contacts = 1000;
         collision_request.max_contacts_per_pair = 1;
         collision_request.group_name = group_name_;
-
         planning_scene_->checkCollision(collision_request, collision_result);
 
         // Convert the collision result to a collision collective.

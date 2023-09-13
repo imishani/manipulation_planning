@@ -249,7 +249,7 @@ public:
 
     /// @brief Visualize a state via its end effector pose in rviz for debugging
     /// @param pose
-    void VisualizePose(const geometry_msgs::Pose &pose) {
+    void visualizePose(const geometry_msgs::Pose &pose) {
         visualization_msgs::Marker marker;
         marker.header.frame_id = moveit_interface_->planning_scene_->getPlanningFrame();
         marker.header.stamp = ros::Time();
