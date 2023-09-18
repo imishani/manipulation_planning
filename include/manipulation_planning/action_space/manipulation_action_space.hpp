@@ -477,7 +477,7 @@ namespace ims
                     // if the action is snap, then the next state is the goal state
                     // TODO: Add the option to have a goal state defined in ws even if planning in conf space
                     if (action[0] == INF_DOUBLE){
-                        action_seq.push_back(bfs_heuristic_->mGoal); // TODO: It is wierd that I am using the heuristic here
+                        action_seq.push_back(bfs_heuristic_->goal_); // TODO: It is wierd that I am using the heuristic here
                     }
                     else {
                         // push back the new state after the action

@@ -227,7 +227,7 @@ public:
     }
 
     void setGoal(const StateType& goal) override {
-        mGoal = goal;
+        goal_ = goal;
         kinematic_state->setJointGroupPositions(joint_model_group, goal);
         auto ee_goal_state = kinematic_state->getGlobalLinkTransform(tip_link);
 
@@ -244,7 +244,7 @@ public:
     }
 
     void setStart(const StateType& start) override {
-        mStart = start;
+        start_ = start;
         kinematic_state->setJointGroupPositions(joint_model_group, start);
         auto ee_start_state = kinematic_state->getGlobalLinkTransform(tip_link);
 
@@ -556,7 +556,7 @@ public:
         auto ee_goal_state = kinematic_state_->getGlobalLinkTransform(tip_link_);
 
         auto goal_position = ee_goal_state.translation();
-        mGoal = goal;
+        goal_ = goal;
         goal_ws_ = {goal_position.x(), goal_position.y(), goal_position.z()};
         int x_goal, y_goal, z_goal;
         distance_field_->worldToGrid(goal_position.x(), goal_position.y(), goal_position.z(),
@@ -609,7 +609,7 @@ public:
 
 
     void setStart(const StateType& start) override {
-        mStart = start;
+        start_ = start;
     }
 
     bool getHeuristic(const StateType& s1, const StateType& s2, double& dist) override {
