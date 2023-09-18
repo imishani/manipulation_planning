@@ -32,8 +32,8 @@
  * \date   8/11/23
  */
 
-#ifndef MANIPULATION_PLANNING_MANIPULATION_WS_SRC_MANIPULATION_PLANNING_INCLUDE_MANIPULATION_PLANNING_ACTION_SPACE_EGRAPH_MANIPULATION_ACTION_SPACE_HPP_
-#define MANIPULATION_PLANNING_MANIPULATION_WS_SRC_MANIPULATION_PLANNING_INCLUDE_MANIPULATION_PLANNING_ACTION_SPACE_EGRAPH_MANIPULATION_ACTION_SPACE_HPP_
+#ifndef MANIPULATION_PLANNING_EGRAPH_MANIPULATION_ACTION_SPACE_HPP
+#define MANIPULATION_PLANNING_EGRAPH_MANIPULATION_ACTION_SPACE_HPP
 
 #include "manipulation_action_space.hpp"
 
@@ -115,7 +115,7 @@ namespace ims {
                     // if the action is snap, then the next state is the goal state
                     // TODO: Add the option to have a goal state defined in ws even if planning in conf space
                     if (action[0] == INF_DOUBLE){
-                        action_seq.push_back(bfs_heuristic_->mGoal); // TODO: It is wierd that I am using the heuristic here
+                        action_seq.push_back(bfs_heuristic_->goal_); // TODO: It is wierd that I am using the heuristic here
                     }
                     else {
                         // push back the new state after the action
@@ -822,4 +822,4 @@ namespace ims {
 
 } // namespace ims
 
-#endif //MANIPULATION_PLANNING_MANIPULATION_WS_SRC_MANIPULATION_PLANNING_INCLUDE_MANIPULATION_PLANNING_ACTION_SPACE_EGRAPH_MANIPULATION_ACTION_SPACE_HPP_
+#endif //MANIPULATION_PLANNING_EGRAPH_MANIPULATION_ACTION_SPACE_HPP

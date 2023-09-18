@@ -401,19 +401,22 @@ namespace ims {
     /// @TODO: Needs to be edited. Currently it is way too heavy to run.
     inline bool ShortcutSmooth(PathType &path,
                                const moveit::planning_interface::MoveGroupInterface &move_group,
-                               const planning_scene::PlanningScenePtr& planning_scene){
+                               const planning_scene::PlanningScenePtr& planning_scene,
+                               double timeout = 0.5){
         // iteratively moving further and further down the path, attempting to replace the original path with
         // shortcut paths. The idea is that each action only moves one angle, and we want to move few angles together if possie
         // to reduce the number of actions
+        double start_time = ros::Time::now().toSec();
         if (path.empty())
             return false;
         PathType shortcut_path;
         auto last_state = path.back();
         auto current_state = path.front();
-//        shortcut_path.push_back(current_state);
-        // iteraticely try to connect the current state to the closest state to the last state
-        while (current_state != last_state) {
-            for (size_t i = path.size() -1; true ; i--) {
+        shortcut_path.push_back(current_state);
+        // iteratively try to connect the current state to the closest state to the last state
+        bool is_timeout = false;
+        while (current_state != last_state && !is_timeout){
+            for (size_t i = path.size() - 1; true ; i--) {
                 StateType state_to_shortcut = path[i];
                 if (state_to_shortcut == current_state){
                     current_state = path[i+1];
@@ -421,15 +424,28 @@ namespace ims {
                 }
                 // try to check if the current state can be connected to the state to shortcut by interpolating
                 PathType interpolated_path;
-                for (double alpha = 0.0; alpha <= 1.0; alpha += 0.05) {
+                // step size 0.05
+                double step_size = 0.1;
+                // get the number of steps
+                int num_steps = std::ceil(1.0/step_size);
+                // interpolate between the current state and the state to shortcut
+                for (int j = 1; j <= num_steps; ++j) {
                     StateType interpolated_state;
-                    for (size_t j = 0; j < current_state.size(); j++) {
+                    for (size_t k = 0; k < current_state.size(); k++) {
                         interpolated_state.push_back(
-                            current_state[j] + alpha * (state_to_shortcut[j] - current_state[j]));
-
+                            current_state[k] + step_size * j * (state_to_shortcut[k] - current_state[k]));
                     }
                     interpolated_path.push_back(interpolated_state);
                 }
+//                for (double alpha = 0.0; alpha <= 1.0; alpha += 0.05) {
+//                    StateType interpolated_state;
+//                    for (size_t j = 0; j < current_state.size(); j++) {
+//                        interpolated_state.push_back(
+//                            current_state[j] + alpha * (state_to_shortcut[j] - current_state[j]));
+//
+//                    }
+//                    interpolated_path.push_back(interpolated_state);
+//                }
                 // check if the interpolated path is valid
                 moveit_msgs::RobotTrajectory trajectory;
                 profileTrajectory(interpolated_path.front(),
@@ -450,6 +466,27 @@ namespace ims {
                     current_state = state_to_shortcut;
                     break;
                 }
+            }
+            // check if the timeout is reached
+            if (ros::Time::now().toSec() - start_time > timeout){
+                is_timeout = true;
+            }
+        }
+        if (is_timeout){
+            // add the rest of the path from current state to the last state
+            PathType rest_of_path;
+            // loop in reverse order
+            for (size_t i = path.size() - 1; i >= 0; --i) {
+                if (path[i] == current_state){
+                    break;
+                }
+                rest_of_path.push_back(path[i]);
+            }
+            // reverse the rest of the path
+            std::reverse(rest_of_path.begin(), rest_of_path.end());
+            // add the rest of the path to the shortcut path
+            for (auto& state : rest_of_path) {
+                shortcut_path.push_back(state);
             }
         }
         shortcut_path.push_back(last_state);

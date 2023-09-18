@@ -382,7 +382,7 @@ public:
     /// @return True if IK was found, false otherwise
     bool calculateIK(const geometry_msgs::Pose &pose,
                      StateType &joint_state,
-                     double timeout = 0.1) {
+                     double timeout = 1.0) {
         // resize the joint state
         joint_state.resize(num_joints_);
         // set joint model group as random, only the relevant kinematic group
@@ -414,7 +414,7 @@ public:
                      const StateType &seed,
                      StateType &joint_state,
                      double consistency_limit = 1.0,
-                     double timeout = 0.1) {
+                     double timeout = 1.0) {
         // resize the joint state
         joint_state.resize(num_joints_);
         // set the pose
