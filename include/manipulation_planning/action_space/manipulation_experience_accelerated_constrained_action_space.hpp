@@ -285,11 +285,15 @@ public:
     /// @param conflict_types The types of conflicts that are requested.
     /// @param max_conflicts The maximum number of conflicts to return.
     /// @param names The names of the agents.
+    /// @param time_start The start time from which to check for conflicts. Inclusive. -1 defaults to zero.
+    /// @param time_end The end time until which to check for conflicts. Inclusive. -1 defaults to the end.
     void getPathsConflicts(std::shared_ptr<MultiAgentPaths> paths, 
                            std::vector<std::shared_ptr<Conflict>> &conflicts_ptrs, 
                            const std::vector<ConflictType> &conflict_types,
                            int max_conflicts, 
-                           const std::vector<std::string> &names) override {
+                           const std::vector<std::string> &names, 
+                           TimeType time_start = 0, 
+                           TimeType time_end = -1) override {
         throw std::runtime_error("Not implemented");
     }
 };

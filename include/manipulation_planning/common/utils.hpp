@@ -136,7 +136,7 @@ namespace ims {
                 }
             }
 
-            // Normalize the dimension, if it is not in the range of the joint limits and it is valid according to the mask.
+            // Normalize the dimension to the range [joint_limits[i].first, joint_limits[i].second] and request angles to be in the range of [-pi, pi], if it is not in the range of the joint limits and it is valid according to the mask.
             if (state[i] > joint_limits[i].second){
                 state[i] = state[i] - 2*M_PI;
             }
