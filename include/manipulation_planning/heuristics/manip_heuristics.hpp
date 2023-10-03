@@ -198,7 +198,7 @@ struct SE3HeuristicHopf : public BaseHeuristic {
 class BFSHeuristic : public BaseHeuristic {
 protected:
     // The full pose of the goal EE. Orientation and translation.
-    Eigen::Isometry3d goal_pose_ee_;
+    Eigen::Isometry3d ee_goal_state_;
 
 public:
     BFSHeuristic() : BFSHeuristic(getDistanceFieldMoveIt()) {
@@ -239,9 +239,9 @@ public:
         
         // Compute the goal position in world space.
         kinematic_state->setJointGroupPositions(joint_model_group, goal);
-        goal_pose_ee_ = kinematic_state->getGlobalLinkTransform(tip_link);
+        ee_goal_state_ = kinematic_state->getGlobalLinkTransform(tip_link);
 
-        auto goal_position = goal_pose_ee_.translation();
+        auto goal_position = ee_goal_state_.translation();
         int x, y, z;
         m_distanceField->worldToGrid(goal_position.x(), goal_position.y(), goal_position.z(),
                                      x, y, z);
@@ -330,36 +330,25 @@ public:
 
         dist = getBfsCostToGoal(*m_bfs, x, y, z);
 
-        // // TEST
-        // // Find the distance between the two orientations. Do this with quaternions.
-        // Eigen::Quaterniond q1(pose_ee.rotation());
-        // Eigen::Quaterniond q2(goal_pose_ee_.rotation());
-        // double dot_product = q1.dot(q2);
-        // // Make sure the dot product is clamped to [-1, 1] to avoid issues with acos.
-        // dot_product = std::max(-1.0, std::min(1.0, dot_product));
-        // double angular_distance = 2.0 * acos(fabs(dot_product));
-        // dist += 1000*angular_distance;
-        // // END TEST
-
         return true;
     }
 
     Eigen::Isometry3d getGoalPoseEE() const {
-        return goal_pose_ee_;
+        return ee_goal_state_;
     }
 
     StateType getGoalPoseEExyzrpy() const{
         // Get the goal pose in a vector containing the xyz (meters) and rpy (radians) of the goal pose.
-        StateType goal_pose_ee_xyzrpy(6);
-        goal_pose_ee_xyzrpy[0] = goal_pose_ee_.translation().x();
-        goal_pose_ee_xyzrpy[1] = goal_pose_ee_.translation().y();
-        goal_pose_ee_xyzrpy[2] = goal_pose_ee_.translation().z();
+        StateType ee_goal_state_xyzrpy(6);
+        ee_goal_state_xyzrpy[0] = ee_goal_state_.translation().x();
+        ee_goal_state_xyzrpy[1] = ee_goal_state_.translation().y();
+        ee_goal_state_xyzrpy[2] = ee_goal_state_.translation().z();
         // The stored Isometry3d uses zyx euler angles.
-        goal_pose_ee_xyzrpy[3] = goal_pose_ee_.rotation().eulerAngles(2, 1, 0).z();
-        goal_pose_ee_xyzrpy[4] = goal_pose_ee_.rotation().eulerAngles(2, 1, 0).y();
-        goal_pose_ee_xyzrpy[5] = goal_pose_ee_.rotation().eulerAngles(2, 1, 0).x();
+        ee_goal_state_xyzrpy[3] = ee_goal_state_.rotation().eulerAngles(2, 1, 0).z();
+        ee_goal_state_xyzrpy[4] = ee_goal_state_.rotation().eulerAngles(2, 1, 0).y();
+        ee_goal_state_xyzrpy[5] = ee_goal_state_.rotation().eulerAngles(2, 1, 0).x();
         
-        return goal_pose_ee_xyzrpy;
+        return ee_goal_state_xyzrpy;
     }
 
 private:
@@ -456,7 +445,7 @@ public:
 class BFSHeuristicEgraph : public EGraphHeuristicBase {
 protected:
     // The full pose of the goal EE. Orientation and translation.
-    Eigen::Isometry3d goal_pose_ee_;
+    Eigen::Isometry3d ee_goal_state_;
 
 public:
     void init(std::shared_ptr<EGraphActionSpace> action_space,
@@ -604,9 +593,9 @@ public:
         //////////* The assumption here is that the goal is in configuration spae //////////*/
         //////////* TODO: Fix this assumption in the future ////////////////////////////////*/
         kinematic_state_->setJointGroupPositions(joint_model_group_, goal);
-        goal_pose_ee_ = kinematic_state_->getGlobalLinkTransform(tip_link_);
+        ee_goal_state_ = kinematic_state_->getGlobalLinkTransform(tip_link_);
 
-        auto goal_position = goal_pose_ee_.translation();
+        auto goal_position = ee_goal_state_.translation();
         goal_ = goal;
         goal_ws_ = {goal_position.x(), goal_position.y(), goal_position.z()};
         int x_goal, y_goal, z_goal;

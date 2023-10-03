@@ -130,32 +130,6 @@ namespace ims{
             // Store the joint limits.
             getJointLimits(joint_limits_);
 
-            // // TEST
-            // std::vector<moveit_msgs::CollisionObject> object_msgs;
-            // std::vector<SphereWorldObject> spheres;
-            // spheres.emplace_back(Eigen::Vector3d(0.0, -0.42, 0.83), 0.12);
-            // // spheres.emplace_back(Eigen::Vector3d(0.0, 0.42, 0.83), 0.12);
-            // spheres.emplace_back(Eigen::Vector3d(0.0, 0.0, 0.83), 0.12);
-            // spheres.emplace_back(Eigen::Vector3d(-0.5, 0.0, 0.53), 0.12);
-
-            // // Add spheres in x=1, -1 for all y in -1,1 and z 0, 0.5, 1.0.
-            // for (double y = -1.0; y <= 1.0; y += 0.5) {
-            //     for (double z = 0.3; z <= 1.0; z += 0.2) {
-            //         spheres.emplace_back(Eigen::Vector3d(0.8, y, z), 0.05);
-            //         spheres.emplace_back(Eigen::Vector3d(-0.8, y, z), 0.05);
-            //     }
-            // }
-            // for (double x = -1.0; x <= 1.0; x += 0.5) {
-            //     for (double z = 0.3; z <= 1.0; z += 0.2) {
-            //         spheres.emplace_back(Eigen::Vector3d(x, 0.8, z), 0.05);
-            //         spheres.emplace_back(Eigen::Vector3d(x, -0.8, z), 0.05);
-            //     }
-            // }
-
-            // addSpheresToScene(spheres, object_msgs);
-
-            // // END TEST
-
             auto object_names = planning_scene_->getWorld()->getObjectIds();
 
             for (auto &obj : object_names) {

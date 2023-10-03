@@ -51,50 +51,7 @@
 
 namespace ims {
 
-    // /// \brief Profile the trajectory
-    // /// \param start The start joint state. type: StateType
-    // /// \param goal The goal joint state. type: StateType
-    // /// \param trajectory a vector of joint states. type: std::vector<StateType>
-    // /// \param move_group_ The move group object. type: moveit::planning_interface::MoveGroupInterface
-    // /// \param trajectory_msg The output trajectory. type: moveit_msgs::RobotTrajectory
-    // /// \return success bool
-    // inline bool profileTrajectory(const StateType & start,
-    //                               const StateType & goal,
-    //                               const std::vector<StateType> & trajectory,
-    //                               const moveit::planning_interface::MoveGroupInterface & move_group_,
-    //                               moveit_msgs::RobotTrajectory& trajectory_msg){
-
-    //     trajectory_msg.joint_trajectory.header.frame_id = move_group_.getPlanningFrame();
-    //     trajectory_msg.joint_trajectory.joint_names = move_group_.getActiveJoints();
-    //     trajectory_msg.joint_trajectory.points.resize(trajectory.size());
-
-    //     // check if current robot state is the same as the start state
-    //     auto current_state = move_group_.getCurrentState();
-    //     std::vector<double> joint_values;
-    //     current_state->copyJointGroupPositions(move_group_.getName(), joint_values);
-    //     for (int i = 0; i < trajectory.size(); ++i) {
-    //         trajectory_msg.joint_trajectory.points[i].positions = trajectory[i];
-    //     }
-
-    //     // Create a RobotTrajectory object
-    //     robot_trajectory::RobotTrajectory robot_trajectory(move_group_.getRobotModel(), move_group_.getName());
-    //     // convert the trajectory vector to trajectory message
-    //     moveit::core::RobotState start_state_moveit(robot_trajectory.getRobotModel());
-    //     // set start_state_moveit to the start state of the trajectory
-    //     start_state_moveit.setJointGroupPositions(move_group_.getName(), trajectory[0]);
-    //     robot_trajectory.setRobotTrajectoryMsg(start_state_moveit, trajectory_msg);
-
-    //     // Trajectory processing
-    //     trajectory_processing::IterativeParabolicTimeParameterization time_param(true);
-    //     // scale the velocity of the trajectory
-    //     if (!time_param.computeTimeStamps(robot_trajectory, 0.1, 0.1)){
-    //         ROS_ERROR("Failed to compute timestamps for trajectory");
-    //         return false;
-    //     }
-    //     robot_trajectory.getRobotTrajectoryMsg(trajectory_msg);
-
-    //     return true;
-    // }
+// TODO(yoraish): let's move trajectory profiling code to here.
 
 
 void iterativeMultiAgentPathShortcutting(const std::shared_ptr<MultiAgentPaths>& paths,
