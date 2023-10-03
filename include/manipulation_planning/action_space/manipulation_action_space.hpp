@@ -502,28 +502,28 @@ namespace ims {
             // check if the state is valid
             switch (manipulation_type_->getSpaceType()) {
                 case ManipulationType::SpaceType::ConfigurationSpace:
-                    return moveit_interface_->isStateValid(state_val);
+                return moveit_interface_->isStateValid(state_val);
                 case ManipulationType::SpaceType::WorkSpace:
-                    // check if state exists with IK solution already
-                    geometry_msgs::Pose pose;
-                    pose.position.x = state_val[0];
-                    pose.position.y = state_val[1];
-                    pose.position.z = state_val[2];
-                    // Euler angles to quaternion
-                    Eigen::Quaterniond q;
-                    from_euler_zyx(state_val[5], state_val[4], state_val[3], q);
-                    pose.orientation.x = q.x();
-                    pose.orientation.y = q.y();
-                    pose.orientation.z = q.z();
-                    pose.orientation.w = q.w();
-                    StateType joint_state;
-                    bool succ = moveit_interface_->calculateIK(pose, joint_state);
-                    if (!succ) {
-                        return false;
-                    }
+                // check if state exists with IK solution already
+                geometry_msgs::Pose pose;
+                pose.position.x = state_val[0];
+                pose.position.y = state_val[1];
+                pose.position.z = state_val[2];
+                // Euler angles to quaternion
+                Eigen::Quaterniond q;
+                from_euler_zyx(state_val[5], state_val[4], state_val[3], q);
+                pose.orientation.x = q.x();
+                pose.orientation.y = q.y();
+                pose.orientation.z = q.z();
+                pose.orientation.w = q.w();
+                StateType joint_state;
+                bool succ = moveit_interface_->calculateIK(pose, joint_state);
+                if (!succ) {
+                    return false;
+                }
                     else {
-                        return moveit_interface_->isStateValid(joint_state);
-                    }
+                    return moveit_interface_->isStateValid(joint_state);
+                }
             }
             return false;
         }
@@ -533,30 +533,30 @@ namespace ims {
         /// @param joint_state The ik solution
         /// @return True if the state is valid, false otherwise
         bool isStateValid(const StateType &state_val,
-                        StateType &joint_state) {
+                    StateType &joint_state) {
             switch (manipulation_type_->getSpaceType()) {
-                case ManipulationType::SpaceType::ConfigurationSpace:
-                    return moveit_interface_->isStateValid(state_val);
-                case ManipulationType::SpaceType::WorkSpace:
-                    geometry_msgs::Pose pose;
-                    pose.position.x = state_val[0];
-                    pose.position.y = state_val[1];
-                    pose.position.z = state_val[2];
-                    // Euler angles to quaternion
-                    Eigen::Quaterniond q;
-                    from_euler_zyx(state_val[5], state_val[4], state_val[3], q);
-                    pose.orientation.x = q.x();
-                    pose.orientation.y = q.y();
-                    pose.orientation.z = q.z();
-                    pose.orientation.w = q.w();
-                    bool succ = moveit_interface_->calculateIK(pose, joint_state);
-                    if (!succ) {
-                        ROS_INFO("IK failed");
-                        return false;
-                    }
-                    else {
-                        return moveit_interface_->isStateValid(joint_state);
-                    }
+            case ManipulationType::SpaceType::ConfigurationSpace:
+                return moveit_interface_->isStateValid(state_val);
+            case ManipulationType::SpaceType::WorkSpace:
+                geometry_msgs::Pose pose;
+                pose.position.x = state_val[0];
+                pose.position.y = state_val[1];
+                pose.position.z = state_val[2];
+                // Euler angles to quaternion
+                Eigen::Quaterniond q;
+                from_euler_zyx(state_val[5], state_val[4], state_val[3], q);
+                pose.orientation.x = q.x();
+                pose.orientation.y = q.y();
+                pose.orientation.z = q.z();
+                pose.orientation.w = q.w();
+                bool succ = moveit_interface_->calculateIK(pose, joint_state);
+                if (!succ) {
+                    ROS_INFO("IK failed");
+                    return false;
+                }
+                else {
+                    return moveit_interface_->isStateValid(joint_state);
+                }
             }
             return false;
         }
@@ -566,29 +566,29 @@ namespace ims {
                         StateType &joint_state) {
             // check if the state is valid
             switch (manipulation_type_->getSpaceType()) {
-                case ManipulationType::SpaceType::ConfigurationSpace:
-                    return moveit_interface_->isStateValid(state_val);
-                case ManipulationType::SpaceType::WorkSpace:
-                    geometry_msgs::Pose pose;
-                    pose.position.x = state_val[0];
-                    pose.position.y = state_val[1];
-                    pose.position.z = state_val[2];
-                    // Euler angles to quaternion
-                    Eigen::Quaterniond q;
-                    from_euler_zyx(state_val[5], state_val[4], state_val[3], q);
-                    pose.orientation.x = q.x();
-                    pose.orientation.y = q.y();
-                    pose.orientation.z = q.z();
-                    pose.orientation.w = q.w();
-                    joint_state.resize(moveit_interface_->num_joints_);
-                    bool succ = moveit_interface_->calculateIK(pose, seed, joint_state);
-                    normalizeAngles(joint_state);
-                    if (!succ) {
-                        return false;
-                    }
-                    else {
-                        return moveit_interface_->isStateValid(joint_state);
-                    }
+            case ManipulationType::SpaceType::ConfigurationSpace:
+                return moveit_interface_->isStateValid(state_val);
+            case ManipulationType::SpaceType::WorkSpace:
+                geometry_msgs::Pose pose;
+                pose.position.x = state_val[0];
+                pose.position.y = state_val[1];
+                pose.position.z = state_val[2];
+                // Euler angles to quaternion
+                Eigen::Quaterniond q;
+                from_euler_zyx(state_val[5], state_val[4], state_val[3], q);
+                pose.orientation.x = q.x();
+                pose.orientation.y = q.y();
+                pose.orientation.z = q.z();
+                pose.orientation.w = q.w();
+                joint_state.resize(moveit_interface_->num_joints_);
+                bool succ = moveit_interface_->calculateIK(pose, seed, joint_state);
+                normalizeAngles(joint_state);
+                if (!succ) {
+                    return false;
+                }
+                else {
+                    return moveit_interface_->isStateValid(joint_state);
+                }
             }
             return false;
         }
@@ -631,39 +631,39 @@ namespace ims {
 
         bool isPathValid(const PathType &path) override {
             switch (manipulation_type_->getSpaceType()) {
-                case ManipulationType::SpaceType::ConfigurationSpace:
-                    return moveit_interface_->isPathValid(path);
-                case ManipulationType::SpaceType::WorkSpace:
-                    PathType poses;
-                    for (auto &state : path) {
-                        geometry_msgs::Pose pose;
-                        pose.position.x = state[0];
-                        pose.position.y = state[1];
-                        pose.position.z = state[2];
-                        // Euler angles to quaternion
-                        Eigen::Quaterniond q;
-                        from_euler_zyx(state[5], state[4], state[3], q);
-                        pose.orientation.x = q.x();
-                        pose.orientation.y = q.y();
-                        pose.orientation.z = q.z();
-                        pose.orientation.w = q.w();
-                        StateType joint_state;
-                        bool succ = moveit_interface_->calculateIK(pose, joint_state);
-                        if (!succ) {
-                            return false;
-                        }
-                        else {
-                            poses.push_back(joint_state);
-                        }
+            case ManipulationType::SpaceType::ConfigurationSpace:
+                return moveit_interface_->isPathValid(path);
+            case ManipulationType::SpaceType::WorkSpace:
+                PathType poses;
+                for (auto &state : path) {
+                    geometry_msgs::Pose pose;
+                    pose.position.x = state[0];
+                    pose.position.y = state[1];
+                    pose.position.z = state[2];
+                    // Euler angles to quaternion
+                    Eigen::Quaterniond q;
+                    from_euler_zyx(state[5], state[4], state[3], q);
+                    pose.orientation.x = q.x();
+                    pose.orientation.y = q.y();
+                    pose.orientation.z = q.z();
+                    pose.orientation.w = q.w();
+                    StateType joint_state;
+                    bool succ = moveit_interface_->calculateIK(pose, joint_state);
+                    if (!succ) {
+                        return false;
                     }
-                    return moveit_interface_->isPathValid(poses);
+                    else {
+                        poses.push_back(joint_state);
+                    }
+                }
+                return moveit_interface_->isPathValid(poses);
             }
             return false;
         }
 
         virtual bool getSuccessorsWs(int curr_state_ind,
-                                    std::vector<int> &successors,
-                                    std::vector<double> &costs) {
+                                     std::vector<int>& successors,
+                                     std::vector<double> &costs) {
             // get the current state
             auto curr_state = this->getRobotState(curr_state_ind);
             auto curr_state_val = curr_state->state;
@@ -727,8 +727,8 @@ namespace ims {
         }
 
         virtual bool getSuccessorsCs(int curr_state_ind,
-                                    std::vector<int> &successors,
-                                    std::vector<double> &costs) {
+                                     std::vector<int>& successors,
+                                     std::vector<double> &costs) {
             std::vector<ActionSequence> actions;
             getActions(curr_state_ind, actions, false);
             // get the successors
