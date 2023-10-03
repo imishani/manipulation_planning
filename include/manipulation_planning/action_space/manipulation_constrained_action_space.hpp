@@ -73,9 +73,9 @@ protected:
     BFSHeuristic *bfs_heuristic_;
 
     // TODO: delete: temp
-    int m_vis_id = 0;
-    ros::NodeHandle m_nh;
-    ros::Publisher m_vis_pub;
+    int vis_id_ = 0;
+    ros::NodeHandle nh_;
+    ros::Publisher vis_pub_;
 
     // Instance of the ManipulationActionSpace class to use some of its methods.
     // Since the ManipulationActionSpace class does not have a default constructor, the line above does not work. So instead we set it to nullptr and instantiate it in the constructor.
@@ -93,7 +93,7 @@ public:
         
         // Get the joint limits.
         moveit_interface_->getJointLimits(joint_limits_);
-        m_vis_pub = m_nh.advertise<visualization_msgs::Marker>("visualization_marker", 0);
+        vis_pub_ = nh_.advertise<visualization_msgs::Marker>("visualization_marker", 0);
 
         // Instantiate the ManipulationActionSpace class, for use of some of its methods.
         manip_action_space_ = std::make_shared<ManipulationActionSpace>(env, actions_ptr, bfs_heuristic);
@@ -219,7 +219,7 @@ public:
         marker.header.frame_id = moveit_interface_->planning_scene_->getPlanningFrame();
         marker.header.stamp = ros::Time();
         marker.ns = "graph";
-        marker.id = m_vis_id;
+        marker.id = vis_id_;
         marker.type = visualization_msgs::Marker::CUBE;
         marker.action = visualization_msgs::Marker::ADD;
         marker.pose.position.x = x;
@@ -242,8 +242,8 @@ public:
         // Lifetime.
         marker.lifetime = ros::Duration(5.0);
         // visualize
-        m_vis_pub.publish(marker);
-        m_vis_id++;
+        vis_pub_.publish(marker);
+        vis_id_++;
     }
 
 
@@ -254,7 +254,7 @@ public:
         marker.header.frame_id = moveit_interface_->planning_scene_->getPlanningFrame();
         marker.header.stamp = ros::Time();
         marker.ns = "graph";
-        marker.id = m_vis_id;
+        marker.id = vis_id_;
         marker.type = visualization_msgs::Marker::ARROW; // Other options are CUBE, SPHERE, CYLINDER, AXIS, etc.
         marker.action = visualization_msgs::Marker::ADD;
         marker.pose = pose;
@@ -268,8 +268,8 @@ public:
         marker.lifetime = ros::Duration(5.0);
         
         // visualize
-        m_vis_pub.publish(marker);
-        m_vis_id++;
+        vis_pub_.publish(marker);
+        vis_id_++;
     }
 
     /// @brief Get the end effector pose in the robot frame.

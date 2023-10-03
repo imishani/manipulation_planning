@@ -56,9 +56,9 @@ namespace ims {
         BFSHeuristicEgraph* bfs_heuristic_;
 
         // TODO: delete: temp
-        int m_vis_id = 0;
-        ros::NodeHandle m_nh;
-        ros::Publisher m_vis_pub;
+        int vis_id_ = 0;
+        ros::NodeHandle nh_;
+        ros::Publisher vis_pub_;
 
 
     public:
@@ -74,7 +74,7 @@ namespace ims {
             manipulation_type_ = std::make_shared<ManipulationType>(actions_ptr);
             // get the joint limits
             moveit_interface_->getJointLimits(joint_limits_);
-            m_vis_pub = m_nh.advertise<visualization_msgs::Marker>( "visualization_marker", 0 );
+            vis_pub_ = nh_.advertise<visualization_msgs::Marker>( "visualization_marker", 0 );
 
         }
 
@@ -493,7 +493,7 @@ namespace ims {
             marker.header.frame_id = moveit_interface_->planning_scene_->getPlanningFrame();
             marker.header.stamp = ros::Time();
             marker.ns = "graph";
-            marker.id = m_vis_id;
+            marker.id = vis_id_;
             marker.type = visualization_msgs::Marker::SPHERE;
             marker.action = visualization_msgs::Marker::ADD;
             marker.pose.position.x = x; marker.pose.position.y = y; marker.pose.position.z = z;
@@ -505,8 +505,8 @@ namespace ims {
             marker.color.r = 0.0; marker.color.g = 1.0; marker.color.b = 0.0;
             marker.color.a = 0.5;
             // visualize
-            m_vis_pub.publish(marker);
-            m_vis_id++;
+            vis_pub_.publish(marker);
+            vis_id_++;
         }
 
 

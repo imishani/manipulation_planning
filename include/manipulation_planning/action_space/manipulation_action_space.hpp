@@ -330,23 +330,23 @@ namespace ims {
             return actions_;
         }
 
-        /// @brief Set values in the motion primitive active type.
-        /// @param short_dist The short distance threshold
-        /// @param long_dist The long distance threshold
-        /// @param snap_xyz The snap xyz threshold
-        /// @param snap_rpy The snap rpy threshold
-        /// @param snap_xyzrpy The snap xyzrpy threshold
-        void setMprimActiveType(std::pair<bool, double> short_dist,
-                                std::pair<bool, double> long_dist,
-                                std::pair<bool, double> snap_xyz,
-                                std::pair<bool, double> snap_rpy,
-                                std::pair<bool, double> snap_xyzrpy) {
-            mprim_active_type_.short_dist = short_dist;
-            mprim_active_type_.long_dist = long_dist;
-            mprim_active_type_.snap_xyz = snap_xyz;
-            mprim_active_type_.snap_rpy = snap_rpy;
-            mprim_active_type_.snap_xyzrpy = snap_xyzrpy;
-        }
+    /// @brief Set values in the motion primitive active type.
+    /// @param short_dist The short distance threshold
+    /// @param long_dist The long distance threshold
+    /// @param snap_xyz The snap xyz threshold
+    /// @param snap_rpy The snap rpy threshold
+    /// @param snap_xyzrpy The snap xyzrpy threshold
+    void setMprimActiveType(std::pair<bool, double> short_dist,
+                            std::pair<bool, double> long_dist,
+                            std::pair<bool, double> snap_xyz,
+                            std::pair<bool, double> snap_rpy,
+                            std::pair<bool, double> snap_xyzrpy) {
+        mprim_active_type_.short_dist = short_dist;
+        mprim_active_type_.long_dist = long_dist;
+        mprim_active_type_.snap_xyz = snap_xyz;
+        mprim_active_type_.snap_rpy = snap_rpy;
+        mprim_active_type_.snap_xyzrpy = snap_xyzrpy;
+    }
 
         /// @brief Motion primitive active type: Used for adaptive motion primitives, given a few motion primitives,
         /// which one is active at a given time and it's threshold
@@ -388,9 +388,9 @@ namespace ims {
         BFSHeuristic *bfs_heuristic_;
 
         // TODO: delete: temp
-        int m_vis_id = 0;
-        ros::NodeHandle m_nh;
-        ros::Publisher m_vis_pub;
+        int vis_id_ = 0;
+        ros::NodeHandle nh_;
+        ros::Publisher vis_pub_;
 
     public:
         /// @brief Constructor
@@ -403,7 +403,7 @@ namespace ims {
             manipulation_type_ = std::make_shared<ManipulationType>(actions_ptr);
             // get the joint limits
             moveit_interface_->getJointLimits(joint_limits_);
-            m_vis_pub = m_nh.advertise<visualization_msgs::Marker>("visualization_marker", 0);
+            vis_pub_ = nh_.advertise<visualization_msgs::Marker>("visualization_marker", 0);
         }
 
         void getActions(int state_id,
@@ -781,7 +781,7 @@ namespace ims {
             marker.header.frame_id = moveit_interface_->planning_scene_->getPlanningFrame();
             marker.header.stamp = ros::Time();
             marker.ns = "graph";
-            marker.id = m_vis_id;
+            marker.id = vis_id_;
             marker.type = visualization_msgs::Marker::SPHERE;
             marker.action = visualization_msgs::Marker::ADD;
             marker.pose.position.x = x;
@@ -805,8 +805,8 @@ namespace ims {
             marker.lifetime = ros::Duration(5.0);
 
             // visualize
-            m_vis_pub.publish(marker);
-            m_vis_id++;
+            vis_pub_.publish(marker);
+            vis_id_++;
         }
     };
 }  // namespace ims
