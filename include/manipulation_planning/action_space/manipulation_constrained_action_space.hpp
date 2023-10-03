@@ -66,7 +66,7 @@ protected:
     /// @brief Moveit interface
     std::shared_ptr<MoveitInterface> moveit_interface_;
     /// @brief joint limits
-    std::vector<std::pair<double, double>> mJointLimits;
+    std::vector<std::pair<double, double>> joint_limits_;
     /// @brief Joint states seed
     //    std::vector<double> mJointStatesSeed {0, 0, 0, 0, 0, 0};
     /// @brief The BFS heuristic
@@ -92,7 +92,7 @@ public:
         manipulation_type_ = std::make_shared<ManipulationType>(actions_ptr);
         
         // Get the joint limits.
-        moveit_interface_->getJointLimits(mJointLimits);
+        moveit_interface_->getJointLimits(joint_limits_);
         m_vis_pub = m_nh.advertise<visualization_msgs::Marker>("visualization_marker", 0);
 
         // Instantiate the ManipulationActionSpace class, for use of some of its methods.
