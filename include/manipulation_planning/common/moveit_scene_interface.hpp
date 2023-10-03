@@ -233,6 +233,7 @@ namespace ims{
 
         // Set the state of all robots.
         robot_state::RobotState &current_scene_state = planning_scene_->getCurrentStateNonConst();
+        current_scene_state.setToDefaultValues(); // TODO(yoraish): do we need this?
         int num_move_groups = other_move_group_names.size();
         for (int i = 0; i < num_move_groups; i++) {
             current_scene_state.setJointGroupPositions(other_move_group_names[i], other_move_group_states[i]);
