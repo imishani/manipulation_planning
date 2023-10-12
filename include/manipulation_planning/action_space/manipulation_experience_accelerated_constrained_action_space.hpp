@@ -50,16 +50,16 @@
 #include <manipulation_planning/common/moveit_scene_interface.hpp>
 #include <manipulation_planning/common/utils.hpp>
 #include <manipulation_planning/heuristics/manip_heuristics.hpp>
-#include <search/action_space/experience_accelerated_constrained_action_space.hpp>
+#include <search/action_space/subcost_experience_accelerated_constrained_action_space.hpp>
 #include <manipulation_planning/action_space/manipulation_action_space.hpp>
 
 namespace ims {
 
-/// @class ManipulationExperienceAcceleratedConstrainedActionSpace
-/// @brief A class that implements the ConstrainedActionSpace for Moveit. This class borrows many function implementations from the ManipulationExperienceAcceleratedConstrainedActionSpace class.
-/// @class ManipulationExperienceAcceleratedConstrainedActionSpace
+/// @class ManipulationSubcostExperienceAcceleratedConstrainedActionSpace
+/// @brief A class that implements the ConstrainedActionSpace for Moveit. This class borrows many function implementations from the ManipulationSubcostExperienceAcceleratedConstrainedActionSpace class.
+/// @class ManipulationSubcostExperienceAcceleratedConstrainedActionSpace
 /// @brief A class that implements the ActionSpace for Moveit
-class ManipulationExperienceAcceleratedConstrainedActionSpace : public ExperienceAcceleratedConstrainedActionSpace {
+class ManipulationSubcostExperienceAcceleratedConstrainedActionSpace : public SubcostExperienceAcceleratedConstrainedActionSpace {
 protected:
     /// @brief Manipulation type
     std::shared_ptr<ManipulationType> manipulation_type_;
@@ -85,9 +85,9 @@ public:
     /// @brief Constructor
     /// @param moveitInterface The moveit interface
     /// @param ManipulationType The manipulation type
-    ManipulationExperienceAcceleratedConstrainedActionSpace(const MoveitInterface &env,
+    ManipulationSubcostExperienceAcceleratedConstrainedActionSpace(const MoveitInterface &env,
                             const ManipulationType &actions_ptr,
-                            BFSHeuristic *bfs_heuristic = nullptr) : bfs_heuristic_(bfs_heuristic), ExperienceAcceleratedConstrainedActionSpace() {
+                            BFSHeuristic *bfs_heuristic = nullptr) : bfs_heuristic_(bfs_heuristic), SubcostExperienceAcceleratedConstrainedActionSpace() {
         moveit_interface_ = std::make_shared<MoveitInterface>(env);
         manipulation_type_ = std::make_shared<ManipulationType>(actions_ptr);
         
@@ -198,10 +198,31 @@ public:
         return manip_action_space_->getSuccessors(curr_state_ind, successors, costs);
     }
 
+    virtual bool getSuccessorsWs(int curr_state_ind,
+                                 std::vector<int> &successors,
+                                 std::vector<double>& costs,
+                                 std::vector<double>& subcosts) {
+        throw std::runtime_error("Not implemented.");
+    }
+
+    virtual bool getSuccessorsCs(int curr_state_ind,
+                                 std::vector<int> &successors,
+                                 std::vector<double>& costs,
+                                 std::vector<double>& subcosts) {
+        throw std::runtime_error("Not implemented.");
+    }
+
     virtual bool getSuccessors(int curr_state_ind,
                        std::vector<int> &successors,
                        std::vector<double> &costs) override {
         return manip_action_space_->getSuccessors(curr_state_ind, successors, costs);
+    }
+
+    virtual bool getSuccessors(int curr_state_ind,
+                       std::vector<int>& successors,
+                       std::vector<double>& costs,
+                       std::vector<double>& subcosts) override {
+        throw std::runtime_error("Not implemented.");
     }
 
     /// @brief Visualize a state point in rviz for debugging
