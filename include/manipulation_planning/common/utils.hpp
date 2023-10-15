@@ -400,7 +400,7 @@ namespace ims {
     /// @return bool success
     /// @TODO: Needs to be edited. Currently it is way too heavy to run.
     inline bool ShortcutSmooth(PathType &path,
-                               const moveit::planning_interface::MoveGroupInterface &move_group,
+                               moveit::planning_interface::MoveGroupInterface &move_group,
                                const planning_scene::PlanningScenePtr& planning_scene,
                                double timeout = 0.5){
         // iteratively moving further and further down the path, attempting to replace the original path with
@@ -414,12 +414,16 @@ namespace ims {
         auto current_state = path.front();
         shortcut_path.push_back(current_state);
         // iteratively try to connect the current state to the closest state to the last state
+        collision_detection::CollisionRequest collision_request;
+        collision_request.verbose = true;
+        collision_detection::CollisionResult collision_result;
+        robot_state::RobotState robot_state = planning_scene->getCurrentStateNonConst();
         bool is_timeout = false;
         while (current_state != last_state && !is_timeout){
             for (size_t i = path.size() - 1; true ; i--) {
                 StateType state_to_shortcut = path[i];
-                if (state_to_shortcut == current_state){
-                    current_state = path[i+1];
+                if (state_to_shortcut == current_state) {
+                    current_state = path[i + 1];
                     break;
                 }
                 // try to check if the current state can be connected to the state to shortcut by interpolating
@@ -427,7 +431,7 @@ namespace ims {
                 // step size 0.05
                 double step_size = 0.1;
                 // get the number of steps
-                int num_steps = std::ceil(1.0/step_size);
+                int num_steps = std::ceil(1.0 / step_size);
                 // interpolate between the current state and the state to shortcut
                 for (int j = 1; j <= num_steps; ++j) {
                     StateType interpolated_state;
@@ -435,48 +439,39 @@ namespace ims {
                         interpolated_state.push_back(
                             current_state[k] + step_size * j * (state_to_shortcut[k] - current_state[k]));
                     }
-                    interpolated_path.push_back(interpolated_state);
+                    // check if the interpolated state is in collision
+                    robot_state.setJointGroupPositions(move_group.getName(), interpolated_state);
+                    // reset the collision result
+                    collision_result.clear();
+                    planning_scene->checkCollision(collision_request, collision_result, robot_state);
+                    if (collision_result.collision) {
+                        // if the interpolated state is in collision, then break
+                        break;
+                    } else {
+                        interpolated_path.push_back(interpolated_state);
+                    }
                 }
-//                for (double alpha = 0.0; alpha <= 1.0; alpha += 0.05) {
-//                    StateType interpolated_state;
-//                    for (size_t j = 0; j < current_state.size(); j++) {
-//                        interpolated_state.push_back(
-//                            current_state[j] + alpha * (state_to_shortcut[j] - current_state[j]));
-//
-//                    }
-//                    interpolated_path.push_back(interpolated_state);
-//                }
-                // check if the interpolated path is valid
-                moveit_msgs::RobotTrajectory trajectory;
-                profileTrajectory(interpolated_path.front(),
-                                  interpolated_path.back(),
-                                  interpolated_path,
-                                  move_group,
-                                  trajectory);
-                moveit_msgs::RobotState start_state;
-                start_state.joint_state.name = move_group.getVariableNames();
-                start_state.joint_state.position = interpolated_path.front();
-                bool valid_path = planning_scene->isPathValid(start_state, trajectory, move_group.getName());
-                if (valid_path) {
-                    // if the path is valid then add the interpolated path to the shortcut path
+                // if the interpolated path is not empty, then add it to the shortcut path
+                if (!collision_result.collision) {
+                    // add the interpolated path to the shortcut path
                     for (auto& state : interpolated_path) {
                         shortcut_path.push_back(state);
                     }
-                    // set the current state to the state to shortcut
+                    // set the current state to the last state of the interpolated path
                     current_state = state_to_shortcut;
                     break;
                 }
             }
-            // check if the timeout is reached
-            if (ros::Time::now().toSec() - start_time > timeout){
+            if (ros::Time::now().toSec() - start_time > timeout) {
                 is_timeout = true;
             }
         }
+        // check if the timeout is reached
         if (is_timeout){
             // add the rest of the path from current state to the last state
             PathType rest_of_path;
             // loop in reverse order
-            for (size_t i = path.size() - 1; i >= 0; --i) {
+            for (size_t i = path.size() - 1; i > 0; --i) {
                 if (path[i] == current_state){
                     break;
                 }
