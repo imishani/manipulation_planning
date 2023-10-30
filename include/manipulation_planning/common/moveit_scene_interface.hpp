@@ -205,7 +205,7 @@ public:
 
         // Set the state of all robots.
         robot_state::RobotState &current_scene_state = planning_scene_->getCurrentStateNonConst();
-        int num_move_groups = other_move_group_names.size();
+        int num_move_groups = static_cast<int>(other_move_group_names.size());
         for (int i = 0; i < num_move_groups; i++) {
             current_scene_state.setJointGroupPositions(other_move_group_names[i], other_move_group_states[i]);
         }
@@ -292,10 +292,9 @@ public:
             // Add the object to the scene with a new name.
             moveit_msgs::CollisionObject collision_object;
             collision_object.id = "world_sphere" + std::to_string(object_msgs.size());
-            collision_object.header.frame_id = "base";
-            frame_id_;
+            collision_object.header.frame_id = frame_id_;
             shapes::ShapeMsg collision_object_shape_msg;
-            shapes::Sphere *shape = new shapes::Sphere(obj.radius);
+            auto *shape = new shapes::Sphere(obj.radius);
             shapes::constructMsgFromShape(shape, collision_object_shape_msg);
             geometry_msgs::Pose collision_object_pose;
             collision_object_pose.position.x = obj.origin.x();
@@ -309,7 +308,7 @@ public:
 
             collision_object.primitives.push_back(boost::get<shape_msgs::SolidPrimitive>(collision_object_shape_msg));
             collision_object.primitive_poses.push_back(collision_object_pose);
-            collision_object.operation = collision_object.ADD;
+            collision_object.operation = moveit_msgs::CollisionObject::ADD;
 
             // Update the planning scene.
             planning_scene_interface_->applyCollisionObject(collision_object); // For visualization. TODO(yoraish): remove.
@@ -327,7 +326,7 @@ public:
         planning_scene_interface_ = std::make_shared<moveit::planning_interface::PlanningSceneInterface>(); // TODO(yorais): this should be initialized elsewhere.
 
         for (auto &obj_msg : object_msgs) {
-            obj_msg.operation = obj_msg.REMOVE;
+            obj_msg.operation = moveit_msgs::CollisionObject_<std::allocator<void>>::REMOVE;
             planning_scene_interface_->applyCollisionObject(obj_msg); // TODO(yoraish): For viz. Remove this.
             planning_scene_->processCollisionObjectMsg(obj_msg);  // For collision checking.
         }
@@ -344,7 +343,7 @@ public:
                         CollisionsCollective &collisions_collective) {
         // Set the state of all robots.
         robot_state::RobotState &current_scene_state = planning_scene_->getCurrentStateNonConst();
-        int num_move_groups = other_move_group_names.size();
+        int num_move_groups = static_cast<int>(other_move_group_names.size());
         for (int i = 0; i < num_move_groups; i++) {
             current_scene_state.setJointGroupPositions(other_move_group_names[i], other_move_group_states[i]);
         }
