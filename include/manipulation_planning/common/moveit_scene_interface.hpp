@@ -37,6 +37,7 @@
 
 // include standard libraries
 #include <iostream>
+#include <memory>
 #include <vector>
 
 // include ROS libraries
@@ -68,6 +69,7 @@ public:
     /// @brief Constructor
     explicit MoveitInterface(const std::string &group_name) {
         // planning scene monitor
+        std::cout << BOLDRED << "MoveitInterface: " << RESET << "Creating planning scene monitor" << std::endl;
         planning_scene_monitor_ = std::make_shared<planning_scene_monitor::PlanningSceneMonitor>("robot_description");
         planning_scene_monitor_->startSceneMonitor();
         planning_scene_monitor_->startStateMonitor();
@@ -98,12 +100,12 @@ public:
 
         // Get the names for all the move groups in the scene.
         scene_move_group_names_ = planning_scene_->getRobotModel()->getJointModelGroupNames();
-
+        std::cout << BOLDRED << "MoveitInterface: " << RESET << "Move groups in the scene: " << std::endl;
         for (auto &obj : object_names) {
-            std::cout << "Object name: " << obj << std::endl;
+            ROS_DEBUG_STREAM_NAMED("IMS", "Object name: " << obj);
         }
         if (object_names.empty()) {
-            std::cout << "No collision objects in the scene" << std::endl;
+            ROS_DEBUG_NAMED("IMS", "No collision objects in the scene");
         }
     };
 
@@ -112,11 +114,6 @@ public:
     MoveitInterface(const std::string &group_name, planning_scene::PlanningScenePtr &planning_scene) {
         // planning scene monitor
         planning_scene_monitor_ = std::make_shared<planning_scene_monitor::PlanningSceneMonitor>("robot_description");
-        planning_scene_monitor_->startSceneMonitor();
-        planning_scene_monitor_->startStateMonitor();
-        planning_scene_monitor_->startWorldGeometryMonitor();
-        planning_scene_monitor_->requestPlanningSceneState();
-        ros::Duration(0.1).sleep();
         planning_scene_ = planning_scene;
         group_name_ = group_name;
 
@@ -134,10 +131,10 @@ public:
         auto object_names = planning_scene_->getWorld()->getObjectIds();
 
         for (auto &obj : object_names) {
-            std::cout << "Object name: " << obj << std::endl;
+            ROS_DEBUG_STREAM_NAMED("IMS", "Object name: " << obj);
         }
         if (object_names.empty()) {
-            std::cout << "No collision objects in the scene" << std::endl;
+            ROS_DEBUG_NAMED("IMS", "No collision objects in the scene");
         }
     };
 
@@ -387,8 +384,10 @@ public:
         // set joint model group as random, only the relevant kinematic group
         kinematic_state_->setToRandomPositions(joint_model_group);
         // update
-        planning_scene_monitor_->updateFrameTransforms();
-        planning_scene_monitor_->updateSceneWithCurrentState();  // TODO: Is this needed?
+//        planning_scene_monitor_->updateFrameTransforms();
+//        planning_scene_monitor_->updateSceneWithCurrentState();  // TODO: Is this needed?
+        kinematic_state_->update();
+//        kinematic_state_->updateLinkTransforms();
         // set the pose
         if (kinematic_state_->setFromIK(joint_model_group, pose, timeout)) {
             // get the joint values
@@ -419,8 +418,10 @@ public:
         // set the pose
         kinematic_state_->setJointGroupPositions(joint_model_group,seed);
         // update
-        planning_scene_monitor_->updateFrameTransforms();
-        planning_scene_monitor_->updateSceneWithCurrentState();
+        kinematic_state_->update();
+//        kinematic_state_->updateLinkTransforms();
+//        planning_scene_monitor_->updateFrameTransforms();
+//        planning_scene_monitor_->updateSceneWithCurrentState();
         // add a consistency_limits of 0.1 to the seed
         std::vector<double> consistency_limits(num_joints_, consistency_limit);
         // get the tip link
@@ -448,8 +449,8 @@ public:
         // set the joint state
         kinematic_state_->setJointGroupPositions(joint_model_group, joint_state);
         // update
-        planning_scene_monitor_->updateFrameTransforms();
-        planning_scene_monitor_->updateSceneWithCurrentState();
+//        planning_scene_monitor_->updateFrameTransforms();
+//        planning_scene_monitor_->updateSceneWithCurrentState();
         // get the tip link
         const std::string &tip_link = joint_model_group->getLinkModelNames().back();
         // get the pose
@@ -496,6 +497,51 @@ public:
         }
         return true;
     }
+
+
+    std::shared_ptr<distance_field::PropagationDistanceField> getDistanceFieldMoveItInterface(double df_size_x = 3.0,
+                                                                                     double df_size_y = 3.0,
+                                                                                     double df_size_z = 3.0,
+                                                                                     double df_res = 0.02,
+                                                                                     double df_origin_x = -0.75,
+                                                                                     double df_origin_y = -1.5,
+                                                                                     double df_origin_z = 0.0,
+                                                                                     double max_distance = 1.8){
+
+        auto df = std::make_shared<distance_field::PropagationDistanceField>(df_size_x, df_size_y, df_size_z,
+                                                                             df_res, df_origin_x, df_origin_y, df_origin_z,
+                                                                             max_distance);
+        ROS_DEBUG_STREAM_NAMED("IMS", "Distance field size: " << df->getSizeX() << ", " << df->getSizeY() << ", " << df->getSizeZ());
+        auto objects = planning_scene_->getWorld()->getObjectIds();
+        ROS_INFO_STREAM_NAMED("IMS", "Number of objects in the scene: " << objects.size());
+        std::vector<moveit_msgs::CollisionObject> objs;
+        planning_scene_->getCollisionObjectMsgs(objs);
+        // fill the distance field
+        for (auto& obj : objs) {
+
+            Eigen::Isometry3d pose;
+            // convert from pose to eigen
+            geometry_msgs::Pose pose_msg = obj.pose;
+            tf::poseMsgToEigen(pose_msg, pose);
+            shapes::Shape* shape;
+            // get shape from a collision object
+            if (obj.primitives.empty() && obj.meshes.empty()) {
+                // raise exception
+                ROS_ERROR("No shape found in the collision object");
+                std::exception e;
+            }
+            else if (!obj.primitives.empty()){
+                // cnsrtuct shape from primitive;
+                shape = shapes::constructShapeFromMsg(obj.primitives[0]);
+            }
+            else {
+                shape = shapes::constructShapeFromMsg(obj.meshes[0]);
+            }
+            df->addShapeToField(shape, pose);
+        }
+        return df;
+    }
+
 
     planning_scene_monitor::PlanningSceneMonitorPtr planning_scene_monitor_;
     std::shared_ptr<planning_scene::PlanningScene> planning_scene_;

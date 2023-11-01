@@ -344,6 +344,53 @@ namespace ims {
         return distance;
     }
 
+    /// \brief Profile the trajectory
+    /// \param start The start joint state. type: StateType
+    /// \param goal The goal joint state. type: StateType
+    /// \param trajectory a vector of joint states. type: std::vector<StateType>
+    /// \param move_group_ The move group object. type: moveit::planning_interface::MoveGroupInterface
+    /// \param trajectory_msg The output trajectory. type: moveit_msgs::RobotTrajectory
+    /// \return success bool
+    inline bool profileTrajectory(const moveit::core::RobotModelConstPtr& robot_model,
+                                  const std::string& group_name,
+                                  const std::vector<StateType> & trajectory,
+                                  moveit_msgs::RobotTrajectory& trajectory_msg,
+                                  double velocity_scaling_factor = 0.2,
+                                  double acceleration_scaling_factor = 0.2){
+        // get planning group
+        auto planning_group = robot_model->getJointModelGroup(group_name);
+
+        trajectory_msg.joint_trajectory.header.frame_id = robot_model->getModelFrame();
+        trajectory_msg.joint_trajectory.joint_names = robot_model->getActiveJointModelNames();
+        trajectory_msg.joint_trajectory.points.resize(trajectory.size());
+
+        // check if current robot state is the same as the start state
+        for (int i = 0; i < trajectory.size(); ++i) {
+            trajectory_msg.joint_trajectory.points[i].positions = trajectory[i];
+        }
+
+        // Create a RobotTrajectory object
+        robot_trajectory::RobotTrajectory robot_trajectory(robot_model, planning_group);
+        // convert the trajectory vector to a trajectory message
+        moveit::core::RobotState start_state_moveit(robot_trajectory.getRobotModel());
+        // set start_state_moveit to the start state of the trajectory
+        start_state_moveit.setJointGroupPositions(robot_model->getName(), trajectory[0]);
+        robot_trajectory.setRobotTrajectoryMsg(start_state_moveit, trajectory_msg);
+
+        // Trajectory processing
+        trajectory_processing::IterativeParabolicTimeParameterization time_param(true);
+        // scale the velocity of the trajectory
+        // get the velocity scaling factor
+        if (!time_param.computeTimeStamps(robot_trajectory, velocity_scaling_factor,
+                                          acceleration_scaling_factor)){
+            ROS_ERROR("Failed to compute timestamps for trajectory");
+            return false;
+        }
+        robot_trajectory.getRobotTrajectoryMsg(trajectory_msg);
+
+        return true;
+    }
+
 
     /// \brief Profile the trajectory
     /// \param start The start joint state. type: StateType
@@ -393,6 +440,139 @@ namespace ims {
 
         return true;
     }
+
+
+    /// @brief Try to shortcut and smooth the path
+    /// @param path The path to shortcut and smooth
+    /// @param planning_scene The planning scene
+    /// @param joint_model_group The joint model group
+    /// @return bool success
+    /// @TODO: Needs to be edited. Currently it is way too heavy to run.
+    inline bool ShortcutSmooth(PathType &path,
+                               const planning_scene::PlanningScenePtr& planning_scene,
+                               const robot_state::JointModelGroup* joint_model_group,
+                               double timeout = 1.0){
+        // Iteratively moving further and further down the path, attempting to replace the original path with
+        // shortcut paths. The idea is that each action only moves one angle, and we want to move few angles together if possie
+        // to reduce the number of actions
+        double start_time = ros::Time::now().toSec();
+        if (path.empty())
+            return false;
+        else if (path.size() == 1)
+            return true;
+        PathType shortcut_path;
+        auto current_state = path.front();
+        int current_state_index = 0;
+        shortcut_path.push_back(current_state);
+        int last_state_index = static_cast<int>(path.size() - 1);
+        // iteratively try to connect the current state to the closest state to the last state
+        collision_detection::CollisionRequest collision_request;
+        collision_request.verbose = true;
+        collision_detection::CollisionResult collision_result;
+        robot_state::RobotState robot_state = planning_scene->getCurrentStateNonConst();
+        // print the robot state
+        bool is_timeout = false;
+        double step_size = 0.05;
+        // start from the start state (current_state) and try to connect it to the next states along the path.
+        // while collision free, try to connect to the next state. if not, then use the last collision-free shortcut,
+        // and start the same process of connecting from the last collision free state
+        while (current_state_index < last_state_index - 1){
+            for (int i {current_state_index + 2}; i <= last_state_index; ++i) {
+                // check if the timeout is reached
+                if (ros::Time::now().toSec() - start_time > timeout){
+                    is_timeout = true;
+                    break;
+                }
+                // interpolate between the current state and the next state
+                double distance = 0.0;
+                std::vector<double> to_state = path[i];
+                for (int j = 0; j < current_state.size(); ++j) {
+                    distance += std::pow(current_state[j] - to_state[j], 2);
+                }
+                distance = std::sqrt(distance);
+                int num_steps = static_cast<int>(distance/step_size);
+                // interpolate between the current state and the next state
+                for (int j = 0; j < num_steps; ++j) {
+                    std::vector<double> state;
+                    for (int k = 0; k < current_state.size(); ++k) {
+                        state.push_back(current_state[k] + (to_state[k] - current_state[k])*(j+1)/num_steps);
+                    }
+                    // check if the state is in collision
+                    robot_state.setJointGroupPositions(joint_model_group->getName(), state);
+                    collision_result.clear();
+                    planning_scene->checkCollision(collision_request, collision_result, robot_state);
+                    if (collision_result.collision){
+                        // add the last collision-free state to the shortcut path
+                        shortcut_path.push_back(path[i-1]);
+                        // update the current state
+                        current_state = path[i-1];
+                        current_state_index = i-1;
+                        break;
+                    } else if ((ros::Time::now().toSec() - start_time) > timeout){
+                        is_timeout = true;
+                        break;
+                    }
+                }
+                // check if the timeout is reached
+                if (collision_result.collision) {
+                    break;
+                } else if ((ros::Time::now().toSec() - start_time) > timeout){
+                    is_timeout = true;
+                    break;
+                }
+            }
+            // check if the timeout is reached
+            if (is_timeout){
+                break;
+            }
+        }
+        // check if the timeout is reached
+        if (is_timeout){
+            ROS_INFO_STREAM("Timeout reached! " << "Shortcut path size: " << shortcut_path.size());
+            // add the rest of the path from the current state to the last state
+            PathType rest_of_path;
+            // loop in reverse order
+            for (size_t i = path.size() - 1; i > 0; --i) {
+                if (i == current_state_index){
+                    break;
+                }
+                rest_of_path.push_back(path[i]);
+            }
+            // reverse the rest of the path
+            std::reverse(rest_of_path.begin(), rest_of_path.end());
+            // add the rest of the path to the shortcut path
+            for (auto& state : rest_of_path) {
+                shortcut_path.push_back(state);
+            }
+        }
+        shortcut_path.push_back(path.back());
+        ROS_DEBUG_STREAM_NAMED("SHORTCUT: ", "Shortcut path size: " << shortcut_path.size());
+        ROS_DEBUG_STREAM_NAMED("SHORTCUT: ", "Path size: " << path.size());
+        // interpolate between the states in the shortcut path to make sure the maximum distance between two states is 0.1
+        PathType shortcut_path_interpolated;
+        shortcut_path_interpolated.push_back(shortcut_path[0]);
+        for (int i = 0; i < shortcut_path.size() - 1; ++i) {
+            double distance = 0.0;
+            std::vector<double> from_state = shortcut_path[i];
+            std::vector<double> to_state = shortcut_path[i+1];
+            for (int j = 0; j < from_state.size(); ++j) {
+                distance += std::pow(from_state[j] - to_state[j], 2);
+            }
+            distance = std::sqrt(distance);
+            int num_steps = static_cast<int>(distance/0.1);
+            // interpolate between the current state and the next state
+            for (int j = 0; j < num_steps; ++j) {
+                std::vector<double> state;
+                for (int k = 0; k < from_state.size(); ++k) {
+                    state.push_back(from_state[k] + (to_state[k] - from_state[k])*(j+1)/num_steps);
+                }
+                shortcut_path_interpolated.push_back(state);
+            }
+        }
+        path = shortcut_path_interpolated;
+        return true;
+    }
+
 
     /// @brief Try to shortcut and smooth the path
     /// @param path The path to shortcut and smooth
@@ -572,14 +752,18 @@ namespace ims {
         auto df = std::make_shared<distance_field::PropagationDistanceField>(df_size_x, df_size_y, df_size_z,
                                                                              df_res, df_origin_x, df_origin_y, df_origin_z,
                                                                              max_distance);
+        std::cout << "Getting the planning scene interface" << std::endl;
         // get the planning scene interface
         moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
+        std::cout << "Getting the collision objects" << std::endl;
         // get the collision objects
         auto objects = planning_scene_interface.getObjects();
+        std::cout << "Number of objects: " << objects.size() << std::endl;
         std::vector<moveit_msgs::CollisionObject> objs;
         for (auto& obj : objects) {
             objs.push_back(obj.second);
         }
+        std::cout << "Number of objects: " << objs.size() << std::endl;
         // fill the distance field
         for (auto& obj : objs) {
 

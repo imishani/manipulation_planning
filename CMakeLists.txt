@@ -150,6 +150,7 @@ add_library(${PROJECT_NAME}
         include/manipulation_planning/common/moveit_scene_interface.hpp
         include/manipulation_planning/heuristics/manip_heuristics.hpp
         include/manipulation_planning/common/utils.hpp
+        include/manipulation_planning/common/factories.hpp
 )
 
 target_link_libraries(${PROJECT_NAME}
@@ -157,6 +158,7 @@ target_link_libraries(${PROJECT_NAME}
         ${eigen_LIBRARIES}
         /usr/local/lib/${search_LIBRARIES}
         )
+
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
 ## either from message generation or dynamic reconfigure
@@ -247,6 +249,9 @@ target_link_libraries(${PROJECT_NAME}_egraph_test
 #   FILES_MATCHING PATTERN "*.hpp"
    PATTERN ".svn" EXCLUDE
  )
+
+
+
 
 ## Mark other files for installation (e.g. launch and bag files, etc.)
 # install(FILES

@@ -389,7 +389,7 @@ namespace ims
             std::pair<bool, double> long_dist = std::make_pair(true, 0.4);
             std::pair<bool, double> snap_xyz = std::make_pair(false, 0.2);
             std::pair<bool, double> snap_rpy = std::make_pair(false, 0.2);
-            std::pair<bool, double> snap_xyzrpy = std::make_pair(true, 0.1);
+            std::pair<bool, double> snap_xyzrpy = std::make_pair(true, 0.4);
         };
 
         ActionType action_type_;
@@ -435,6 +435,7 @@ namespace ims
                                 BFSHeuristic* bfs_heuristic = nullptr) : ActionSpace(), bfs_heuristic_(bfs_heuristic)
         {
             moveit_interface_ = std::make_shared<MoveitInterface>(env);
+            moveit_interface_->planning_scene_monitor_->startSceneMonitor();
             manipulation_type_ = std::make_shared<ManipulationType>(actions_ptr);
             // get the joint limits
             moveit_interface_->getJointLimits(joint_limits_);
@@ -456,6 +457,7 @@ namespace ims
                     // push back the new state after the action
                     StateType next_state_val(curr_state_val.size());
                     std::transform(curr_state_val.begin(), curr_state_val.end(), action.begin(), next_state_val.begin(), std::plus<>());
+                    action_seq.push_back(next_state_val);
                     actions_seq.push_back(action_seq);
                 }
             } else {
@@ -819,6 +821,7 @@ namespace ims
 
                 if (!discontinuity && isStateToStateValid(curr_state_val, new_state_val))
                 {
+
                     // create a new state
                     int next_state_ind = getOrCreateRobotState(new_state_val);
                     // add the state to the successors

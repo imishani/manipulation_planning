@@ -115,7 +115,8 @@ int main(int argc, char** argv) {
     action_type.Discretization(discretization);
 
 //    std::shared_ptr<ims::ManipulationActionSpace> action_space = std::make_shared<ims::ManipulationActionSpace>(scene_interface, action_type);
-    std::shared_ptr<ims::ManipulationActionSpace> action_space = std::make_shared<ims::ManipulationActionSpace>(scene_interface, action_type,
+    std::shared_ptr<ims::ManipulationActionSpace> action_space = std::make_shared<ims::ManipulationActionSpace>(scene_interface,
+                                                                                                                action_type,
                                                                                                                 heuristic);
 
     StateType start_state {0, 0, 0, 0, 0, 0};

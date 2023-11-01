@@ -1,7 +1,0 @@
-<library path="libmoveit_ims_planner_plugin">
-  <class name="manipulation_planning/IMSPlanner" type="ims_interface::IMSPlannerManager" base_class_type="planning_interface::PlannerManager">
-    <description>
-      The ims motion planner plugin
-    </description>
-  </class>
-</library>
