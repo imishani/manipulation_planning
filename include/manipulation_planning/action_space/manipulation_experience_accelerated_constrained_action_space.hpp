@@ -317,7 +317,13 @@ public:
                            TimeType time_end = -1) override {
         throw std::runtime_error("Not implemented");
     }
-};
+
+    /// @brief Get the scene interface.
+    /// @return The scene interface
+    std::shared_ptr<MoveitInterface> getSceneInterface() {
+        return moveit_interface_;
+    }
+    };
 }  // namespace ims
 
 #endif  // MANIPULATION_PLANNING_MANIPULATION_EXPERIENCE_ACCELERATED_CONSTRAINEDACTIONSPACE_HPP

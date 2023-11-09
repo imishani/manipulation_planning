@@ -64,6 +64,9 @@ namespace ims{
     private:
         bool verbose_ = false;
 
+        // The number of collision checks carried out.
+        int num_collision_checks_ = 0;
+
     public:
         /// @brief Constructor
         explicit MoveitInterface(const std::string &group_name) {
@@ -153,6 +156,7 @@ namespace ims{
         robotState.joint_state.name = joint_names_;
 
         // Check for the joint limits and if the scene is valid. 
+        num_collision_checks_++;
         return planning_scene_->isStateValid(robotState, group_name_);
     }
 
@@ -183,6 +187,7 @@ namespace ims{
         collision_request.max_contacts_per_pair = 1;
         collision_request.group_name = group_name_;
         planning_scene_->checkCollision(collision_request, collision_result);
+        num_collision_checks_++;
 
         // Convert the collision result to a collision collective.
         moveitCollisionResultToCollisionsCollective(collision_result, collisions_collective);
@@ -226,6 +231,7 @@ namespace ims{
         collision_request.group_name = group_name_;
 
         planning_scene_->checkCollision(collision_request, collision_result);
+        num_collision_checks_++;
 
         // Convert the collision result to a collision collective.
         moveitCollisionResultToCollisionsCollective(collision_result, collisions_collective);
@@ -361,6 +367,7 @@ namespace ims{
         collision_request.verbose = verbose_;
 
         planning_scene_->checkCollision(collision_request, collision_result);
+        num_collision_checks_++;
 
         // Convert the collision result to a collision collective.
         moveitCollisionResultToCollisionsCollective(collision_result, collisions_collective);
@@ -517,6 +524,11 @@ namespace ims{
             }
         }
         return true;
+    }
+
+
+    inline int getNumCollisionChecks() const {
+        return num_collision_checks_;
     }
 
         planning_scene_monitor::PlanningSceneMonitorPtr planning_scene_monitor_;
