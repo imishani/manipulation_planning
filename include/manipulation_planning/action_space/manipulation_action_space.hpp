@@ -782,6 +782,7 @@ namespace ims {
             marker.header.stamp = ros::Time();
             marker.ns = "graph";
             marker.id = vis_id_;
+            // marker.id = rand();
             marker.type = visualization_msgs::Marker::SPHERE;
             marker.action = visualization_msgs::Marker::ADD;
             marker.pose.position.x = x;
@@ -807,6 +808,12 @@ namespace ims {
             // visualize
             vis_pub_.publish(marker);
             vis_id_++;
+        }
+    
+        /// @brief Get the scene interface.
+        /// @return The scene interface
+        std::shared_ptr<MoveitInterface> getSceneInterface() {
+            return moveit_interface_;
         }
     };
 }  // namespace ims
