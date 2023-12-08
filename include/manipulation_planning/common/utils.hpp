@@ -48,9 +48,11 @@
 #include <moveit/distance_field/voxel_grid.h>
 #include <moveit/distance_field/propagation_distance_field.h>
 #include <moveit/distance_field/distance_field.h>
+#include <moveit/robot_state/conversions.h>
 
 #include <moveit/planning_scene_interface/planning_scene_interface.h>
 #include <moveit/planning_scene_monitor/planning_scene_monitor.h>
+#include <moveit_msgs/DisplayRobotState.h>
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <eigen_conversions/eigen_msg.h>
 #include <geometric_shapes/shape_operations.h>
@@ -764,8 +766,15 @@ namespace ims {
     }
         
     inline void moveitCollisionResultToCollisionsCollective(const collision_detection::CollisionResult& collision_result,
-                                                            CollisionsCollective& collisions)
+                                                            CollisionsCollective& collisions,
+                                                            std::string agent_name_prefix = "", // The name of the agent that we are checking collisions for. Must be a prefix of the body names.
+                                                            std::vector<std::string> other_agent_name_prefixes = {}) // The names of the other agents.
     {
+
+        // Add "base" to the list of other agents prefixes.
+        // TODO(yoraish): this is a hack to remove. The reason is that the base is not considered an agent in the collision detection.
+        other_agent_name_prefixes.push_back("base");
+
         collisions.clear();
         for (const auto& collision_pair_and_contacts : collision_result.contacts)
         {
@@ -774,25 +783,106 @@ namespace ims {
             c.body_name_0 = collision_pair_and_contacts.first.first;
             c.body_name_1 = collision_pair_and_contacts.first.second;
 
+            // A collision may be discarded if it is between two agents that we are not checking collisions for.
+            bool discard_collision = false;
+
             for (const auto& contact : contacts){
                 // Create a contact objects and add it to the collision object. Here, we need to change the body type from moveit to our new type.
 
                 c.contacts.emplace_back(Contact(contact.body_name_1, contact.body_name_2, contact.body_type_1, contact.body_type_2, contact.pos, contact.normal));
 
                 // Update the collision type of the collision object. This information is unfortunately only available in the contact object, so we take it from here.
-                if ((c.body_name_0 == c.contacts.back().body_name_0 && c.body_name_1 == c.contacts.back().body_name_1) || (c.body_name_0 == c.contacts.back().body_name_1 && c.body_name_1 == c.contacts.back().body_name_0))
+                if ((c.body_name_0 == c.contacts.back().body_name_0 && c.body_name_1 == c.contacts.back().body_name_1))
                 {
                     c.body_type_0 = c.contacts.back().body_type_0;
                     c.body_type_1 = c.contacts.back().body_type_1;
+                }
+                else if(c.body_name_0 == c.contacts.back().body_name_1 && c.body_name_1 == c.contacts.back().body_name_0)
+                {
+                    c.body_type_0 = c.contacts.back().body_type_1;
+                    c.body_type_1 = c.contacts.back().body_type_0;
                 }
                 else{
                     // Raise exception.
                     ROS_ERROR_STREAM("moveitCollisionResultToCollisionsCollective: The collision object names " << c.body_name_0 << " and " << c.body_name_1 << " do not match the contact object names " << c.contacts.back().body_name_0 << " and " << c.contacts.back().body_name_1 << ".");
                 }
+
+
+                // Check whether this collision is to be kept. First, if the self agent is in one of the collision objects.
+                std::string body_name_0_prefix = c.body_name_0.substr(0, c.body_name_0.find('_'));
+                std::string body_name_1_prefix = c.body_name_1.substr(0, c.body_name_1.find('_'));
+                if (agent_name_prefix != ""){
+                    // Check for self-collision.
+                    if (body_name_0_prefix == agent_name_prefix && body_name_1_prefix == agent_name_prefix){
+                        // This is a self collision. Keep it.
+                        continue;
+                    }
+
+                    // Now check if this is a collision between the self agent and a world object.
+                    if ((body_name_0_prefix == agent_name_prefix && c.body_type_1 == BodyType::WORLD_OBJECT) ||
+                        (body_name_1_prefix == agent_name_prefix && c.body_type_0 == BodyType::WORLD_OBJECT)){
+                        // This is a collision between the self agent and a world object. Keep it.
+                        continue;
+                    }
+
+                    // Now check if this is a collision between the self agent and another agent.
+                    if ((body_name_0_prefix == agent_name_prefix && std::find(other_agent_name_prefixes.begin(), other_agent_name_prefixes.end(), body_name_1_prefix) != other_agent_name_prefixes.end()) ||
+                        (body_name_1_prefix == agent_name_prefix && std::find(other_agent_name_prefixes.begin(), other_agent_name_prefixes.end(), body_name_0_prefix) != other_agent_name_prefixes.end())){
+                        // This is a collision between the self agent and another agent. Keep it.
+                        continue;
+                    }
+
+                    // If we got here, this is a collision between two agents that we are not checking collisions for. Discard it.
+                    discard_collision = true;
+                }
+
+                // If the self agent is not specified but only the others, check that all collision bodies are either in the other agents or are world objects.
+                else if (other_agent_name_prefixes.size() > 0){
+                    // Check if this is a collision between two other agents.
+                    if (std::find(other_agent_name_prefixes.begin(), other_agent_name_prefixes.end(), body_name_0_prefix) != other_agent_name_prefixes.end() &&
+                        std::find(other_agent_name_prefixes.begin(), other_agent_name_prefixes.end(), body_name_1_prefix) != other_agent_name_prefixes.end()){
+                        // This is a collision between two other agents. Keep it.
+                        continue;
+                    }
+
+                    // Now check if this is a collision between an other agent and a world object.
+                    if ((std::find(other_agent_name_prefixes.begin(), other_agent_name_prefixes.end(), body_name_0_prefix) != other_agent_name_prefixes.end() && c.body_type_1 == BodyType::WORLD_OBJECT) ||
+                        (std::find(other_agent_name_prefixes.begin(), other_agent_name_prefixes.end(), body_name_1_prefix) != other_agent_name_prefixes.end() && c.body_type_0 == BodyType::WORLD_OBJECT)){
+                        // This is a collision between an other agent and a world object. Keep it.
+                        continue;
+                    }
+
+                    // If we got here, this is a collision between two agents that we are not checking collisions for. Discard it.
+                    discard_collision = true;
+                }
             }
-            collisions.addCollision(c);
+
+            if (!discard_collision){
+                collisions.addCollision(c);
+            }
+            // else{
+            //     std::cout << RED << "Requested collision between self: " << agent_name_prefix << " and other: ";
+            //     for (const auto& other_agent_name_prefix : other_agent_name_prefixes){
+            //         std::cout << other_agent_name_prefix << " ";
+            //     }
+            //     std::string body_name_0_prefix = c.body_name_0.substr(0, std::find(c.body_name_0.begin(), c.body_name_0.end(), '_') - c.body_name_0.begin());
+            //     std::string body_name_1_prefix = c.body_name_1.substr(0, std::find(c.body_name_1.begin(), c.body_name_1.end(), '_') - c.body_name_1.begin());
+            //     std::cout << "\n    But discarded because the found collision was between " << body_name_0_prefix << " and " << body_name_1_prefix << RESET << std::endl;
+            // }
         }
+
+        return;
     }
+
+/// @brief Convert a mapping between robot names to states to a composite state given an ordering of the robots.
+void namedMultiAgentStateToStackedState(std::unordered_map<std::string, StateType> multi_state, std::vector<std::string> robot_names, StateType& stacked_state)
+{
+    stacked_state.clear();
+    for (const auto& robot_name : robot_names)
+    {
+        stacked_state.insert(stacked_state.end(), multi_state[robot_name].begin(), multi_state[robot_name].end());
+    }
+}
 
 } // namespace ims
 
