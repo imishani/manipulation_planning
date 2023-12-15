@@ -860,15 +860,6 @@ namespace ims {
             if (!discard_collision){
                 collisions.addCollision(c);
             }
-            // else{
-            //     std::cout << RED << "Requested collision between self: " << agent_name_prefix << " and other: ";
-            //     for (const auto& other_agent_name_prefix : other_agent_name_prefixes){
-            //         std::cout << other_agent_name_prefix << " ";
-            //     }
-            //     std::string body_name_0_prefix = c.body_name_0.substr(0, std::find(c.body_name_0.begin(), c.body_name_0.end(), '_') - c.body_name_0.begin());
-            //     std::string body_name_1_prefix = c.body_name_1.substr(0, std::find(c.body_name_1.begin(), c.body_name_1.end(), '_') - c.body_name_1.begin());
-            //     std::cout << "\n    But discarded because the found collision was between " << body_name_0_prefix << " and " << body_name_1_prefix << RESET << std::endl;
-            // }
         }
 
         return;
