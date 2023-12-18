@@ -599,7 +599,7 @@ public:
     /// @param resolution The resolution of the path (default: 0.005 rad)
     /// @return The interpolated path
     static PathType interpolatePath(const StateType &start, const StateType &end,
-                                    const double resolution = 0.2) {
+                                    const double resolution = 0.05) {
         // TODO: Currently only works for configuration space
         assert(start.size() == end.size());
         PathType path;
@@ -782,7 +782,6 @@ public:
         marker.header.stamp = ros::Time();
         marker.ns = "graph";
         marker.id = vis_id_;
-        // marker.id = rand();
         marker.type = visualization_msgs::Marker::SPHERE;
         marker.action = visualization_msgs::Marker::ADD;
         marker.pose.position.x = x;
