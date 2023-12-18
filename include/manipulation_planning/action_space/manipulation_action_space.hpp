@@ -382,8 +382,6 @@ protected:
     std::shared_ptr<MoveitInterface> moveit_interface_;
     /// @brief joint limits
     std::vector<std::pair<double, double>> joint_limits_;
-    /// @brief Joint states seed
-    //    std::vector<double> mJointStatesSeed {0, 0, 0, 0, 0, 0};
     /// @brief The BFS heuristic
     BFSHeuristic *bfs_heuristic_;
 

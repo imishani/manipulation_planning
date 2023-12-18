@@ -72,7 +72,6 @@ protected:
     /// @brief The BFS heuristic
     BFSHeuristic *bfs_heuristic_;
 
-    // TODO: delete: temp
     int vis_id_ = 0;
     ros::NodeHandle nh_;
     ros::Publisher vis_pub_;
