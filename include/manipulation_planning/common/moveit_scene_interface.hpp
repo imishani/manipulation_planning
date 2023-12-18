@@ -120,6 +120,7 @@ public:
         ros::Duration(1.0).sleep();
         planning_scene_ = planning_scene;
         group_name_ = group_name;
+        frame_id_ = planning_scene_->getPlanningFrame();
 
         kinematic_state_ = std::make_shared<moveit::core::RobotState>(planning_scene_->getCurrentState());
         // joint model group
@@ -245,113 +246,6 @@ public:
         return collisions_collective.size() == 0;
     }
 
-    /* TODO(yoraish): check if the implementation below is the correct one.
-    /// @brief check if the state is valid w.r.t. other bodies.
-    /// @param state the configuration to check
-    /// @param other_move_group_names the names of the robots to check against.
-    /// @param other_move_group_states the states of the robots to check against.
-    /// @param collisions_collective the collisions that have been found, potentially.
-    /// @return true if the state is valid, false otherwise.
-    bool isStateValid(const StateType &state,
-                      const std::vector<std::string> &other_move_group_names,
-                      const std::vector<StateType> &other_move_group_states,
-                      CollisionsCollective& collisions_collective) {
-        // Check the passed state for joint limits.
-        if (!isStateWithinJointLimits(state)) {
-            return false;
-        }
-
-        // Set the state of all robots.
-        robot_state::RobotState &current_scene_state = planning_scene_->getCurrentStateNonConst();
-        current_scene_state.setToDefaultValues(); // TODO(yoraish): do we need this?
-        int num_move_groups = other_move_group_names.size();
-        for (int i = 0; i < num_move_groups; i++) {
-            current_scene_state.setJointGroupPositions(other_move_group_names[i], other_move_group_states[i]);
-        }
-
-        // Set the state of the ego robot.
-        current_scene_state.setJointGroupPositions(group_name_, state);
-
-        // Check if this configuration is in collision. Whether any robot collides with any other.
-        collision_detection::CollisionRequest collision_request;
-        collision_detection::CollisionResult collision_result;
-        collision_request.contacts = true;
-        collision_request.max_contacts = 1000;
-        collision_request.max_contacts_per_pair = 1;
-        collision_request.verbose = verbose_;
-        collision_request.group_name = group_name_;
-
-        planning_scene_->checkCollision(collision_request, collision_result);
-        num_collision_checks_++;
-
-        // Convert the collision result to a collision collective.
-        moveitCollisionResultToCollisionsCollective(collision_result, collisions_collective);
-
-        // Go through the collisions collective and only keep the groups specified either in group_name_ or in other_move_group_names. These should be a suffix of any group name.
-        std::vector<Collision> collisions_to_keep;
-        std::vector<std::string> group_prefixes_to_keep{"base"};
-        std::string agent_name = group_name_.substr(0, group_name_.find("_"));
-        group_prefixes_to_keep.push_back(agent_name);
-        for (auto &other_move_group_name : other_move_group_names) {
-            std::string other_agent_name = other_move_group_name.substr(0, other_move_group_name.find("_"));
-            group_prefixes_to_keep.push_back(other_agent_name);
-        }
-
-        for (Collision collision : collisions_collective.getCollisions()) {
-            // Decide if this collisions should be kept. It should not be, if either of the bodies is a robot and is not does not have the prefix of "base", group_name_ or any of the other_move_group_names.
-            bool keep_collision = true;
-
-            // Check the body_name_0.
-            if(collision.body_type_0 == BodyType::ROBOT){
-                bool has_prefix = false;
-                for (auto &group_prefix : group_prefixes_to_keep) {
-                    if (collision.body_name_0.find(group_prefix) == 0) {
-                        has_prefix = true;
-                        break;
-                    }
-                }
-                if (!has_prefix) {
-                    keep_collision = false;
-                }
-            }
-
-            // Check the body_name_1.
-            if(collision.body_type_1 == BodyType::ROBOT){
-                bool has_prefix = false;
-                for (auto &group_prefix : group_prefixes_to_keep) {
-                    if (collision.body_name_1.find(group_prefix) == 0) {
-                        has_prefix = true;
-                        break;
-                    }
-                }
-                if (!has_prefix) {
-                    keep_collision = false;
-                }
-            }
-
-            // Add the collision to the list of collisions to keep.
-            if (keep_collision) {
-                collisions_to_keep.push_back(collision);
-            }
-            else{
-                std::cout << "Discarding collision between " << collision.body_name_0 << " and " << collision.body_name_1 << "." << std::endl;
-                std::cout << "The allowed prefixes are: ";
-                for (auto &group_prefix : group_prefixes_to_keep) {
-                    std::cout << group_prefix << ", ";
-                }
-                std::cout << std::endl;
-            }
-        }
-
-        // Set the collisions to keep.
-        collisions_collective.clear();
-        for (auto &collision : collisions_to_keep) {
-            collisions_collective.addCollision(collision);
-        }
-
-        return collisions_to_keep.empty();
-    }*/
-
     /// @brief check if the state is valid w.r.t. other bodies and other robots in given configurations.
     /// @param state
     /// @param other_move_group_names
@@ -411,8 +305,8 @@ public:
             // Add the object to the scene with a new name.
             moveit_msgs::CollisionObject collision_object;
             collision_object.id = "world_sphere" + std::to_string(object_msgs.size());
-            collision_object.header.frame_id = "base";
-            frame_id_;
+            collision_object.header.frame_id = frame_id_;
+
             shapes::ShapeMsg collision_object_shape_msg;
             shapes::Sphere *shape = new shapes::Sphere(obj.radius);
             shapes::constructMsgFromShape(shape, collision_object_shape_msg);
