@@ -30,7 +30,7 @@
  * \file   moveit_scene_interface.hpp
  * \author Itamar Mishani (imishani@cmu.edu)
  * \date   4/3/23
-*/
+ */
 
 #ifndef MANIPULATION_PLANNING_MOVEITINTERFACE_HPP
 #define MANIPULATION_PLANNING_MOVEITINTERFACE_HPP
@@ -40,12 +40,11 @@
 #include <vector>
 
 // include ROS libraries
-#include <ros/ros.h>
-#include <moveit/move_group_interface/move_group_interface.h>
-#include <moveit/planning_scene_monitor/planning_scene_monitor.h>
-#include <moveit/planning_scene_interface/planning_scene_interface.h>
-
 #include <eigen_conversions/eigen_msg.h>
+#include <moveit/move_group_interface/move_group_interface.h>
+#include <moveit/planning_scene_interface/planning_scene_interface.h>
+#include <moveit/planning_scene_monitor/planning_scene_monitor.h>
+#include <ros/ros.h>
 
 // project includes
 #include <manipulation_planning/common/utils.hpp>
@@ -54,7 +53,7 @@
 #include <search/common/types.hpp>
 #include <search/common/world_objects.hpp>
 
-namespace ims{
+namespace ims {
 
 /// @class MoveitInterface
 /// @brief A class that implements the SceneInterface for Moveit
@@ -106,7 +105,6 @@ public:
             std::cout << "No collision objects in the scene" << std::endl;
         }
     };
-
 
     /// @brief Constructor with the option to set the planning scene.
     MoveitInterface(const std::string &group_name, planning_scene::PlanningScenePtr &planning_scene) {
@@ -197,7 +195,7 @@ public:
     bool isStateValid(const StateType &state,
                       const std::vector<std::string> &other_move_group_names,
                       const std::vector<StateType> &other_move_group_states,
-                      CollisionsCollective& collisions_collective) {
+                      CollisionsCollective &collisions_collective) {
         // Check the passed state for joint limits.
         if (!isStateWithinJointLimits(state)) {
             return false;
@@ -241,7 +239,7 @@ public:
                       const std::vector<std::string> &other_move_group_names,
                       const std::vector<StateType> &other_move_group_states,
                       const std::vector<SphereWorldObject> &sphere_world_objects,
-                      CollisionsCollective& collisions_collective) {
+                      CollisionsCollective &collisions_collective) {
         // Add the objects to the scene. Keep track of the objects.
         std::vector<moveit_msgs::CollisionObject> object_msgs;
         addSpheresToScene(sphere_world_objects, object_msgs);
@@ -264,8 +262,7 @@ public:
     /// @return
     bool isStateValid(const StateType &state,
                       const std::vector<SphereWorldObject> &sphere_world_objects,
-                      CollisionsCollective& collisions_collective){
-
+                      CollisionsCollective &collisions_collective) {
         // Add the objects to the scene. Keep track of the objects.
         std::vector<moveit_msgs::CollisionObject> object_msgs;
         addSpheresToScene(sphere_world_objects, object_msgs);
@@ -283,12 +280,10 @@ public:
     /// @param sphere_world_objects
     /// @param object_msgs the collision objects that were added to the scene.
     /// @return nothing.
-    void addSpheresToScene(const std::vector<SphereWorldObject> &sphere_world_objects, std::vector<moveit_msgs::CollisionObject> &object_msgs){
-
-        planning_scene_interface_ = std::make_shared<moveit::planning_interface::PlanningSceneInterface>(); // TODO(yorais): this should be initialized elsewhere.
+    void addSpheresToScene(const std::vector<SphereWorldObject> &sphere_world_objects, std::vector<moveit_msgs::CollisionObject> &object_msgs) {
+        planning_scene_interface_ = std::make_shared<moveit::planning_interface::PlanningSceneInterface>();  // TODO(yorais): this should be initialized elsewhere.
 
         for (auto &obj : sphere_world_objects) {
-
             // Add the object to the scene with a new name.
             moveit_msgs::CollisionObject collision_object;
             collision_object.id = "world_sphere" + std::to_string(object_msgs.size());
@@ -311,24 +306,23 @@ public:
             collision_object.operation = moveit_msgs::CollisionObject::ADD;
 
             // Update the planning scene.
-            planning_scene_interface_->applyCollisionObject(collision_object); // For visualization. TODO(yoraish): remove.
-            planning_scene_->processCollisionObjectMsg(collision_object);  // For collision checking.
+            planning_scene_interface_->applyCollisionObject(collision_object);  // For visualization. TODO(yoraish): remove.
+            planning_scene_->processCollisionObjectMsg(collision_object);       // For collision checking.
 
             // Add the object to the list of objects.
             object_msgs.push_back(collision_object);
-
         }
     }
 
     /// @brief Remove collision objects from the planning scene.
     /// @param object_msgs
     void removeObjectsFromScene(std::vector<moveit_msgs::CollisionObject> object_msgs) {
-        planning_scene_interface_ = std::make_shared<moveit::planning_interface::PlanningSceneInterface>(); // TODO(yorais): this should be initialized elsewhere.
+        planning_scene_interface_ = std::make_shared<moveit::planning_interface::PlanningSceneInterface>();  // TODO(yorais): this should be initialized elsewhere.
 
         for (auto &obj_msg : object_msgs) {
             obj_msg.operation = moveit_msgs::CollisionObject_<std::allocator<void>>::REMOVE;
-            planning_scene_interface_->applyCollisionObject(obj_msg); // TODO(yoraish): For viz. Remove this.
-            planning_scene_->processCollisionObjectMsg(obj_msg);  // For collision checking.
+            planning_scene_interface_->applyCollisionObject(obj_msg);  // TODO(yoraish): For viz. Remove this.
+            planning_scene_->processCollisionObjectMsg(obj_msg);       // For collision checking.
         }
     }
 
@@ -373,7 +367,6 @@ public:
         // return true;
     }
 
-
     /// @brief Calculate IK for a given pose
     /// @param pose The pose to calculate IK for
     /// @param joint_state The joint state to store the IK solution
@@ -401,7 +394,6 @@ public:
         }
     }
 
-
     /// @brief Calculate IK for a given pose and a given seed
     /// @param pose The pose to calculate IK for
     /// @param seed The seed to use for the IK
@@ -417,7 +409,7 @@ public:
         // resize the joint state
         joint_state.resize(num_joints_);
         // set the pose
-        kinematic_state_->setJointGroupPositions(joint_model_group,seed);
+        kinematic_state_->setJointGroupPositions(joint_model_group, seed);
         // update
         planning_scene_monitor_->updateFrameTransforms();
         planning_scene_monitor_->updateSceneWithCurrentState();
@@ -433,7 +425,8 @@ public:
                                         timeout)) {
             kinematic_state_->copyJointGroupPositions(joint_model_group, joint_state);
             return true;
-        } else {
+        }
+        else {
             ROS_INFO("No IK solution found using seed");
             return false;
         }
@@ -466,14 +459,12 @@ public:
 
     /// @brief get the joint limits
     /// @param joint_limits The joint limits to store the limits
-    void getJointLimits(std::vector<std::pair<double, double>> &joint_limits) const { // TODO: check if this is the right way to do it
+    void getJointLimits(std::vector<std::pair<double, double>> &joint_limits) const {  // TODO: check if this is the right way to do it
         const auto &bounds = joint_model_group->getActiveJointModelsBounds();
         std::vector<double> min_vals, max_vals;
-        for(int i = 0; i < num_joints_;i++)
-        {
+        for (int i = 0; i < num_joints_; i++) {
             const auto *jb = bounds[i];
-            for(auto& b: *jb)
-            {
+            for (auto &b : *jb) {
                 max_vals.push_back(b.max_position_);
                 min_vals.push_back(b.min_position_);
             }
@@ -482,8 +473,7 @@ public:
         joint_limits.resize(num_joints_);
         // assert if the number of joint is not equal to the size of the bounds
         assert(num_joints_ == min_vals.size());
-        for(int i = 0; i < num_joints_;i++)
-        {
+        for (int i = 0; i < num_joints_; i++) {
             joint_limits[i] = std::make_pair(min_vals[i], max_vals[i]);
         }
     }
@@ -511,7 +501,6 @@ public:
     /// @brief Ordered names of the move groups in the scene. Agent0 is at the zero index, agent1 at the first index, etc.
     std::vector<std::string> scene_move_group_names_;
 };
-}
+}  // namespace ims
 
-#endif //MANIPULATION_PLANNING_MOVEITINTERFACE_HPP
-
+#endif  // MANIPULATION_PLANNING_MOVEITINTERFACE_HPP
