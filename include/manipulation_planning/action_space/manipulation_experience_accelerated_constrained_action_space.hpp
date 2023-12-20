@@ -50,7 +50,7 @@
 #include <manipulation_planning/common/moveit_scene_interface.hpp>
 #include <manipulation_planning/common/utils.hpp>
 #include <manipulation_planning/heuristics/manip_heuristics.hpp>
-#include <search/action_space/subcost_experience_accelerated_constrained_action_space.hpp>
+#include <search/action_space/subcost_action_space.hpp>
 #include <manipulation_planning/action_space/manipulation_action_space.hpp>
 
 namespace ims {

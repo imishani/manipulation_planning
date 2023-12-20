@@ -204,9 +204,9 @@ public:
     BFSHeuristic() : BFSHeuristic(getDistanceFieldMoveIt()) {
     }
 
-    explicit BFSHeuristic(std::shared_ptr<distance_field::PropagationDistanceField> distance_field_,
+    explicit BFSHeuristic(std::shared_ptr<distance_field::PropagationDistanceField> distance_field,
                           const std::string& group_name = "manipulator_1") {
-        m_distanceField = std::move(distance_field_);
+        distance_field_ = std::move(distance_field);
         // setup robot move group and planning scene
         move_group = std::make_shared<moveit::planning_interface::MoveGroupInterface>(group_name);
         // robot model
@@ -226,11 +226,11 @@ public:
     }
 
     void setInflationRadius(double radius) {
-        m_inflation_radius = radius;
+        inflation_radius_ = radius;
     }
 
     void setCostPerCell(int cost_per_cell) {
-        m_cost_per_cell = cost_per_cell;
+        cost_per_cell_ = cost_per_cell;
     }
 
     void setGoal(const StateType& goal) override {
@@ -243,14 +243,14 @@ public:
 
         auto goal_position = ee_goal_state_.translation();
         int x, y, z;
-        m_distanceField->worldToGrid(goal_position.x(), goal_position.y(), goal_position.z(),
+        distance_field_->worldToGrid(goal_position.x(), goal_position.y(), goal_position.z(),
                                      x, y, z);
-        if (!m_bfs->inBounds(x, y, z))
+        if (!bfs_->inBounds(x, y, z))
             throw std::runtime_error("goal is out of bounds");
 
         m_goal_cells.emplace_back(x, y, z);
 
-        m_bfs->run(x, y, z); // TODO(yoraish): does this take other _robots_ into account too? Or only static obstacles.
+        bfs_->run(x, y, z); // TODO(yoraish): does this take other _robots_ into account too? Or only static obstacles.
 
         // Flag for whether the goal is set.
         is_goal_set = true;
@@ -262,7 +262,7 @@ public:
         auto ee_start_state = kinematic_state->getGlobalLinkTransform(tip_link);
 
         auto start_position = ee_start_state.translation();
-        m_distanceField->worldToGrid(start_position.x(), start_position.y(), start_position.z(),
+        distance_field_->worldToGrid(start_position.x(), start_position.y(), start_position.z(),
                                      start_cells[0], start_cells[1], start_cells[2]);
         //            if (!bfs_->inBounds(x, y, z))
         //                throw std::runtime_error("start is out of bounds");
@@ -275,11 +275,11 @@ public:
     /// @return The distance to the goal state
     double getMetricGoalDistance(double x, double y, double z) const {
         int gx, gy, gz;
-        m_distanceField->worldToGrid(x, y, z, gx, gy, gz);
-        if (!m_bfs->inBounds(gx, gy, gz))
-            return (double)::smpl::BFS_3D::WALL * m_distanceField->getResolution();
+        distance_field_->worldToGrid(x, y, z, gx, gy, gz);
+        if (!bfs_->inBounds(gx, gy, gz))
+            return (double)::smpl::BFS_3D::WALL * distance_field_->getResolution();
         else
-            return (double)m_bfs->getDistance(gx, gy, gz) * m_distanceField->getResolution();
+            return (double)bfs_->getDistance(gx, gy, gz) * distance_field_->getResolution();
     }
 
     /// @brief Get the metric distance to the start state
@@ -289,9 +289,9 @@ public:
     /// @return The distance to the start state
     double getMetricStartDistance(double x, double y, double z) {
         int sx, sy, sz;
-        m_distanceField->worldToGrid(x, y, z, sx, sy, sz);
+        distance_field_->worldToGrid(x, y, z, sx, sy, sz);
         // manhattan distance
-        return (std::abs(sx - start_cells[0]) + std::abs(sy - start_cells[1]) + std::abs(sz - start_cells[2])) * m_distanceField->getResolution();
+        return (std::abs(sx - start_cells[0]) + std::abs(sy - start_cells[1]) + std::abs(sz - start_cells[2])) * distance_field_->getResolution();
     }
 
     bool getHeuristic(const StateType& s1, const StateType& s2, double& dist) override {
@@ -301,7 +301,7 @@ public:
 
         auto check_position = ee_check_state.translation();
         int x, y, z;
-        m_distanceField->worldToGrid(check_position.x(), check_position.y(), check_position.z(),
+        distance_field_->worldToGrid(check_position.x(), check_position.y(), check_position.z(),
                                      x, y, z);
         // check if s2 is a goal state
         for (const auto& goal_cell : m_goal_cells) {
@@ -325,10 +325,10 @@ public:
 
         auto s_position = pose_ee.translation();
         int x, y, z;
-        m_distanceField->worldToGrid(s_position.x(), s_position.y(), s_position.z(),
+        distance_field_->worldToGrid(s_position.x(), s_position.y(), s_position.z(),
                                      x, y, z);
 
-        dist = getBfsCostToGoal(*m_bfs, x, y, z);
+        dist = getBfsCostToGoal(*bfs_, x, y, z);
 
         return true;
     }
@@ -352,10 +352,10 @@ public:
     }
 
 private:
-    std::shared_ptr<distance_field::PropagationDistanceField> m_distanceField;
-    std::unique_ptr<::smpl::BFS_3D> m_bfs;
-    double m_inflation_radius = 0.02;
-    int m_cost_per_cell = 100;
+    std::shared_ptr<distance_field::PropagationDistanceField> distance_field_;
+    std::unique_ptr<::smpl::BFS_3D> bfs_;
+    double inflation_radius_ = 0.02;
+    int cost_per_cell_ = 100;
     int start_cells[3]{};
 
     // Flag for whether the goal is set.
@@ -369,18 +369,18 @@ private:
     std::vector<CellCoord> m_goal_cells;
 
     void syncGridAndBfs() {
-        const int xc = m_distanceField->getXNumCells();
-        const int yc = m_distanceField->getYNumCells();
-        const int zc = m_distanceField->getZNumCells();
-        m_bfs = std::make_unique<::smpl::BFS_3D>(xc, yc, zc);
+        const int xc = distance_field_->getXNumCells();
+        const int yc = distance_field_->getYNumCells();
+        const int zc = distance_field_->getZNumCells();
+        bfs_ = std::make_unique<::smpl::BFS_3D>(xc, yc, zc);
         const int cell_count = xc * yc * zc;
         int wall_count = 0;
         for (int x = 0; x < xc; ++x) {
             for (int y = 0; y < yc; ++y) {
                 for (int z = 0; z < zc; ++z) {
-                    const double radius = m_inflation_radius;
-                    if (m_distanceField->getDistance(x, y, z) <= radius) {
-                        m_bfs->setWall(x, y, z);
+                    const double radius = inflation_radius_;
+                    if (distance_field_->getDistance(x, y, z) <= radius) {
+                        bfs_->setWall(x, y, z);
                         ++wall_count;
                     }
                 }
@@ -394,7 +394,7 @@ private:
         if (!bfs.inBounds(x, y, z) || bfs.getDistance(x, y, z) == ::smpl::BFS_3D::WALL)
             return INF_INT;
         else {
-            return m_cost_per_cell * bfs.getDistance(x, y, z);
+            return cost_per_cell_ * bfs.getDistance(x, y, z);
         }
     }
 
@@ -411,8 +411,8 @@ public:
     BFSRemoveTimeHeuristic() : BFSHeuristic() {
     }
 
-    explicit BFSRemoveTimeHeuristic(std::shared_ptr<distance_field::PropagationDistanceField> distance_field_,
-                                    const std::string& group_name = "panda0_arm") : BFSHeuristic(distance_field_, group_name) {
+    explicit BFSRemoveTimeHeuristic(std::shared_ptr<distance_field::PropagationDistanceField> distance_field,
+                                    const std::string& group_name = "panda0_arm") : BFSHeuristic(distance_field, group_name) {
     }
 
     void setGoal(const StateType& goal) override {

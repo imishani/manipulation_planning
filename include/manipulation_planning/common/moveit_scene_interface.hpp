@@ -110,7 +110,7 @@ public:
     };
 
     /// @brief Constructor with the option to set the planning scene.
-    explicit MoveitInterface(const std::string &group_name, planning_scene::PlanningScenePtr &planning_scene) {
+    MoveitInterface(const std::string &group_name, planning_scene::PlanningScenePtr &planning_scene) {
         // planning scene monitor
         planning_scene_monitor_ = std::make_shared<planning_scene_monitor::PlanningSceneMonitor>("robot_description");
         planning_scene_monitor_->startSceneMonitor();
@@ -349,7 +349,7 @@ public:
     /// @param other_move_group_names the names of the robots to check against.
     /// @param other_move_group_states the states of the robots to check against.
     /// @param collisions_collective the collisions that have been found, potentially.
-    /// @return true if the state is valid, false otherwise.
+    /// @return true if the state is in collision, false otherwise.
     bool checkCollision(const std::vector<std::string> &other_move_group_names,
                         const std::vector<StateType> &other_move_group_states,
                         CollisionsCollective &collisions_collective) {
