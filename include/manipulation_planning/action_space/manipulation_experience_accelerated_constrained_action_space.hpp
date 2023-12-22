@@ -34,7 +34,7 @@
 
 #ifndef MANIPULATION_PLANNING_MANIPULATION_EXPERIENCE_ACCELERATED_CONSTRAINEDACTIONSPACE_HPP
 #define MANIPULATION_PLANNING_MANIPULATION_EXPERIENCE_ACCELERATED_CONSTRAINEDACTIONSPACE_HPP
-
+/*
 // include standard libraries
 #include <iostream>
 #include <utility>
@@ -74,8 +74,8 @@ protected:
 
     // TODO: delete: temp
     int vis_id_ = 0;
-    ros::NodeHandle nh_;
-    ros::Publisher vis_pub_;
+    rclcpp::NodeHandle nh_;
+    rclcpp::Publisher vis_pub_;
 
     // Instance of the ManipulationActionSpace class to use some of its methods.
     // Since the ManipulationActionSpace class does not have a default constructor, the line above does not work. So instead we set it to nullptr and instantiate it in the constructor.
@@ -93,7 +93,7 @@ public:
         
         // Get the joint limits.
         moveit_interface_->getJointLimits(joint_limits_);
-        vis_pub_ = nh_.advertise<visualization_msgs::Marker>("visualization_marker", 0);
+        vis_pub_ = nh_.advertise<visualization_msgs::msg::Marker>("visualization_marker", 0);
 
         // Instantiate the ManipulationActionSpace class, for use of some of its methods.
         manip_action_space_ = std::make_shared<ManipulationActionSpace>(env, actions_ptr, bfs_heuristic);
@@ -236,13 +236,13 @@ public:
     /// @brief Visualize a state point in rviz for debugging, with color.
     void VisualizeCube(double x, double y, double z, double r, double g, double b, double a) {
         // Use the implementation from manipulation action space.
-        visualization_msgs::Marker marker;
+        visualization_msgs::msg::Marker marker;
         marker.header.frame_id = moveit_interface_->planning_scene_->getPlanningFrame();
-        marker.header.stamp = ros::Time();
+        marker.header.stamp = rclcpp::Time();
         marker.ns = "graph";
         marker.id = vis_id_;
-        marker.type = visualization_msgs::Marker::CUBE;
-        marker.action = visualization_msgs::Marker::ADD;
+        marker.type = visualization_msgs::msg::Marker::CUBE;
+        marker.action = visualization_msgs::msg::Marker::ADD;
         marker.pose.position.x = x;
         marker.pose.position.y = y;
         marker.pose.position.z = z;
@@ -261,7 +261,7 @@ public:
         marker.color.a = a;
         
         // Lifetime.
-        marker.lifetime = ros::Duration(5.0);
+        marker.lifetime = rclcpp::Duration(5.0);
         // visualize
         vis_pub_.publish(marker);
         vis_id_++;
@@ -270,14 +270,14 @@ public:
 
     /// @brief Visualize a state via its end effector pose in rviz for debugging
     /// @param pose
-    void visualizePose(const geometry_msgs::Pose &pose) {
-        visualization_msgs::Marker marker;
+    void visualizePose(const geometry_msgs::msg::Pose &pose) {
+        visualization_msgs::msg::Marker marker;
         marker.header.frame_id = moveit_interface_->planning_scene_->getPlanningFrame();
-        marker.header.stamp = ros::Time();
+        marker.header.stamp = rclcpp::Time();
         marker.ns = "graph";
         marker.id = vis_id_;
-        marker.type = visualization_msgs::Marker::ARROW; // Other options are CUBE, SPHERE, CYLINDER, AXIS, etc.
-        marker.action = visualization_msgs::Marker::ADD;
+        marker.type = visualization_msgs::msg::Marker::ARROW; // Other options are CUBE, SPHERE, CYLINDER, AXIS, etc.
+        marker.action = visualization_msgs::msg::Marker::ADD;
         marker.pose = pose;
 
         marker.scale.x = 0.1; marker.scale.y = 0.01; marker.scale.z = 0.01;
@@ -286,7 +286,7 @@ public:
         marker.color.a = 0.5;
 
         // Lifetime.
-        marker.lifetime = ros::Duration(5.0);
+        marker.lifetime = rclcpp::Duration(5.0);
         
         // visualize
         vis_pub_.publish(marker);
@@ -325,5 +325,5 @@ public:
     }
     };
 }  // namespace ims
-
+*/
 #endif  // MANIPULATION_PLANNING_MANIPULATION_EXPERIENCE_ACCELERATED_CONSTRAINEDACTIONSPACE_HPP

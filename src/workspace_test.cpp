@@ -8,10 +8,11 @@
 #include <search/planners/wastar.hpp>
 #include <search/heuristics/standard_heuristics.hpp>
 
-#include <ros/ros.h>
-// include tf2
+#include <rclcpp/rclcpp.hpp>
+#include <tf2/LinearMath/Quaternion.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 #include <tf2_ros/transform_listener.h>
+#include <geometry_msgs/msg/pose.hpp>
 
 #include <manipulation_planning/common/utils.hpp>
 
@@ -19,9 +20,9 @@
 
 int main(int argc, char** argv) {
 
-    ros::init(argc, argv, "workspace_test");
-    ros::NodeHandle nh;
-    ros::AsyncSpinner spinner(1);
+    rclcpp::init(argc, argv, "workspace_test");
+    rclcpp::NodeHandle nh;
+    rclcpp::AsyncSpinner spinner(1);
     spinner.start();
 
     auto full_path = boost::filesystem::path(__FILE__).parent_path().parent_path();
@@ -50,7 +51,7 @@ int main(int argc, char** argv) {
 
     StateType start_state {0, 0, 0, 0, 0, 0};
     // get the current end effector pose
-    geometry_msgs::PoseStamped current_pose = move_group.getCurrentPose();  // "arm_1tool0"
+    geometry_msgs::msg::PoseStamped current_pose = move_group.getCurrentPose();  // "arm_1tool0"
 
     start_state[0] = current_pose.pose.position.x;
     start_state[1] = current_pose.pose.position.y;
@@ -80,7 +81,7 @@ int main(int argc, char** argv) {
     }
     Eigen::Quaterniond start_pose_eigen;
     ims::from_euler_zyx(start_state[5], start_state[4], start_state[3], start_pose_eigen);
-    geometry_msgs::Pose pose_check;
+    geometry_msgs::msg::Pose pose_check;
     pose_check.position.x = start_state[0]; pose_check.position.y = start_state[1]; pose_check.position.z = start_state[2];
     tf::quaternionEigenToMsg(start_pose_eigen, pose_check.orientation);
 
@@ -158,9 +159,9 @@ int main(int argc, char** argv) {
 //        traj.push_back(state->getState());
 //    }
 //    // execute a waypoint in the workspace
-//    std::vector<geometry_msgs::Pose> waypoints;
+//    std::vector<geometry_msgs::msg::Pose> waypoints;
 //    for (auto& state : traj) {
-//        geometry_msgs::Pose pose;
+//        geometry_msgs::msg::Pose pose;
 //        pose.position.x = state[0];
 //        pose.position.y = state[1];
 //        pose.position.z = state[2];
@@ -170,7 +171,7 @@ int main(int argc, char** argv) {
 //        pose.orientation.z = quat_res.z(); pose.orientation.w = quat_res.w();
 //        waypoints.push_back(pose);
 //    }
-//    moveit_msgs::RobotTrajectory trajectory;
+//    moveit_msgs::msg::RobotTrajectoryy trajectory;
 //    double fraction = move_group_.computeCartesianPath(waypoints, 0.01, 0.0, trajectory);
 //    std::cout << "fraction: " << fraction << std::endl;
 //    moveit::planning_interface::MoveGroupInterface::Plan my_plan;
@@ -186,7 +187,7 @@ int main(int argc, char** argv) {
 //        assert(state->getMappedState().size() == move_group_.getJoints().size());
 //        traj.push_back(state->getMappedState());
 //    }
-//    moveit_msgs::RobotTrajectory trajectory;
+//    moveit_msgs::msg::RobotTrajectoryy trajectory;
 //    ims::profileTrajectory(start_state,
 //                           goal_state,
 //                           traj,

@@ -42,9 +42,11 @@
 
 // include ROS libraries
 #include <moveit/move_group_interface/move_group_interface.h>
-#include <ros/ros.h>
+#include <visualization_msgs/msg/marker.hpp>
+#include <rclcpp/rclcpp.hpp>
 // include tf to convert euler angles to quaternions
-#include <tf/transform_datatypes.h>
+#include <tf2/transform_datatypes.h>
+#include <geometry_msgs/msg/pose.hpp>
 
 // project includes
 #include <search/action_space/action_space.hpp>
@@ -134,12 +136,13 @@ struct ManipulationType : ActionType {
                         std::string first_line = "Motion_Primitives(degrees): ";
                         // Check if the line begins with the string
                         if (line.find(first_line) != 0) {
-                            ROS_ERROR_STREAM("The first line of the motion primitives file should begin with: " << first_line);
+                            auto logger = rclcpp::get_logger("manipulation_action_space");
+                            std::cout << "The first line of the motion primitives file should begin with: " << first_line << std::endl;
                         }
                         // Get the numbers
                         std::istringstream iss(line.substr(first_line.size()));
                         if (!(iss >> tot_prim >> dof >> num_short_prim)) {
-                            ROS_ERROR_STREAM("The first line of the motion primitives file should begin with: " << first_line);
+                            std::cout <<    "The first line of the motion primitives file should begin with: " << first_line;
                         }
                         i++;
                         continue;
@@ -172,12 +175,12 @@ struct ManipulationType : ActionType {
                         std::string first_line = "Motion_Primitives(meters/degrees): ";
                         // Check if the line begins with the string
                         if (line.find(first_line) != 0) {
-                            ROS_ERROR_STREAM("The first line of the motion primitives file should begin with: " << first_line);
+                            std::cout << "The first line of the motion primitives file should begin with: " << first_line;
                         }
                         // Get the numbers
                         std::istringstream iss(line.substr(first_line.size()));
                         if (!(iss >> tot_ptim >> positions_prims >> orientations_prims)) {
-                            ROS_ERROR_STREAM("The first line of the motion primitives file should begin with: " << first_line);
+                            std::cout << "The first line of the motion primitives file should begin with: " << first_line;
                         }
                         i++;
                         continue;
@@ -240,7 +243,7 @@ struct ManipulationType : ActionType {
                                 inverted_action[4] = -action_[4];
                                 inverted_action[5] = -action_[5];
                                 // convert from euler angles to quaternions
-                                tf::Quaternion q;
+                                tf2::Quaternion q;
                                 q.setRPY(action_[3] * M_PI / 180.0,
                                          action_[4] * M_PI / 180,
                                          action_[5] * M_PI / 180);
@@ -324,8 +327,6 @@ struct ManipulationType : ActionType {
         if (mprim_active_type_.snap_xyzrpy.first && goal_dist < mprim_active_type_.snap_xyzrpy.second) {
             actions_.push_back({INF_DOUBLE, INF_DOUBLE, INF_DOUBLE,
                                 INF_DOUBLE, INF_DOUBLE, INF_DOUBLE});  // TODO: Fix this to make it better designed
-            ROS_DEBUG_NAMED("adaptive_mprim", "snap xyzrpy");
-            ROS_DEBUG_STREAM("goal_dist: " << goal_dist);
         }
         return actions_;
     }
@@ -387,8 +388,8 @@ protected:
 
     // TODO: delete: temp
     int vis_id_ = 0;
-    ros::NodeHandle nh_;
-    ros::Publisher vis_pub_;
+    rclcpp::Node::SharedPtr node_;
+    rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr vis_pub_;
 
 public:
     /// @brief Constructor
@@ -401,7 +402,13 @@ public:
         manipulation_type_ = std::make_shared<ManipulationType>(actions_ptr);
         // get the joint limits
         moveit_interface_->getJointLimits(joint_limits_);
-        vis_pub_ = nh_.advertise<visualization_msgs::Marker>("visualization_marker", 0);
+
+        // Set the ros node for this class.
+        node_ = rclcpp::Node::make_shared("manipulation_action_space");
+
+        // Initialize the publisher for the visualization markers.
+        vis_pub_ = node_->create_publisher<visualization_msgs::msg::Marker>("visualization_marker", 0);
+    
     }
 
     void getActions(int state_id,
@@ -503,7 +510,7 @@ public:
                 return moveit_interface_->isStateValid(state_val);
             case ManipulationType::SpaceType::WorkSpace:
                 // check if state exists with IK solution already
-                geometry_msgs::Pose pose;
+                geometry_msgs::msg::Pose pose;
                 pose.position.x = state_val[0];
                 pose.position.y = state_val[1];
                 pose.position.z = state_val[2];
@@ -536,7 +543,7 @@ public:
             case ManipulationType::SpaceType::ConfigurationSpace:
                 return moveit_interface_->isStateValid(state_val);
             case ManipulationType::SpaceType::WorkSpace:
-                geometry_msgs::Pose pose;
+                geometry_msgs::msg::Pose pose;
                 pose.position.x = state_val[0];
                 pose.position.y = state_val[1];
                 pose.position.z = state_val[2];
@@ -549,7 +556,7 @@ public:
                 pose.orientation.w = q.w();
                 bool succ = moveit_interface_->calculateIK(pose, joint_state);
                 if (!succ) {
-                    ROS_INFO("IK failed");
+                    RCLCPP_INFO(node_->get_logger(), "IK failed");
                     return false;
                 }
                 else {
@@ -567,7 +574,7 @@ public:
             case ManipulationType::SpaceType::ConfigurationSpace:
                 return moveit_interface_->isStateValid(state_val);
             case ManipulationType::SpaceType::WorkSpace:
-                geometry_msgs::Pose pose;
+                geometry_msgs::msg::Pose pose;
                 pose.position.x = state_val[0];
                 pose.position.y = state_val[1];
                 pose.position.z = state_val[2];
@@ -634,7 +641,7 @@ public:
             case ManipulationType::SpaceType::WorkSpace:
                 PathType poses;
                 for (auto &state : path) {
-                    geometry_msgs::Pose pose;
+                    geometry_msgs::msg::Pose pose;
                     pose.position.x = state[0];
                     pose.position.y = state[1];
                     pose.position.z = state[2];
@@ -694,7 +701,7 @@ public:
             bool succ;
             StateType mapped_state;
             if (curr_state->state_mapped.empty()) {
-                //                    ROS_INFO("No mapped state, using IK without seed");
+                //                    RCLCPP_INFO(node_->get_logger(), "No mapped state, using IK without seed");
                 succ = isStateValid(new_state_val,
                                     mapped_state);
             }
@@ -775,13 +782,13 @@ public:
     /// @param state_id The state id
     /// @param type The type of state (greedy, attractor, etc)
     void VisualizePoint(double x, double y, double z) {
-        visualization_msgs::Marker marker;
+        visualization_msgs::msg::Marker marker;
         marker.header.frame_id = moveit_interface_->planning_scene_->getPlanningFrame();
-        marker.header.stamp = ros::Time();
+        marker.header.stamp = rclcpp::Clock().now();
         marker.ns = "graph";
         marker.id = vis_id_;
-        marker.type = visualization_msgs::Marker::SPHERE;
-        marker.action = visualization_msgs::Marker::ADD;
+        marker.type = visualization_msgs::msg::Marker::SPHERE;
+        marker.action = visualization_msgs::msg::Marker::ADD;
         marker.pose.position.x = x;
         marker.pose.position.y = y;
         marker.pose.position.z = z;
@@ -800,10 +807,10 @@ public:
         marker.color.a = 0.5;
 
         // Lifetime.
-        marker.lifetime = ros::Duration(5.0);
+        marker.lifetime = rclcpp::Duration::from_seconds(5.0);
 
         // visualize
-        vis_pub_.publish(marker);
+        vis_pub_->publish(marker);
         vis_id_++;
     }
 

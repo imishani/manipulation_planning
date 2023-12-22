@@ -50,27 +50,27 @@
 
 int main(int argc, char** argv) {
 
-    ros::init(argc, argv, "configuration_test");
-    ros::NodeHandle nh;
-    ros::AsyncSpinner spinner(8);
+    rclcpp::init(argc, argv, "configuration_test");
+    rclcpp::NodeHandle nh;
+    rclcpp::AsyncSpinner spinner(8);
     spinner.start();
 
-    std::string group_name = "manipulator_1";
+    std::string group_name = "panda_arm";
     double discret = 1;
 
     if (argc == 0) {
-        ROS_INFO_STREAM(BOLDMAGENTA << "No arguments given: using default values");
-        ROS_INFO_STREAM("<group_name(string)> <discretization(int)> ");
-        ROS_INFO_STREAM("Using default values: manipulator_1 1" << RESET);
+        RCLCPP_INFO_STREAM(this->get_logger(), BOLDMAGENTA << "No arguments given: using default values");
+        RCLCPP_INFO_STREAM(this->get_logger(), "<group_name(string)> <discretization(int)> ");
+        RCLCPP_INFO_STREAM(this->get_logger(), "Using default values: manipulator_1 1" << RESET);
     } else if (argc == 2) {
         group_name = argv[1];
     } else if (argc == 3) {
         group_name = argv[1];
         discret = std::stod(argv[2]);
     } else {
-        ROS_INFO_STREAM(BOLDMAGENTA << "No arguments given: using default values");
-        ROS_INFO_STREAM("<group_name(string)> <discretization(int)> ");
-        ROS_INFO_STREAM("Using default values: manipulator_1 1" << RESET);
+        RCLCPP_INFO_STREAM(this->get_logger(), BOLDMAGENTA << "No arguments given: using default values");
+        RCLCPP_INFO_STREAM(this->get_logger(), "<group_name(string)> <discretization(int)> ");
+        RCLCPP_INFO_STREAM(this->get_logger(), "Using default values: manipulator_1 1" << RESET);
     }
 
     auto full_path = boost::filesystem::path(__FILE__).parent_path().parent_path();
@@ -93,7 +93,7 @@ int main(int argc, char** argv) {
 
     auto df = ims::getDistanceFieldMoveIt();
     // show the bounding box of the distance field
-    ros::Publisher bb_pub = nh.advertise<visualization_msgs::Marker>("bb_marker", 10);
+    rclcpp::Publisher bb_pub = nh.advertise<visualization_msgs::msg::Marker>("bb_marker", 10);
     // get the planning frame
     ims::visualizeBoundingBox(df, bb_pub, move_group.getPlanningFrame());
 
@@ -117,11 +117,11 @@ int main(int argc, char** argv) {
     heuristic->init(action_space, df, group_name);
 
     StateType start_state {0, 0, 0, 0, 0, 0};
-    const std::vector<std::string>& joint_names = move_group.getVariableNames();
+    const std::vector<std::string>& joint_names = move_group.getJointModelGroupNames();
     int num_joints_ = (int)move_group.getVariableCount();
     for (int i = 0; i < num_joints; i++) {
         start_state[i] = current_state->getVariablePosition(joint_names[i]);
-        ROS_INFO_STREAM("Joint " << joint_names[i] << " is " << start_state[i]);
+        RCLCPP_INFO_STREAM(this->get_logger(), "Joint " << joint_names[i] << " is " << start_state[i]);
     }
     // make a goal_state a copy of start_state
     ims::rad2deg(start_state);
@@ -151,16 +151,16 @@ int main(int argc, char** argv) {
         planner.initializePlanner(action_space, start_state, goal_state);
     }
     catch (std::exception& e) {
-        ROS_INFO_STREAM(e.what() << std::endl);
+        RCLCPP_INFO_STREAM(this->get_logger(), e.what() << std::endl);
     }
 
     std::vector<StateType> path_;
     if (!planner.plan(path_)) {
-        ROS_INFO_STREAM(RED << "No path found" << RESET);
+        RCLCPP_INFO_STREAM(this->get_logger(), RED << "No path found" << RESET);
         return 0;
     }
     else
-        ROS_INFO_STREAM(GREEN << "Path found" << RESET);
+        RCLCPP_INFO_STREAM(this->get_logger(), GREEN << "Path found" << RESET);
 
     // Print nicely the path
     int counter = 0;
@@ -174,7 +174,7 @@ int main(int argc, char** argv) {
 
     // report stats
     PlannerStats stats = planner.reportStats();
-    ROS_INFO_STREAM("\n" << GREEN << "\t Planning time: " << stats.time << " sec" << std::endl <<
+    RCLCPP_INFO_STREAM(this->get_logger(), "\n" << GREEN << "\t Planning time: " << stats.time << " sec" << std::endl <<
                     "\t cost: " << stats.cost << std::endl <<
                     "\t Path length: " << path_.size() << std::endl <<
                     "\t Number of nodes expanded: " << stats.num_expanded << std::endl <<
@@ -186,14 +186,14 @@ int main(int argc, char** argv) {
     for (auto& state : path_) {
         traj.push_back(state);
     }
-    moveit_msgs::RobotTrajectory trajectory;
+    moveit_msgs::msg::RobotTrajectoryy trajectory;
     ims::profileTrajectory(start_state,
                            goal_state,
                            traj,
                            move_group,
                            trajectory);
 
-    ROS_INFO("Executing trajectory");
+    RCLCPP_INFO(this->get_logger(), "Executing trajectory");
     move_group.execute(trajectory);
     // @}
     return 0;

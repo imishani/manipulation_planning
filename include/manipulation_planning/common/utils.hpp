@@ -35,7 +35,7 @@
 #ifndef MANIPULATION_PLANNING_UTILS_HPP
 #define MANIPULATION_PLANNING_UTILS_HPP
 
-#include <eigen_conversions/eigen_msg.h>
+// #include <eigen_conversions/eigen_msg.h>
 #include <geometric_shapes/shape_operations.h>
 #include <moveit/collision_detection/collision_common.h>
 #include <moveit/distance_field/distance_field.h>
@@ -49,8 +49,12 @@
 #include <moveit/trajectory_processing/iterative_spline_parameterization.h>
 #include <moveit/trajectory_processing/iterative_time_parameterization.h>
 #include <moveit/trajectory_processing/time_optimal_trajectory_generation.h>
-#include <moveit_msgs/DisplayRobotState.h>
-#include <ros/ros.h>
+#include <moveit_msgs/msg/display_robot_state.h>
+#include <moveit_msgs/msg/robot_trajectory.h>
+#include <rclcpp/rclcpp.hpp>
+#include <geometry_msgs/msg/pose.hpp>
+#include <tf2/convert.h>
+#include <geometry_msgs/msg/pose_stamped.hpp>
 
 #include <search/common/collisions.hpp>
 #include <search/common/types.hpp>
@@ -205,11 +209,14 @@ void from_euler_zyx(T y, T p, T r, Eigen::Quaternion<T>& q) {
 }
 
 template <typename T>
-void from_euler_zyx(T y, T p, T r, geometry_msgs::Pose& q) {
+void from_euler_zyx(T y, T p, T r, geometry_msgs::msg::Pose& q) {
     Eigen::Matrix<T, 3, 3> R;
     from_euler_zyx(y, p, r, R);
     Eigen::Quaternion<T> quat(R);
-    tf::quaternionEigenToMsg(quat, q.orientation);
+    q.orientation.x = quat.x();
+    q.orientation.y = quat.y();
+    q.orientation.z = quat.z();
+    q.orientation.w = quat.w();
 }
 
 template <typename T>
@@ -333,13 +340,13 @@ inline double geodesicDistance(const Eigen::Vector3d& q1, const Eigen::Vector3d&
 /// \param goal The goal joint state. type: StateType
 /// \param trajectory a vector of joint states. type: std::vector<StateType>
 /// \param move_group_ The move group object. type: moveit::planning_interface::MoveGroupInterface
-/// \param trajectory_msg The output trajectory. type: moveit_msgs::RobotTrajectory
+/// \param trajectory_msg The output trajectory. type: moveit_msgs::msg::RobotTrajectory
 /// \return success bool
 inline bool profileTrajectory(const StateType& start,
                               const StateType& goal,
                               const std::vector<StateType>& trajectory,
                               const moveit::planning_interface::MoveGroupInterface& move_group_,
-                              moveit_msgs::RobotTrajectory& trajectory_msg,
+                              moveit_msgs::msg::RobotTrajectory& trajectory_msg,
                               double velocity_scaling_factor = 0.2,
                               double acceleration_scaling_factor = 0.2) {
     trajectory_msg.joint_trajectory.header.frame_id = move_group_.getPlanningFrame();
@@ -368,7 +375,8 @@ inline bool profileTrajectory(const StateType& start,
     // get the velocity scaling factor
     if (!time_param.computeTimeStamps(robot_trajectory, velocity_scaling_factor,
                                       acceleration_scaling_factor)) {
-        ROS_ERROR("Failed to compute timestamps for trajectory");
+        RCLCPP_ERROR(rclcpp::get_logger("profileTrajectory"),
+                     "Failed to compute timestamps for trajectory");
         return false;
     }
     robot_trajectory.getRobotTrajectoryMsg(trajectory_msg);
@@ -388,7 +396,7 @@ inline bool ShortcutSmooth(PathType& path,
     // Iteratively moving further and further down the path, attempting to replace the original path with
     // shortcut paths. The idea is that each action only moves one angle, and we want to move few angles together if possie
     // to reduce the number of actions
-    double start_time = ros::Time::now().toSec();
+    double start_time = rclcpp::Clock().now().seconds();
     if (path.empty())
         return false;
     else if (path.size() == 1)
@@ -402,7 +410,7 @@ inline bool ShortcutSmooth(PathType& path,
     collision_detection::CollisionRequest collision_request;
     collision_request.verbose = true;
     collision_detection::CollisionResult collision_result;
-    robot_state::RobotState robot_state = planning_scene->getCurrentStateNonConst();
+    moveit::core::RobotState robot_state = planning_scene->getCurrentStateNonConst();
     // print the robot state
     bool is_timeout = false;
     double step_size = 0.05;
@@ -412,7 +420,7 @@ inline bool ShortcutSmooth(PathType& path,
     while (current_state_index < last_state_index - 1) {
         for (int i{current_state_index + 2}; i <= last_state_index; ++i) {
             // check if the timeout is reached
-            if (ros::Time::now().toSec() - start_time > timeout) {
+            if ( rclcpp::Clock().now().seconds() - start_time > timeout) {
                 is_timeout = true;
                 break;
             }
@@ -442,7 +450,7 @@ inline bool ShortcutSmooth(PathType& path,
                     current_state_index = i - 1;
                     break;
                 }
-                else if ((ros::Time::now().toSec() - start_time) > timeout) {
+                else if (( rclcpp::Clock().now().seconds() - start_time) > timeout) {
                     is_timeout = true;
                     break;
                 }
@@ -451,7 +459,7 @@ inline bool ShortcutSmooth(PathType& path,
             if (collision_result.collision) {
                 break;
             }
-            else if ((ros::Time::now().toSec() - start_time) > timeout) {
+            else if (( rclcpp::Clock().now().seconds() - start_time) > timeout) {
                 is_timeout = true;
                 break;
             }
@@ -463,7 +471,7 @@ inline bool ShortcutSmooth(PathType& path,
     }
     // check if the timeout is reached
     if (is_timeout) {
-        ROS_INFO_STREAM("Timeout reached! "
+        RCLCPP_INFO_STREAM(rclcpp::get_logger("ShortcutSmooth"), "Timeout reached! "
                         << "Shortcut path size: " << shortcut_path.size());
         // add the rest of the path from the current state to the last state
         PathType rest_of_path;
@@ -482,8 +490,6 @@ inline bool ShortcutSmooth(PathType& path,
         }
     }
     shortcut_path.push_back(path.back());
-    ROS_DEBUG_STREAM_NAMED("SHORTCUT: ", "Shortcut path size: " << shortcut_path.size());
-    ROS_DEBUG_STREAM_NAMED("SHORTCUT: ", "Path size: " << path.size());
     // interpolate between the states in the shortcut path to make sure the maximum distance between two states is 0.1
     PathType shortcut_path_interpolated;
     shortcut_path_interpolated.push_back(shortcut_path[0]);
@@ -559,7 +565,7 @@ inline std::shared_ptr<distance_field::PropagationDistanceField> getDistanceFiel
     moveit::planning_interface::PlanningSceneInterface planning_scene_interface;
     // get the collision objects
     auto objects = planning_scene_interface.getObjects();
-    std::vector<moveit_msgs::CollisionObject> objs;
+    std::vector<moveit_msgs::msg::CollisionObject> objs;
     for (auto& obj : objects) {
         objs.push_back(obj.second);
     }
@@ -567,8 +573,14 @@ inline std::shared_ptr<distance_field::PropagationDistanceField> getDistanceFiel
     for (auto& obj : objs) {
         Eigen::Isometry3d pose;
         // convert from pose to eigen
-        geometry_msgs::Pose pose_msg = obj.pose;
-        tf::poseMsgToEigen(pose_msg, pose);
+        geometry_msgs::msg::Pose pose_msg = obj.pose;
+        // tf2::fromMsg(pose_msg, pose);
+        // Convert the translation.
+        pose.translation() = Eigen::Vector3d(pose_msg.position.x, pose_msg.position.y, pose_msg.position.z);
+        // Convert the rotation.
+        pose.linear() = Eigen::Quaterniond(pose_msg.orientation.w, pose_msg.orientation.x, pose_msg.orientation.y, pose_msg.orientation.z).toRotationMatrix();
+
+
         shapes::Shape* shape;
         // get shape from a collision object
         if (obj.primitives.empty() && obj.meshes.empty()) {
@@ -638,7 +650,7 @@ inline void getShapeOccupancy(const std::shared_ptr<distance_field::PropagationD
     Eigen::Vector3d center;
     computeShapeBoundingSphere(&shape, center, radius);
     // get the bounding cylinder of the shape
-    visualization_msgs::Marker marker;
+    visualization_msgs::msg::Marker marker;
     constructMarkerFromShape(&shape, marker);
     // loop through the points and add them to the distance field as occupied
     for (auto& i : marker.points) {
@@ -672,9 +684,10 @@ inline void getRobotOccupancy(
     moveit::core::RobotState& robot_state,
     const std::unique_ptr<moveit::planning_interface::MoveGroupInterface>& move_group_,
     std::vector<std::vector<int>>& occupied_cells) {
-    // get the collision models of the robot
-    std::vector<const robot_model::LinkModel*> link_models =
-        robot_state.getJointModelGroup(move_group_->getName())->getLinkModels();
+    // Get the collision models of the robot
+    std::vector<const moveit::core::LinkModel*> link_models = robot_state.getJointModelGroup(move_group_->getName())->getLinkModels();
+    
+    
     // delete all link models besides the first two:
     link_models.erase(link_models.begin(), link_models.begin() + 2);
 
@@ -707,16 +720,16 @@ inline void getRobotOccupancy(
 /// \param frame_id The frame id
 /// \param id The marker id
 inline void visualizeOccupancy(const std::shared_ptr<distance_field::PropagationDistanceField>& df,
-                               const ros::Publisher& publisher,
+                               const rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr& publisher,
                                const std::string& frame_id,
                                int id = 1) {
-    visualization_msgs::Marker marker;
+    visualization_msgs::msg::Marker marker;
     marker.header.frame_id = frame_id;
-    marker.header.stamp = ros::Time();
+    marker.header.stamp = rclcpp::Time();
     marker.ns = "occupied_cells";
     marker.id = id;
-    marker.type = visualization_msgs::Marker::CUBE_LIST;
-    marker.action = visualization_msgs::Marker::ADD;
+    marker.type = visualization_msgs::msg::Marker::CUBE_LIST;
+    marker.action = visualization_msgs::msg::Marker::ADD;
     marker.scale.x = df->getResolution();
     marker.scale.y = df->getResolution();
     marker.scale.z = df->getResolution();
@@ -730,7 +743,7 @@ inline void visualizeOccupancy(const std::shared_ptr<distance_field::Propagation
         for (int y{0}; y < df->getYNumCells(); y++) {
             for (int z{0}; z < df->getZNumCells(); z++) {
                 if (df->getCell(x, y, z).distance_square_ == 0) {
-                    geometry_msgs::Point p;
+                    geometry_msgs::msg::Point p;
                     df->gridToWorld(x, y, z, p.x, p.y, p.z);
                     marker.points.push_back(p);
                     num_occupied_cells++;
@@ -738,8 +751,7 @@ inline void visualizeOccupancy(const std::shared_ptr<distance_field::Propagation
             }
         }
     }
-    ROS_DEBUG_STREAM("Added " << num_occupied_cells << " occupied cells to the marker array" << std::endl);
-    publisher.publish(marker);
+    publisher->publish(marker);
 }
 
 /// \brief Visualize the distance field bounding box in rviz
@@ -747,15 +759,15 @@ inline void visualizeOccupancy(const std::shared_ptr<distance_field::Propagation
 /// \param marker_pub The marker publisher
 /// \param frame_id The frame id
 inline void visualizeBoundingBox(std::shared_ptr<distance_field::PropagationDistanceField>& df,
-                                 ros::Publisher& marker_pub,
+                                 rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr& marker_pub,
                                  const std::string& frame_id) {
     int id{1};
     int x_min{0}, x_max{df->getXNumCells()}, y_min{0}, y_max{df->getYNumCells()}, z_min{0}, z_max{df->getYNumCells()};
-    visualization_msgs::Marker marker;
+    visualization_msgs::msg::Marker marker;
     marker.header.frame_id = frame_id;
     marker.ns = "bounding_box";
-    marker.type = visualization_msgs::Marker::LINE_STRIP;
-    marker.action = visualization_msgs::Marker::ADD;
+    marker.type = visualization_msgs::msg::Marker::LINE_STRIP;
+    marker.action = visualization_msgs::msg::Marker::ADD;
     marker.pose.orientation.w = 1.0;
     marker.scale.x = 0.02;
     marker.scale.y = 0.02;
@@ -765,16 +777,16 @@ inline void visualizeBoundingBox(std::shared_ptr<distance_field::PropagationDist
     marker.color.g = 0.0;
     marker.color.b = 0.0;
 
-    geometry_msgs::Point p;
-    ros::Duration(1).sleep();
+    geometry_msgs::msg::Point p;
+    rclcpp::sleep_for(std::chrono::seconds(1));
     df->gridToWorld(x_min, y_min, z_min, p.x, p.y, p.z);
     marker.points.push_back(p);
     df->gridToWorld(x_max, y_min, z_min, p.x, p.y, p.z);
     marker.points.push_back(p);
-    marker.header.stamp = ros::Time();
+    marker.header.stamp = rclcpp::Time();
     marker.id = id;
     ++id;
-    marker_pub.publish(marker);
+    marker_pub->publish(marker);
 
     marker.points.clear();
 
@@ -782,10 +794,10 @@ inline void visualizeBoundingBox(std::shared_ptr<distance_field::PropagationDist
     marker.points.push_back(p);
     df->gridToWorld(x_min, y_max, z_min, p.x, p.y, p.z);
     marker.points.push_back(p);
-    marker.header.stamp = ros::Time();
+    marker.header.stamp = rclcpp::Time();
     marker.id = id;
     ++id;
-    marker_pub.publish(marker);
+    marker_pub->publish(marker);
 
     marker.points.clear();
 
@@ -793,10 +805,10 @@ inline void visualizeBoundingBox(std::shared_ptr<distance_field::PropagationDist
     marker.points.push_back(p);
     df->gridToWorld(x_min, y_min, z_max, p.x, p.y, p.z);
     marker.points.push_back(p);
-    marker.header.stamp = ros::Time();
+    marker.header.stamp = rclcpp::Time();
     marker.id = id;
     ++id;
-    marker_pub.publish(marker);
+    marker_pub->publish(marker);
 
     marker.points.clear();
 
@@ -804,10 +816,10 @@ inline void visualizeBoundingBox(std::shared_ptr<distance_field::PropagationDist
     marker.points.push_back(p);
     df->gridToWorld(x_max, y_min, z_max, p.x, p.y, p.z);
     marker.points.push_back(p);
-    marker.header.stamp = ros::Time();
+    marker.header.stamp = rclcpp::Time();
     marker.id = id;
     ++id;
-    marker_pub.publish(marker);
+    marker_pub->publish(marker);
 
     marker.points.clear();
 
@@ -815,10 +827,10 @@ inline void visualizeBoundingBox(std::shared_ptr<distance_field::PropagationDist
     marker.points.push_back(p);
     df->gridToWorld(x_max, y_max, z_min, p.x, p.y, p.z);
     marker.points.push_back(p);
-    marker.header.stamp = ros::Time();
+    marker.header.stamp = rclcpp::Time();
     marker.id = id;
     ++id;
-    marker_pub.publish(marker);
+    marker_pub->publish(marker);
 
     marker.points.clear();
 
@@ -826,10 +838,10 @@ inline void visualizeBoundingBox(std::shared_ptr<distance_field::PropagationDist
     marker.points.push_back(p);
     df->gridToWorld(x_max, y_max, z_min, p.x, p.y, p.z);
     marker.points.push_back(p);
-    marker.header.stamp = ros::Time();
+    marker.header.stamp = rclcpp::Time();
     marker.id = id;
     ++id;
-    marker_pub.publish(marker);
+    marker_pub->publish(marker);
 
     marker.points.clear();
 
@@ -837,10 +849,10 @@ inline void visualizeBoundingBox(std::shared_ptr<distance_field::PropagationDist
     marker.points.push_back(p);
     df->gridToWorld(x_min, y_max, z_max, p.x, p.y, p.z);
     marker.points.push_back(p);
-    marker.header.stamp = ros::Time();
+    marker.header.stamp = rclcpp::Time();
     marker.id = id;
     ++id;
-    marker_pub.publish(marker);
+    marker_pub->publish(marker);
 
     marker.points.clear();
 
@@ -848,10 +860,10 @@ inline void visualizeBoundingBox(std::shared_ptr<distance_field::PropagationDist
     marker.points.push_back(p);
     df->gridToWorld(x_max, y_max, z_max, p.x, p.y, p.z);
     marker.points.push_back(p);
-    marker.header.stamp = ros::Time();
+    marker.header.stamp = rclcpp::Time();
     marker.id = id;
     ++id;
-    marker_pub.publish(marker);
+    marker_pub->publish(marker);
 
     marker.points.clear();
 
@@ -859,10 +871,10 @@ inline void visualizeBoundingBox(std::shared_ptr<distance_field::PropagationDist
     marker.points.push_back(p);
     df->gridToWorld(x_max, y_max, z_max, p.x, p.y, p.z);
     marker.points.push_back(p);
-    marker.header.stamp = ros::Time();
+    marker.header.stamp = rclcpp::Time();
     marker.id = id;
     ++id;
-    marker_pub.publish(marker);
+    marker_pub->publish(marker);
 
     marker.points.clear();
 
@@ -870,10 +882,10 @@ inline void visualizeBoundingBox(std::shared_ptr<distance_field::PropagationDist
     marker.points.push_back(p);
     df->gridToWorld(x_max, y_max, z_max, p.x, p.y, p.z);
     marker.points.push_back(p);
-    marker.header.stamp = ros::Time();
+    marker.header.stamp = rclcpp::Time();
     marker.id = id;
     ++id;
-    marker_pub.publish(marker);
+    marker_pub->publish(marker);
 
     marker.points.clear();
 
@@ -881,10 +893,10 @@ inline void visualizeBoundingBox(std::shared_ptr<distance_field::PropagationDist
     marker.points.push_back(p);
     df->gridToWorld(x_max, y_min, z_max, p.x, p.y, p.z);
     marker.points.push_back(p);
-    marker.header.stamp = ros::Time();
+    marker.header.stamp = rclcpp::Time();
     marker.id = id;
     ++id;
-    marker_pub.publish(marker);
+    marker_pub->publish(marker);
 
     marker.points.clear();
 
@@ -892,10 +904,10 @@ inline void visualizeBoundingBox(std::shared_ptr<distance_field::PropagationDist
     marker.points.push_back(p);
     df->gridToWorld(x_min, y_max, z_max, p.x, p.y, p.z);
     marker.points.push_back(p);
-    marker.header.stamp = ros::Time();
+    marker.header.stamp = rclcpp::Time();
     marker.id = id;
     ++id;
-    marker_pub.publish(marker);
+    marker_pub->publish(marker);
 }
 
 inline void moveitCollisionResultToCollisionsCollective(const collision_detection::CollisionResult& collision_result,
@@ -933,7 +945,7 @@ inline void moveitCollisionResultToCollisionsCollective(const collision_detectio
             }
             else {
                 // Raise exception.
-                ROS_ERROR_STREAM("moveitCollisionResultToCollisionsCollective: The collision object names " << c.body_name_0 << " and " << c.body_name_1 << " do not match the contact object names " << c.contacts.back().body_name_0 << " and " << c.contacts.back().body_name_1 << ".");
+                RCLCPP_ERROR_STREAM(rclcpp::get_logger("moveitCollisionResultToCollisionsCollective"), "moveitCollisionResultToCollisionsCollective: The collision object names " << c.body_name_0 << " and " << c.body_name_1 << " do not match the contact object names " << c.contacts.back().body_name_0 << " and " << c.contacts.back().body_name_1 << ".");
             }
 
             // Check whether this collision is to be kept. First, if the self agent is in one of the collision objects.
@@ -1072,7 +1084,7 @@ std::unordered_map<int, bool> isMultiAgentPathValid(MultiAgentPaths paths,
     collision_request.contacts = true;
     collision_request.max_contacts = 1000;
     collision_detection::CollisionResult collision_result;
-    robot_state::RobotState robot_state = planning_scene->getCurrentStateNonConst();
+    moveit::core::RobotState robot_state = planning_scene->getCurrentStateNonConst();
     std::unordered_map<int, bool> agent_validity;
 
     // Set all the agents to valid.

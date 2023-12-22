@@ -1,9 +1,7 @@
 //
 // Created by itamar on 4/13/23.
 //
-
-#ifndef MANIPULATION_PLANNING_MANIPHEURISTICS_HPP
-#define MANIPULATION_PLANNING_MANIPHEURISTICS_HPP
+#pragma once
 
 // standard includes
 #include <memory>
@@ -200,15 +198,21 @@ protected:
     // The full pose of the goal EE. Orientation and translation.
     Eigen::Isometry3d ee_goal_state_;
 
+    // A ROS2 node for moveit.
+    rclcpp::Node::SharedPtr node_;
+
 public:
     BFSHeuristic() : BFSHeuristic(getDistanceFieldMoveIt()) {
+
+        // Start the node for moveit.
+        node_ = rclcpp::Node::make_shared("bfs_heuristic_node");
     }
 
     explicit BFSHeuristic(std::shared_ptr<distance_field::PropagationDistanceField> distance_field_,
                           const std::string& group_name = "manipulator_1") {
         m_distanceField = std::move(distance_field_);
         // setup robot move group and planning scene
-        move_group = std::make_shared<moveit::planning_interface::MoveGroupInterface>(group_name);
+        move_group = std::make_shared<moveit::planning_interface::MoveGroupInterface>(node_, group_name);
         // robot model
         robot_model = move_group->getRobotModel();
         // joint model group
@@ -403,6 +407,7 @@ private:
     moveit::core::RobotModelConstPtr robot_model;
     const moveit::core::JointModelGroup* joint_model_group;
     moveit::core::RobotStatePtr kinematic_state;
+
 };
 
 /// @brief Same as the BFS Heuristic, but with states that include time in thier last element of the state vector. The methods here remove the time component and call the BFS heuristic methods as normal.
@@ -412,7 +417,7 @@ public:
     }
 
     explicit BFSRemoveTimeHeuristic(std::shared_ptr<distance_field::PropagationDistanceField> distance_field_,
-                                    const std::string& group_name = "panda0_arm") : BFSHeuristic(distance_field_, group_name) {
+                                    const std::string& group_name = "panda_arm") : BFSHeuristic(distance_field_, group_name) {
     }
 
     void setGoal(const StateType& goal) override {
@@ -447,7 +452,18 @@ protected:
     // The full pose of the goal EE. Orientation and translation.
     Eigen::Isometry3d ee_goal_state_;
 
+    // A ROS2 node for moveit.
+    rclcpp::Node::SharedPtr node_;
+
 public:
+    BFSHeuristicEgraph() : EGraphHeuristicBase() {
+
+        // Start the node for moveit.
+        node_ = rclcpp::Node::make_shared("bfs_heuristic_egraph_node");
+    }
+
+    ~BFSHeuristicEgraph() override = default;
+
     void init(std::shared_ptr<EGraphActionSpace> action_space,
               std::shared_ptr<distance_field::PropagationDistanceField> distance_field,
               const std::string& group_name = "manipulator_1") {
@@ -455,7 +471,7 @@ public:
 
         distance_field_ = std::move(distance_field);
         // setup robot move group and planning scene
-        move_group_ = std::make_shared<moveit::planning_interface::MoveGroupInterface>(group_name);
+        move_group_ = std::make_shared<moveit::planning_interface::MoveGroupInterface>(node_, group_name);
         // robot model
         robot_model_ = move_group_->getRobotModel();
         // joint model group
@@ -1108,5 +1124,4 @@ private:
 //        std::string tip_link_;
 //    };
 }  // namespace ims
-
-#endif  // MANIPULATION_PLANNING_MANIPHEURISTICS_HPP
+#

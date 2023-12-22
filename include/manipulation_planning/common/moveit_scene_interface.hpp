@@ -40,11 +40,14 @@
 #include <vector>
 
 // include ROS libraries
-#include <eigen_conversions/eigen_msg.h>
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/planning_scene_interface/planning_scene_interface.h>
 #include <moveit/planning_scene_monitor/planning_scene_monitor.h>
-#include <ros/ros.h>
+#include <rclcpp/rclcpp.hpp>
+#include <geometry_msgs/msg/pose.hpp>
+#include <Eigen/Geometry>
+#include <tf2/convert.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
 // project includes
 #include <manipulation_planning/common/utils.hpp>
@@ -69,13 +72,28 @@ private:
 public:
     /// @brief Constructor
     explicit MoveitInterface(const std::string &group_name) {
-        // planning scene monitor
-        planning_scene_monitor_ = std::make_shared<planning_scene_monitor::PlanningSceneMonitor>("robot_description");
+        // Start the node.
+        // rclcpp::init(0, nullptr);
+        rclcpp::NodeOptions node_options;
+        node_options.automatically_declare_parameters_from_overrides(true);
+        node_ = rclcpp::Node::make_shared("moveit_interface_node", node_options);
+
+        // We spin up a SingleThreadedExecutor for the current state monitor to get information
+        // about the robot's state.
+        rclcpp::executors::SingleThreadedExecutor executor;
+        executor.add_node(node_);
+        std::thread([&executor]() { executor.spin(); }).detach();
+
+        // Create a ROS logger
+        auto const logger = rclcpp::get_logger("moveit_interface_node");
+
+        // Planning scene monitor.
+        planning_scene_monitor_ = std::make_shared<planning_scene_monitor::PlanningSceneMonitor>(node_, "robot_description");
         planning_scene_monitor_->startSceneMonitor();
         planning_scene_monitor_->startStateMonitor();
         planning_scene_monitor_->startWorldGeometryMonitor();
         planning_scene_monitor_->requestPlanningSceneState();
-        ros::Duration(1.0).sleep();
+        rclcpp::sleep_for(std::chrono::seconds(1));
         planning_scene_ = planning_scene_monitor_->getPlanningScene();
         group_name_ = group_name;
 
@@ -83,7 +101,7 @@ public:
         // joint model group
         joint_model_group = kinematic_state_->getJointModelGroup(group_name_);
         // get the joint names
-        joint_names_ = joint_model_group->getVariableNames();
+        joint_names_ = joint_model_group->getActiveJointModelNames(); // TODO(yoraish): check this.
         // get the number of joints
         num_joints_ = joint_names_.size();
 
@@ -91,6 +109,12 @@ public:
 
         // Store the joint limits.
         getJointLimits(joint_limits_);
+
+        // Print the current state of the move group.
+        std::cout << "Current state of the move group: " << std::endl;
+        for (auto const &joint : joint_names_) {
+            std::cout << joint << ": " << kinematic_state_->getVariablePosition(joint) << std::endl;
+        }
 
         // Store the frame id.
         frame_id_ = planning_scene_->getPlanningFrame();
@@ -111,16 +135,36 @@ public:
 
     /// @brief Constructor with the option to set the planning scene.
     explicit MoveitInterface(const std::string &group_name, planning_scene::PlanningScenePtr &planning_scene) {
+
+        // Start the node.
+        // node_ = rclcpp::Node::make_shared("moveit_interface_node");
+
+        rclcpp::init(0, nullptr);
+        rclcpp::NodeOptions node_options;
+        node_options.automatically_declare_parameters_from_overrides(true);
+        node_ = rclcpp::Node::make_shared("moveit_interface_node", node_options);
+
+        // We spin up a SingleThreadedExecutor for the current state monitor to get information
+        // about the robot's state.
+        rclcpp::executors::SingleThreadedExecutor executor;
+        executor.add_node(node_);
+        std::thread([&executor]() { executor.spin(); }).detach();
+
+
+        // Create a ROS logger
+        auto const logger = rclcpp::get_logger("moveit_interface_node");
+
         // planning scene monitor
-        planning_scene_monitor_ = std::make_shared<planning_scene_monitor::PlanningSceneMonitor>("robot_description");
+        planning_scene_monitor_ = std::make_shared<planning_scene_monitor::PlanningSceneMonitor>(node_, "robot_description");
         planning_scene_monitor_->startSceneMonitor();
         planning_scene_monitor_->startStateMonitor();
         planning_scene_monitor_->startWorldGeometryMonitor();
         planning_scene_monitor_->requestPlanningSceneState();
-        ros::Duration(1.0).sleep();
+        rclcpp::sleep_for(std::chrono::seconds(1));
         planning_scene_ = planning_scene;
         group_name_ = group_name;
         frame_id_ = planning_scene_->getPlanningFrame();
+
 
         kinematic_state_ = std::make_shared<moveit::core::RobotState>(planning_scene_->getCurrentState());
         // joint model group
@@ -150,7 +194,7 @@ public:
     /// @param state The state to check
     /// @return True if the state is valid, false otherwise
     bool isStateValid(const StateType &state) {
-        moveit_msgs::RobotState robotState;
+        moveit_msgs::msg::RobotState robotState;
         // copy the values
         robotState.joint_state.position = state;
         robotState.joint_state.name = joint_names_;
@@ -172,7 +216,7 @@ public:
         }
 
         // Set the state of the ego robot and reset the states of all others.
-        robot_state::RobotState &current_scene_state = planning_scene_->getCurrentStateNonConst();
+        moveit::core::RobotState &current_scene_state = planning_scene_->getCurrentStateNonConst();
         // Reset the scene.
         current_scene_state.setToDefaultValues();
 
@@ -212,7 +256,7 @@ public:
         }
 
         // Set the state of all robots.
-        robot_state::RobotState &current_scene_state = planning_scene_->getCurrentStateNonConst();
+        moveit::core::RobotState &current_scene_state = planning_scene_->getCurrentStateNonConst();
         current_scene_state.setToDefaultValues();  // TODO(yoraish): do we need this?
         int num_move_groups = other_move_group_names.size();
         for (int i = 0; i < num_move_groups; i++) {
@@ -259,7 +303,7 @@ public:
                       const std::vector<SphereWorldObject> &sphere_world_objects,
                       CollisionsCollective &collisions_collective) {
         // Add the objects to the scene. Keep track of the objects.
-        std::vector<moveit_msgs::CollisionObject> object_msgs;
+        std::vector<moveit_msgs::msg::CollisionObject> object_msgs;
         addSpheresToScene(sphere_world_objects, object_msgs);
 
         // Call the other isStateValid function.
@@ -282,7 +326,7 @@ public:
                       const std::vector<SphereWorldObject> &sphere_world_objects,
                       CollisionsCollective &collisions_collective) {
         // Add the objects to the scene. Keep track of the objects.
-        std::vector<moveit_msgs::CollisionObject> object_msgs;
+        std::vector<moveit_msgs::msg::CollisionObject> object_msgs;
         addSpheresToScene(sphere_world_objects, object_msgs);
 
         // Call the other isStateValid function.
@@ -298,18 +342,18 @@ public:
     /// @param sphere_world_objects
     /// @param object_msgs the collision objects that were added to the scene.
     /// @return nothing.
-    void addSpheresToScene(const std::vector<SphereWorldObject> &sphere_world_objects, std::vector<moveit_msgs::CollisionObject> &object_msgs) {
+    void addSpheresToScene(const std::vector<SphereWorldObject> &sphere_world_objects, std::vector<moveit_msgs::msg::CollisionObject> &object_msgs) {
         planning_scene_interface_ = std::make_shared<moveit::planning_interface::PlanningSceneInterface>();  // TODO(yorais): this should be initialized elsewhere.
 
         for (auto &obj : sphere_world_objects) {
             // Add the object to the scene with a new name.
-            moveit_msgs::CollisionObject collision_object;
+            moveit_msgs::msg::CollisionObject collision_object;
             collision_object.id = "world_sphere" + std::to_string(object_msgs.size());
             collision_object.header.frame_id = frame_id_;
             shapes::ShapeMsg collision_object_shape_msg;
             auto *shape = new shapes::Sphere(obj.radius);
             shapes::constructMsgFromShape(shape, collision_object_shape_msg);
-            geometry_msgs::Pose collision_object_pose;
+            geometry_msgs::msg::Pose collision_object_pose;
             collision_object_pose.position.x = obj.origin.x();
             collision_object_pose.position.y = obj.origin.y();
             collision_object_pose.position.z = obj.origin.z();
@@ -319,9 +363,9 @@ public:
             collision_object_pose.orientation.z = 0.0;
             collision_object_pose.orientation.w = 1.0;
 
-            collision_object.primitives.push_back(boost::get<shape_msgs::SolidPrimitive>(collision_object_shape_msg));
+            collision_object.primitives.push_back(boost::get<shape_msgs::msg::SolidPrimitive>(collision_object_shape_msg));
             collision_object.primitive_poses.push_back(collision_object_pose);
-            collision_object.operation = moveit_msgs::CollisionObject::ADD;
+            collision_object.operation = moveit_msgs::msg::CollisionObject::ADD;
 
             // Update the planning scene.
             planning_scene_interface_->applyCollisionObject(collision_object);  // For visualization. TODO(yoraish): remove.
@@ -334,7 +378,7 @@ public:
 
     /// @brief Remove collision objects from the planning scene.
     /// @param object_msgs
-    void removeObjectsFromScene(std::vector<moveit_msgs::CollisionObject> object_msgs) {
+    void removeObjectsFromScene(std::vector<moveit_msgs::msg::CollisionObject> object_msgs) {
         planning_scene_interface_ = std::make_shared<moveit::planning_interface::PlanningSceneInterface>();  // TODO(yorais): this should be initialized elsewhere.
 
         for (auto &obj_msg : object_msgs) {
@@ -354,7 +398,7 @@ public:
                         const std::vector<StateType> &other_move_group_states,
                         CollisionsCollective &collisions_collective) {
         // Set the state of all robots.
-        robot_state::RobotState &current_scene_state = planning_scene_->getCurrentStateNonConst();
+        moveit::core::RobotState &current_scene_state = planning_scene_->getCurrentStateNonConst();
         int num_move_groups = static_cast<int>(other_move_group_names.size());
         for (int i = 0; i < num_move_groups; i++) {
             current_scene_state.setJointGroupPositions(other_move_group_names[i], other_move_group_states[i]);
@@ -401,10 +445,21 @@ public:
                      const StateType &joint_state_seed,
                      StateType &joint_state,
                      double timeout = 0.1) {
-        // Convert the input to a geometry_msgs::Pose.
-        geometry_msgs::Pose pose_msg;
-        tf::poseEigenToMsg(pose, pose_msg);
+        // Convert the input to a geometry_msgs::msg::Pose.
+        geometry_msgs::msg::Pose pose_msg;
 
+        // Set the translation part.
+        pose_msg.position.x = pose.translation().x();
+        pose_msg.position.y = pose.translation().y();
+        pose_msg.position.z = pose.translation().z();
+
+        // Set the rotation part.
+        Eigen::Quaterniond quat(pose.rotation());
+        pose_msg.orientation.x = quat.x();
+        pose_msg.orientation.y = quat.y();
+        pose_msg.orientation.z = quat.z();
+        pose_msg.orientation.w = quat.w();
+        
         // Call the other calculateIK function.
         return calculateIK(pose_msg, joint_state_seed, joint_state, 1.0, timeout);
     }
@@ -414,7 +469,7 @@ public:
     /// @param joint_state The joint state to store the IK solution
     /// @param timeout The timeout for the IK calculation
     /// @return True if IK was found, false otherwise
-    bool calculateIK(const geometry_msgs::Pose &pose,
+    bool calculateIK(const geometry_msgs::msg::Pose &pose,
                      StateType &joint_state,
                      double timeout = 0.1) {
         // resize the joint state
@@ -431,7 +486,7 @@ public:
             return true;
         }
         else {
-            ROS_INFO("No IK solution found without using seed");
+            RCLCPP_INFO(logger_, "No IK solution found without using seed");
             return false;
         }
     }
@@ -443,7 +498,7 @@ public:
     /// @param consistency_limit The consistency limit to use for the IK
     /// @param timeout The timeout for the IK calculation
     /// @return True if IK was found, false otherwise
-    bool calculateIK(const geometry_msgs::Pose &pose,
+    bool calculateIK(const geometry_msgs::msg::Pose &pose,
                      const StateType &seed,
                      StateType &joint_state,
                      double consistency_limit = 1.0,
@@ -460,8 +515,16 @@ public:
         // get the tip link
         const std::string &tip_link = joint_model_group->getLinkModelNames().back();
         Eigen::Isometry3d pose_eigen;
-        tf::poseMsgToEigen(pose, pose_eigen);
-
+        // tf2::convert(pose, pose_eigen); // // tf::poseMsgToEigen(pose, pose_eigen);
+        // Set translation.
+        pose_eigen.translation().x() = pose.position.x;
+        pose_eigen.translation().y() = pose.position.y;
+        pose_eigen.translation().z() = pose.position.z;
+        // Set rotation.
+        Eigen::Quaterniond quat(pose.orientation.w, pose.orientation.x, pose.orientation.y, pose.orientation.z);
+        pose_eigen.linear() = quat.toRotationMatrix();
+        
+        // Calculate IK.
         if (kinematic_state_->setFromIK(joint_model_group, pose_eigen,
                                         tip_link, consistency_limits,
                                         timeout)) {
@@ -469,7 +532,7 @@ public:
             return true;
         }
         else {
-            ROS_INFO("No IK solution found using seed");
+            RCLCPP_INFO(logger_, "No IK solution found using seed");
             return false;
         }
     }
@@ -494,7 +557,8 @@ public:
         pose[0] = end_effector_state.translation().x();
         pose[1] = end_effector_state.translation().y();
         pose[2] = end_effector_state.translation().z();
-        ims::get_euler_zyx(end_effector_state.rotation(), pose[5], pose[4], pose[3]);
+        Eigen::Matrix3d rot = end_effector_state.rotation();
+        ims::get_euler_zyx(rot, pose[5], pose[4], pose[3]);
         ims::normalize_euler_zyx(pose[5], pose[4], pose[3]);
         return true;
     }
@@ -546,6 +610,12 @@ public:
 
     /// @brief Ordered names of the move groups in the scene. Agent0 is at the zero index, agent1 at the first index, etc.
     std::vector<std::string> scene_move_group_names_;
+
+    // A ROS2 node.
+    rclcpp::Node::SharedPtr node_ = rclcpp::Node::make_shared("moveit_interface_node");
+
+    // A ROS2 logger.
+    rclcpp::Logger logger_ = rclcpp::get_logger("moveit_interface_node");
 };
 }  // namespace ims
 
