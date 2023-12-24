@@ -210,6 +210,9 @@ public:
 
     explicit BFSHeuristic(std::shared_ptr<distance_field::PropagationDistanceField> distance_field_,
                           const std::string& group_name = "manipulator_1") {
+        //  Initialize the ros node.
+        node_ = rclcpp::Node::make_shared("bfs_heuristic_node");
+
         m_distanceField = std::move(distance_field_);
         // setup robot move group and planning scene
         move_group = std::make_shared<moveit::planning_interface::MoveGroupInterface>(node_, group_name);

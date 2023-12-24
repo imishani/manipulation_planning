@@ -395,7 +395,7 @@ public:
     /// @brief Constructor
     /// @param moveitInterface The moveit interface
     /// @param ManipulationType The manipulation type
-    ManipulationActionSpace(const MoveitInterface &env,
+    ManipulationActionSpace( MoveitInterface &env,
                             const ManipulationType &actions_ptr,
                             BFSHeuristic *bfs_heuristic = nullptr) : ActionSpace(), bfs_heuristic_(bfs_heuristic) {
         moveit_interface_ = std::make_shared<MoveitInterface>(env);
@@ -408,6 +408,9 @@ public:
 
         // Initialize the publisher for the visualization markers.
         vis_pub_ = node_->create_publisher<visualization_msgs::msg::Marker>("visualization_marker", 0);
+
+        // Spin the node.
+        rclcpp::spin_some(node_);
     
     }
 
@@ -424,6 +427,7 @@ public:
                 // push back the new state after the action
                 StateType next_state_val(curr_state_val.size());
                 std::transform(curr_state_val.begin(), curr_state_val.end(), action.begin(), next_state_val.begin(), std::plus<>());
+                action_seq.push_back(next_state_val);
                 actions_seq.push_back(action_seq);
             }
         }

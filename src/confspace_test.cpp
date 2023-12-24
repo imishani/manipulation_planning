@@ -70,7 +70,6 @@ int main(int argc, char** argv) {
 
     std::string group_name = "panda_arm";
     double discret = 5;
-    bool save_experience = false;
 
     // if (argc == 0) {
     //     RCLCPP_INFO_STREAM(node->get_logger(), BOLDMAGENTA << "No arguments given: using default values");
@@ -101,29 +100,12 @@ int main(int argc, char** argv) {
     // Define Robot inteface to give commands and get info from moveit:
     moveit::planning_interface::MoveGroupInterface move_group(node, group_name);
 
-    // TEST TEST TEST.
-    // Access joint values
-
-    // Create MoveGroupInterface
-
-    // Get the current joint state
-    const moveit::core::RobotStatePtr current_state = move_group.getCurrentState(); //
-    
-  std::cout << "Hello, got the current state of the arm, the joint angles are: " << std::endl;
-  // Get the joint names.
-  std::vector<std::string> joint_namess = move_group.getActiveJoints();
-  for (auto const& joint : joint_namess) {
-    std::cout << joint << ": " << current_state->getVariablePosition(joint) << std::endl;
-  }
-
-    // END TEST TEST TEST.
-
     // get the number of joints
     int num_joints = (int)move_group.getVariableCount();
 
     std::string path_mprim = full_path.string() + "/config/manip_" + std::to_string(num_joints) + "dof.mprim";
 
-    // moveit::core::RobotStatePtr current_state = move_group.getCurrentState();
+    moveit::core::RobotStatePtr current_state = move_group.getCurrentState();
 
     // check for collision
     planning_scene::PlanningScenePtr planning_scene;
@@ -140,7 +122,7 @@ int main(int argc, char** argv) {
     ims::MoveitInterface scene_interface(group_name);
 
     // get the planning frame
-    ims::visualizeBoundingBox(df, bb_pub, move_group.getPlanningFrame());
+    // ims::visualizeBoundingBox(df, bb_pub, move_group.getPlanningFrame());
     auto* heuristic = new ims::BFSHeuristic(df, group_name);
 //    auto* heuristic = new ims::JointAnglesHeuristic;
     double weight = 100.0;
@@ -153,12 +135,11 @@ int main(int argc, char** argv) {
     action_type.Discretization(discretization);
 
 //    std::shared_ptr<ims::ManipulationActionSpace> action_space = std::make_shared<ims::ManipulationActionSpace>(scene_interface, action_type);
-    std::shared_ptr<ims::ManipulationActionSpace> action_space = std::make_shared<ims::ManipulationActionSpace>(scene_interface, action_type,
-                                                                                                                heuristic);
+    std::shared_ptr<ims::ManipulationActionSpace> action_space = std::make_shared<ims::ManipulationActionSpace>(scene_interface, action_type, heuristic);
 
-    StateType start_state {0, 0, 0, 0, 0, 0};
-    const std::vector<std::string>& joint_names = move_group.getJointModelGroupNames();
-    for (int i = 0; i < 6; i++) {
+    StateType start_state  = std::vector<double>(num_joints, 0.0);
+    const std::vector<std::string>& joint_names = move_group.getActiveJoints();
+    for (int i = 0; i < num_joints; i++) {
         start_state[i] = current_state->getVariablePosition(joint_names[i]);
         RCLCPP_INFO_STREAM(node->get_logger(), "Joint " << joint_names[i] << " is " << start_state[i]);
     }
@@ -167,12 +148,9 @@ int main(int argc, char** argv) {
     StateType goal_state = start_state;
 
     // change the goal state
-    goal_state[0] = 1.5708*180/M_PI;// 78; //0;
-    goal_state[1] = 0.0698132*180/M_PI; //25; //30;
-    goal_state[2] = -0.9948*180/M_PI; //-18; //-30;
-    goal_state[3] = -1.5708*180/M_PI; //-147; //0;
-    goal_state[4] = 0; //73; //0;
-    goal_state[5] = 0;//-66; //0;
+    goal_state[0] = 90;
+
+    goal_state[5] = 166;
 
 
     ims::deg2rad(start_state); ims::deg2rad(goal_state);
@@ -195,46 +173,14 @@ int main(int argc, char** argv) {
 
     std::vector<StateType> path_;
     if (!planner.plan(path_)) {
-        std::cout << RED << "No path found" << RESET;
+        RCLCPP_ERROR(node->get_logger(), "No path found");
         return 0;
     }
     else {
-        std::cout << GREEN << "Path found" << RESET;
-        if (save_experience) {
-            std::cout << "Saving path as experience";
-            // check if the directory exists
-            boost::filesystem::path dir(full_path.string() + "/data/experiences/" + group_name);
-            if (boost::filesystem::is_directory(dir)) {
-                std::cout << "Directory " << dir << " exists";
-            } else {
-                std::cout << "Directory " << dir << " does not exist";
-                std::cout << "Creating directory " << dir;
-                boost::filesystem::create_directory(dir);
-            }
-            // check how many experiences in the directory
-            int num_experiences = 0;
-            for (auto& p : boost::filesystem::directory_iterator(dir)) {
-                num_experiences++;
-            }
-            // Save the path to a file as csv
-            std::string path_file = dir.string() + "/path_" +
-                std::to_string(num_experiences + 1) + ".csv";
-
-            std::ofstream file(path_file);
-            // header line
-            file << "Experience," << path_.size() << "," << num_joints << std::endl;
-            // write the path
-            for (int j {0}; j < path_.size(); j++){
-                for (int i {0}; i < num_joints; i++) {
-                    file << path_[j][i] << ",";
-                }
-                file << std::endl;
-            }
-            file.close();
-        }
+        RCLCPP_INFO_STREAM(node->get_logger(), GREEN << "Path found" << RESET);
     }
 
-    // Print nicely the path
+    // Print the path.
     int counter = 0;
     for (auto& state : path_) {
         std::cout << "State: " << counter++ << ": ";

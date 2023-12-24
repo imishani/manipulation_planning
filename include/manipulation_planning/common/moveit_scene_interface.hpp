@@ -69,23 +69,26 @@ private:
     // The number of collision checks carried out.
     int num_collision_checks_ = 0;
 
+    // A ROS2 node.
+    rclcpp::Node::SharedPtr node_;
+
+    // A single-threaded executor to monitor MoveIt!2 events.
+    std::shared_ptr<rclcpp::executors::SingleThreadedExecutor> executor_ptr_;
+
+    // A ROS2 logger.
+    rclcpp::Logger logger_ = rclcpp::get_logger("moveit_interface_node");
+
 public:
     /// @brief Constructor
-    explicit MoveitInterface(const std::string &group_name) {
-        // Start the node.
-        // rclcpp::init(0, nullptr);
-        rclcpp::NodeOptions node_options;
-        node_options.automatically_declare_parameters_from_overrides(true);
-        node_ = rclcpp::Node::make_shared("moveit_interface_node", node_options);
+    explicit MoveitInterface(const std::string &group_name) :
+                                                              node_(rclcpp::Node::make_shared("moveit_interface_node")),
+                                                                logger_(rclcpp::get_logger("moveit_interface_node")) {
 
         // We spin up a SingleThreadedExecutor for the current state monitor to get information
         // about the robot's state.
-        rclcpp::executors::SingleThreadedExecutor executor;
-        executor.add_node(node_);
-        std::thread([&executor]() { executor.spin(); }).detach();
-
-        // Create a ROS logger
-        auto const logger = rclcpp::get_logger("moveit_interface_node");
+        executor_ptr_ = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
+        executor_ptr_->add_node(node_);
+        std::thread([&]() { executor_ptr_->spin(); }).detach();
 
         // Planning scene monitor.
         planning_scene_monitor_ = std::make_shared<planning_scene_monitor::PlanningSceneMonitor>(node_, "robot_description");
@@ -134,25 +137,20 @@ public:
     };
 
     /// @brief Constructor with the option to set the planning scene.
-    explicit MoveitInterface(const std::string &group_name, planning_scene::PlanningScenePtr &planning_scene) {
+    explicit MoveitInterface(const std::string &group_name, planning_scene::PlanningScenePtr &planning_scene) :
+                                                              node_(rclcpp::Node::make_shared("moveit_interface_node")),
+                                                                logger_(rclcpp::get_logger("moveit_interface_node")) {
 
-        // Start the node.
-        // node_ = rclcpp::Node::make_shared("moveit_interface_node");
-
-        rclcpp::init(0, nullptr);
-        rclcpp::NodeOptions node_options;
-        node_options.automatically_declare_parameters_from_overrides(true);
-        node_ = rclcpp::Node::make_shared("moveit_interface_node", node_options);
+        // rclcpp::init(0, nullptr);
+        // rclcpp::NodeOptions node_options;
+        // node_options.automatically_declare_parameters_from_overrides(true);
+        // node_ = rclcpp::Node::make_shared("moveit_interface_node", node_options);
 
         // We spin up a SingleThreadedExecutor for the current state monitor to get information
         // about the robot's state.
-        rclcpp::executors::SingleThreadedExecutor executor;
-        executor.add_node(node_);
-        std::thread([&executor]() { executor.spin(); }).detach();
-
-
-        // Create a ROS logger
-        auto const logger = rclcpp::get_logger("moveit_interface_node");
+        executor_ptr_ = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
+        executor_ptr_->add_node(node_);
+        std::thread([&]() { executor_ptr_->spin(); }).detach();
 
         // planning scene monitor
         planning_scene_monitor_ = std::make_shared<planning_scene_monitor::PlanningSceneMonitor>(node_, "robot_description");
@@ -611,11 +609,6 @@ public:
     /// @brief Ordered names of the move groups in the scene. Agent0 is at the zero index, agent1 at the first index, etc.
     std::vector<std::string> scene_move_group_names_;
 
-    // A ROS2 node.
-    rclcpp::Node::SharedPtr node_ = rclcpp::Node::make_shared("moveit_interface_node");
-
-    // A ROS2 logger.
-    rclcpp::Logger logger_ = rclcpp::get_logger("moveit_interface_node");
 };
 }  // namespace ims
 
