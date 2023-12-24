@@ -417,6 +417,7 @@ public:
                 // push back the new state after the action
                 StateType next_state_val(curr_state_val.size());
                 std::transform(curr_state_val.begin(), curr_state_val.end(), action.begin(), next_state_val.begin(), std::plus<>());
+                action_seq.push_back(next_state_val);
                 actions_seq.push_back(action_seq);
             }
         }
