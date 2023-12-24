@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023, Itamar Mishani, Yorai Shaoul
+ * Copyright (C) 2023, Yorai Shaoul
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,11 +29,11 @@
 /*!
  * \file   manipulation_constrained_action_space.hpp
  * \author Yorai Shaoul (yorai@cmu.edu)
- * \date   Aug 6 2023
+ * \date   Sept 6 2023
  */
 
-#ifndef MANIPULATION_PLANNING_MANIPULATIONCONSTRAINEDACTIONSPACE_HPP
-#define MANIPULATION_PLANNING_MANIPULATIONCONSTRAINEDACTIONSPACE_HPP
+#ifndef MANIPULATION_PLANNING_MANIPULATION_EXPERIENCE_ACCELERATED_CONSTRAINEDACTIONSPACE_HPP
+#define MANIPULATION_PLANNING_MANIPULATION_EXPERIENCE_ACCELERATED_CONSTRAINEDACTIONSPACE_HPP
 
 // include standard libraries
 #include <iostream>
@@ -50,16 +50,16 @@
 #include <manipulation_planning/common/moveit_scene_interface.hpp>
 #include <manipulation_planning/common/utils.hpp>
 #include <manipulation_planning/heuristics/manip_heuristics.hpp>
-#include <search/action_space/constrained_action_space.hpp>
+#include <search/action_space/subcost_action_space.hpp>
 #include <manipulation_planning/action_space/manipulation_action_space.hpp>
 
 namespace ims {
 
-/// @class ManipulationConstrainedActionSpace
-/// @brief A class that implements the ConstrainedActionSpace for Moveit. This class borrows many function implementations from the ManipulationConstrainedActionSpace class.
-/// @class ManipulationConstrainedActionSpace
+/// @class ManipulationSubcostExperienceAcceleratedConstrainedActionSpace
+/// @brief A class that implements the ConstrainedActionSpace for Moveit. This class borrows many function implementations from the ManipulationSubcostExperienceAcceleratedConstrainedActionSpace class.
+/// @class ManipulationSubcostExperienceAcceleratedConstrainedActionSpace
 /// @brief A class that implements the ActionSpace for Moveit
-class ManipulationConstrainedActionSpace : public ConstrainedActionSpace {
+class ManipulationSubcostExperienceAcceleratedConstrainedActionSpace : public SubcostExperienceAcceleratedConstrainedActionSpace {
 protected:
     /// @brief Manipulation type
     std::shared_ptr<ManipulationType> manipulation_type_;
@@ -72,6 +72,7 @@ protected:
     /// @brief The BFS heuristic
     BFSHeuristic *bfs_heuristic_;
 
+    // TODO: delete: temp
     int vis_id_ = 0;
     ros::NodeHandle nh_;
     ros::Publisher vis_pub_;
@@ -84,9 +85,9 @@ public:
     /// @brief Constructor
     /// @param moveitInterface The moveit interface
     /// @param ManipulationType The manipulation type
-    ManipulationConstrainedActionSpace(const MoveitInterface &env,
+    ManipulationSubcostExperienceAcceleratedConstrainedActionSpace(const MoveitInterface &env,
                             const ManipulationType &actions_ptr,
-                            BFSHeuristic *bfs_heuristic = nullptr) : bfs_heuristic_(bfs_heuristic), ConstrainedActionSpace() {
+                            BFSHeuristic *bfs_heuristic = nullptr) : bfs_heuristic_(bfs_heuristic), SubcostExperienceAcceleratedConstrainedActionSpace() {
         moveit_interface_ = std::make_shared<MoveitInterface>(env);
         manipulation_type_ = std::make_shared<ManipulationType>(actions_ptr);
         
@@ -197,10 +198,31 @@ public:
         return manip_action_space_->getSuccessors(curr_state_ind, successors, costs);
     }
 
+    virtual bool getSuccessorsWs(int curr_state_ind,
+                                 std::vector<int> &successors,
+                                 std::vector<double>& costs,
+                                 std::vector<double>& subcosts) {
+        throw std::runtime_error("Not implemented.");
+    }
+
+    virtual bool getSuccessorsCs(int curr_state_ind,
+                                 std::vector<int> &successors,
+                                 std::vector<double>& costs,
+                                 std::vector<double>& subcosts) {
+        throw std::runtime_error("Not implemented.");
+    }
+
     virtual bool getSuccessors(int curr_state_ind,
                        std::vector<int> &successors,
                        std::vector<double> &costs) override {
         return manip_action_space_->getSuccessors(curr_state_ind, successors, costs);
+    }
+
+    virtual bool getSuccessors(int curr_state_ind,
+                       std::vector<int>& successors,
+                       std::vector<double>& costs,
+                       std::vector<double>& subcosts) override {
+        throw std::runtime_error("Not implemented.");
     }
 
     /// @brief Visualize a state point in rviz for debugging
@@ -290,11 +312,18 @@ public:
                            std::vector<std::shared_ptr<Conflict>> &conflicts_ptrs, 
                            const std::vector<ConflictType> &conflict_types,
                            int max_conflicts, 
-                           const std::vector<std::string> &names,
-                           TimeType time_start = 0, TimeType time_end = -1) override {
+                           const std::vector<std::string> &names, 
+                           TimeType time_start = 0, 
+                           TimeType time_end = -1) override {
         throw std::runtime_error("Not implemented");
     }
-};
+
+    /// @brief Get the scene interface.
+    /// @return The scene interface
+    std::shared_ptr<MoveitInterface> getSceneInterface() {
+        return moveit_interface_;
+    }
+    };
 }  // namespace ims
 
-#endif  // MANIPULATION_PLANNING_MANIPULATIONCONSTRAINEDACTIONSPACE_HPP
+#endif  // MANIPULATION_PLANNING_MANIPULATION_EXPERIENCE_ACCELERATED_CONSTRAINEDACTIONSPACE_HPP

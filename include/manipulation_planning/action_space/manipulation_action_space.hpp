@@ -60,23 +60,22 @@ struct ManipulationType : ActionType {
     /// @param[in] bfs_heuristic A pointer to a BFSHeuristic object. Default = nullptr
     explicit ManipulationType() : action_type_(ActionType::MOVE),
                                   space_type_(SpaceType::ConfigurationSpace),
-                                  prim_file_name_("../config/manip_6dof.mprim"),
+                                  mprim_file_name_("../config/manip_6dof.mprim"),
                                   max_action_(0.0){
                                       //            readMPfile();
                                   };
 
     /// @brief Constructor with motion primitives file given
-    /// @param[in] mprimFile The path to the motion primitives file
+    /// @param[in] mprim_file The path to the motion primitives file
     /// @param[in] bfs_heuristic A pointer to a BFSHeuristic object
-    explicit ManipulationType(std::string mprimFile) : action_type_(ActionType::MOVE),
-                                                       space_type_(SpaceType::ConfigurationSpace),
-                                                       prim_file_name_(std::move(mprimFile)),
-                                                       max_action_(0.0){
-                                                           //            readMPfile();
-                                                       };
+    explicit ManipulationType(std::string mprim_file) : action_type_(ActionType::MOVE),
+                                                        space_type_(SpaceType::ConfigurationSpace),
+                                                        mprim_file_name_(std::move(mprim_file)),
+                                                        max_action_(0.0){
+                                                            //            readMPfile();
+                                                        };
 
     /// @brief Constructor with adaptive motion primitives given
-
     /// @brief Destructor
     ~ManipulationType() override = default;
 
@@ -122,7 +121,7 @@ struct ManipulationType : ActionType {
     }
 
     void readMPfile() {
-        std::ifstream file(prim_file_name_);
+        std::ifstream file(mprim_file_name_);
         std::string line;
         std::vector<std::vector<double>> mprim;
         switch (space_type_) {
@@ -356,12 +355,12 @@ struct ManipulationType : ActionType {
         std::pair<bool, double> long_dist = std::make_pair(true, 0.4);
         std::pair<bool, double> snap_xyz = std::make_pair(false, 0.2);
         std::pair<bool, double> snap_rpy = std::make_pair(false, 0.2);
-        std::pair<bool, double> snap_xyzrpy = std::make_pair(true, 0.1);
+        std::pair<bool, double> snap_xyzrpy = std::make_pair(true, 0.04);
     };
 
     ActionType action_type_;
     SpaceType space_type_;
-    std::string prim_file_name_;
+    std::string mprim_file_name_;
     MotionPrimitiveActiveType mprim_active_type_;
 
     std::vector<Action> actions_;
@@ -386,6 +385,7 @@ protected:
     /// @brief The BFS heuristic
     BFSHeuristic *bfs_heuristic_;
 
+    // TODO: delete: temp
     int vis_id_ = 0;
     ros::NodeHandle nh_;
     ros::Publisher vis_pub_;
@@ -488,6 +488,12 @@ public:
         ws_state[5] = euler_angles[0];
         normalize_euler_zyx(ws_state[5], ws_state[4], ws_state[3]);
         roundStateToDiscretization(ws_state, manipulation_type_->state_discretization_);
+    }
+
+    /// @brief Get the end effector pose in the robot frame.
+    /// @param ee_pose The end effector pose
+    void calculateFK(const StateType &state, StateType &ee_pose) {
+        moveit_interface_->calculateFK(state, ee_pose);
     }
 
     bool isStateValid(const StateType &state_val) override {
@@ -792,9 +798,19 @@ public:
         marker.color.g = 1.0;
         marker.color.b = 0.0;
         marker.color.a = 0.5;
+
+        // Lifetime.
+        marker.lifetime = ros::Duration(5.0);
+
         // visualize
         vis_pub_.publish(marker);
         vis_id_++;
+    }
+
+    /// @brief Get the scene interface.
+    /// @return The scene interface
+    std::shared_ptr<MoveitInterface> getSceneInterface() {
+        return moveit_interface_;
     }
 };
 }  // namespace ims

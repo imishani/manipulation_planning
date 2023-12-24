@@ -63,6 +63,9 @@ class MoveitInterface : public SceneInterface {
 private:
     bool verbose_ = false;
 
+    // The number of collision checks carried out.
+    int num_collision_checks_ = 0;
+
 public:
     /// @brief Constructor
     explicit MoveitInterface(const std::string &group_name) {
@@ -114,9 +117,10 @@ public:
         planning_scene_monitor_->startStateMonitor();
         planning_scene_monitor_->startWorldGeometryMonitor();
         planning_scene_monitor_->requestPlanningSceneState();
-        ros::Duration(0.1).sleep();
+        ros::Duration(1.0).sleep();
         planning_scene_ = planning_scene;
         group_name_ = group_name;
+        frame_id_ = planning_scene_->getPlanningFrame();
 
         kinematic_state_ = std::make_shared<moveit::core::RobotState>(planning_scene_->getCurrentState());
         // joint model group
@@ -152,6 +156,7 @@ public:
         robotState.joint_state.name = joint_names_;
 
         // Check for the joint limits and if the scene is valid.
+        num_collision_checks_++;
         return planning_scene_->isStateValid(robotState, group_name_);
     }
 
@@ -166,8 +171,12 @@ public:
             return false;
         }
 
-        // Set the state of the ego robot.
+        // Set the state of the ego robot and reset the states of all others.
         robot_state::RobotState &current_scene_state = planning_scene_->getCurrentStateNonConst();
+        // Reset the scene.
+        current_scene_state.setToDefaultValues();
+
+        // Set the state of the ego robot.
         current_scene_state.setJointGroupPositions(group_name_, state);
 
         // Check if this configuration is in collision. Whether any robot collides with any other.
@@ -177,13 +186,14 @@ public:
         collision_request.max_contacts = 1000;
         collision_request.max_contacts_per_pair = 1;
         collision_request.group_name = group_name_;
-
         planning_scene_->checkCollision(collision_request, collision_result);
+        num_collision_checks_++;
 
         // Convert the collision result to a collision collective.
-        moveitCollisionResultToCollisionsCollective(collision_result, collisions_collective);
+        std::string agent_name_prefix = group_name_.substr(0, group_name_.find("_"));
+        moveitCollisionResultToCollisionsCollective(collision_result, collisions_collective, agent_name_prefix);
 
-        return !collision_result.collision;
+        return collisions_collective.size() == 0;
     }
 
     /// @brief check if the state is valid w.r.t. other bodies.
@@ -203,7 +213,8 @@ public:
 
         // Set the state of all robots.
         robot_state::RobotState &current_scene_state = planning_scene_->getCurrentStateNonConst();
-        int num_move_groups = static_cast<int>(other_move_group_names.size());
+        current_scene_state.setToDefaultValues();  // TODO(yoraish): do we need this?
+        int num_move_groups = other_move_group_names.size();
         for (int i = 0; i < num_move_groups; i++) {
             current_scene_state.setJointGroupPositions(other_move_group_names[i], other_move_group_states[i]);
         }
@@ -221,11 +232,18 @@ public:
         collision_request.group_name = group_name_;
 
         planning_scene_->checkCollision(collision_request, collision_result);
+        num_collision_checks_++;
 
         // Convert the collision result to a collision collective.
-        moveitCollisionResultToCollisionsCollective(collision_result, collisions_collective);
+        std::string agent_name_prefix = group_name_.substr(0, group_name_.find("_"));
+        std::vector<std::string> other_agent_name_prefixes;
+        for (auto &other_move_group_name : other_move_group_names) {
+            std::string other_agent_name_prefix = other_move_group_name.substr(0, other_move_group_name.find("_"));
+            other_agent_name_prefixes.push_back(other_agent_name_prefix);
+        }
+        moveitCollisionResultToCollisionsCollective(collision_result, collisions_collective, agent_name_prefix, other_agent_name_prefixes);
 
-        return !collision_result.collision;
+        return collisions_collective.size() == 0;
     }
 
     /// @brief check if the state is valid w.r.t. other bodies and other robots in given configurations.
@@ -320,18 +338,18 @@ public:
         planning_scene_interface_ = std::make_shared<moveit::planning_interface::PlanningSceneInterface>();  // TODO(yorais): this should be initialized elsewhere.
 
         for (auto &obj_msg : object_msgs) {
-            obj_msg.operation = moveit_msgs::CollisionObject_<std::allocator<void>>::REMOVE;
+            obj_msg.operation = obj_msg.REMOVE;
             planning_scene_interface_->applyCollisionObject(obj_msg);  // TODO(yoraish): For viz. Remove this.
             planning_scene_->processCollisionObjectMsg(obj_msg);       // For collision checking.
         }
     }
 
-    /// @brief check if the state is valid w.r.t. other bodies.
+    /// @brief check if the given state of the specified groups is valid.
     /// @param state the configuration to check
     /// @param other_move_group_names the names of the robots to check against.
     /// @param other_move_group_states the states of the robots to check against.
     /// @param collisions_collective the collisions that have been found, potentially.
-    /// @return true if the state is valid, false otherwise.
+    /// @return true if the state is in collision, false otherwise.
     bool checkCollision(const std::vector<std::string> &other_move_group_names,
                         const std::vector<StateType> &other_move_group_states,
                         CollisionsCollective &collisions_collective) {
@@ -351,11 +369,17 @@ public:
         collision_request.verbose = verbose_;
 
         planning_scene_->checkCollision(collision_request, collision_result);
+        num_collision_checks_++;
 
         // Convert the collision result to a collision collective.
-        moveitCollisionResultToCollisionsCollective(collision_result, collisions_collective);
+        std::vector<std::string> other_agent_name_prefixes;
+        for (auto &other_move_group_name : other_move_group_names) {
+            std::string other_agent_name_prefix = other_move_group_name.substr(0, other_move_group_name.find("_"));
+            other_agent_name_prefixes.push_back(other_agent_name_prefix);
+        }
+        moveitCollisionResultToCollisionsCollective(collision_result, collisions_collective, "", other_agent_name_prefixes);
 
-        return collision_result.collision;
+        return collisions_collective.size() > 0;
     }
 
     /// @brief Check if a path is valid
@@ -369,12 +393,30 @@ public:
 
     /// @brief Calculate IK for a given pose
     /// @param pose The pose to calculate IK for
+    /// @param joint_state_seed The joint state to use as a seed.
+    /// @param joint_state The joint state to store the IK solution
+    /// @param timeout The timeout for the IK calculation
+    /// @return True if IK was found, false otherwise
+    bool calculateIK(const Eigen::Isometry3d &pose,
+                     const StateType &joint_state_seed,
+                     StateType &joint_state,
+                     double timeout = 0.1) {
+        // Convert the input to a geometry_msgs::Pose.
+        geometry_msgs::Pose pose_msg;
+        tf::poseEigenToMsg(pose, pose_msg);
+
+        // Call the other calculateIK function.
+        return calculateIK(pose_msg, joint_state_seed, joint_state, 1.0, timeout);
+    }
+
+    /// @brief Calculate IK for a given pose
+    /// @param pose The pose to calculate IK for
     /// @param joint_state The joint state to store the IK solution
     /// @param timeout The timeout for the IK calculation
     /// @return True if IK was found, false otherwise
     bool calculateIK(const geometry_msgs::Pose &pose,
                      StateType &joint_state,
-                     double timeout = 1.0) {
+                     double timeout = 0.1) {
         // resize the joint state
         joint_state.resize(num_joints_);
         // set joint model group as random, only the relevant kinematic group
@@ -405,7 +447,7 @@ public:
                      const StateType &seed,
                      StateType &joint_state,
                      double consistency_limit = 1.0,
-                     double timeout = 1.0) {
+                     double timeout = 0.1) {
         // resize the joint state
         joint_state.resize(num_joints_);
         // set the pose
@@ -485,6 +527,10 @@ public:
             }
         }
         return true;
+    }
+
+    inline int getNumCollisionChecks() const {
+        return num_collision_checks_;
     }
 
     planning_scene_monitor::PlanningSceneMonitorPtr planning_scene_monitor_;
