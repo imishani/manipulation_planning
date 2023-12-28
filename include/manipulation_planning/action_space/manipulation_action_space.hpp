@@ -32,8 +32,7 @@
  * \date   4/3/23
  */
 
-#ifndef MANIPULATION_PLANNING_MANIPULATIONACTIONSPACE_HPP
-#define MANIPULATION_PLANNING_MANIPULATIONACTIONSPACE_HPP
+#pragma once
 
 // include standard libraries
 #include <iostream>
@@ -50,7 +49,6 @@
 
 // project includes
 #include <search/action_space/action_space.hpp>
-
 #include "manipulation_planning/common/moveit_scene_interface.hpp"
 #include "manipulation_planning/common/utils.hpp"
 #include "manipulation_planning/heuristics/manip_heuristics.hpp"
@@ -74,7 +72,6 @@ struct ManipulationType : ActionType {
                                                         space_type_(SpaceType::ConfigurationSpace),
                                                         mprim_file_name_(std::move(mprim_file)),
                                                         max_action_(0.0){
-                                                            //            readMPfile();
                                                         };
 
     /// @brief Constructor with adaptive motion primitives given
@@ -385,9 +382,9 @@ protected:
     std::vector<std::pair<double, double>> joint_limits_;
     /// @brief The BFS heuristic
     BFSHeuristic *bfs_heuristic_;
-
-    // TODO: delete: temp
+    /// @brief Visualize a point, keep the id of the marker.
     int vis_id_ = 0;
+    /// @brief ROS node and marker publisher.
     rclcpp::Node::SharedPtr node_;
     rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr vis_pub_;
 
@@ -400,7 +397,7 @@ public:
                             BFSHeuristic *bfs_heuristic = nullptr) : ActionSpace(), bfs_heuristic_(bfs_heuristic) {
         moveit_interface_ = std::make_shared<MoveitInterface>(env);
         manipulation_type_ = std::make_shared<ManipulationType>(actions_ptr);
-        // get the joint limits
+        // Get the joint limits.
         moveit_interface_->getJointLimits(joint_limits_);
 
         // Set the ros node for this class.
@@ -826,4 +823,3 @@ public:
 };
 }  // namespace ims
 
-#endif  // MANIPULATION_PLANNING_MANIPULATIONACTIONSPACE_HPP

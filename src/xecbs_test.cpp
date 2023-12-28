@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2023, Itamar Mishani
+ * Copyright (C) 2023, Yorai Shaoul
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,9 +27,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 /*!
- * \file   confspace_test.cpp
- * \author Itamar Mishani (imishani@cmu.edu)
- * \date   4/18/23
+ * \file   xecbs_test.cpp
+ * \author Yorai Shaoul (yorai@cmu.edu)
+ * \date   December 27 2023
 */
 
 // C++ includes
@@ -41,6 +41,7 @@
 #include <manipulation_planning/action_space/manipulation_action_space.hpp>
 #include <manipulation_planning/action_space/manipulation_constrained_action_space.hpp>
 #include <manipulation_planning/common/moveit_scene_interface.hpp>
+#include <search/planners/multi_agent/eaecbs.hpp>
 #include <search/planners/wastar.hpp>
 #include <manipulation_planning/heuristics/manip_heuristics.hpp>
 #include <manipulation_planning/common/utils.hpp>
@@ -52,12 +53,28 @@
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/moveit_cpp/moveit_cpp.h>
 
+std::string getMPrimFilePathFromMoveGroupName(rclcpp::Node::SharedPtr node, std::string move_group_name) {
+    auto full_path = boost::filesystem::path(__FILE__).parent_path().parent_path();
+
+    // Define Robot inteface to give commands and get info from moveit:
+    moveit::planning_interface::MoveGroupInterface move_group(node, move_group_name);
+
+    // Get the number of joints.
+    int num_joints = (int)move_group.getVariableCount();
+
+    std::string path_mprim = full_path.string() + "/config/manip_timed_" + std::to_string(num_joints) + "dof.mprim";
+    return path_mprim;
+}
+
 int main(int argc, char** argv) {
 
+    ///////////////////////////////////
+    // ROS setup.
+    ///////////////////////////////////
     rclcpp::init(0, nullptr);
     rclcpp::NodeOptions node_options;
     node_options.automatically_declare_parameters_from_overrides(true);
-    auto node = rclcpp::Node::make_shared("confspace_test_node", node_options);
+    auto node = rclcpp::Node::make_shared("xecbs_test_node", node_options);
 
     // We spin up a SingleThreadedExecutor for the current state monitor to get information
     // about the robot's state.
@@ -65,70 +82,79 @@ int main(int argc, char** argv) {
     executor.add_node(node);
     std::thread([&executor]() { executor.spin(); }).detach();
 
-
     // Create a ROS logger
-    auto const logger = rclcpp::get_logger("confspace_test_node");
+    auto const logger = rclcpp::get_logger("xecbs_test_node");
 
-    std::string group_name = "panda_arm";
-    double discret = 5;
+    ///////////////////////////////////
+    // Search Action Spaces.
+    ///////////////////////////////////
 
-    // if (argc == 0) {
-    //     RCLCPP_INFO_STREAM(node->get_logger(), BOLDMAGENTA << "No arguments given: using default values");
-    //     RCLCPP_INFO_STREAM(node->get_logger(), "<group_name(string)> <discretization(int)> <save_experience(bool int)>");
-    //     RCLCPP_INFO_STREAM(node->get_logger(), "Using default values: manipulator_1 1 0" << RESET);
-    // } else if (argc == 2) {
-    //     group_name = argv[1];
-    // } else if (argc == 3) {
-    //     group_name = argv[1];
-    //     discret = std::stod(argv[2]);
-    // } else if (argc == 4) {
-    //     group_name = argv[1];
-    //     discret = std::stod(argv[2]);
-    //     save_experience = std::stoi(argv[3]);
-    // } else {
-    //     RCLCPP_INFO_STREAM(node->get_logger(), BOLDMAGENTA << "No arguments given: using default values");
-    //     RCLCPP_INFO_STREAM(node->get_logger(), "<group_name(string)> <discretization(int)> <save_experience(bool int)>" );
-    //     RCLCPP_INFO_STREAM(node->get_logger(), "Using default values: manipulator_1 1 0" << RESET);
-    // }
+    // The relevant moveit groups.
+    std::vector<std::string> move_group_names = {"panda0_arm", "panda1_arm", "panda2_arm", "panda3_arm"};
+    std::vector<std::string> agent_names = {"panda0", "panda1", "panda2", "panda3"};
+    std::vector<std::shared_ptr<ims::ManipulationConstrainedActionSpace>> action_spaces;
 
-    // Print the arguments.
-    RCLCPP_INFO_STREAM(node->get_logger(), "Using group: " << group_name);
-    RCLCPP_INFO_STREAM(node->get_logger(), "Using discretization: " << discret);
+    // Get the motion primitives file paths.
+    std::vector<std::string> mprim_file_paths;
+    for (std::string& move_group_name : move_group_names) {
+        mprim_file_paths.push_back(getMPrimFilePathFromMoveGroupName(node, move_group_name));
+    }
+
+    // Get the distance field of the scene for the BFS heuristic (used for snap).
+    auto df = ims::getDistanceFieldMoveIt();
+
+    // Keep the copies of the scene interfaces.
+    std::vector<std::shared_ptr<ims::MoveitInterface>> scene_interfaces;
+    for (std::string& move_group_name : move_group_names) {
+        scene_interfaces.push_back(std::make_shared<ims::MoveitInterface>(move_group_name));
+    }
+
+    // Show the bounding box of the distance field.
+    /*
+    std::string move_group_name0 = move_group_names[0];
+    moveit::planning_interface::MoveGroupInterface move_group0(node, move_group_name0);
+    rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr bb_pub =
+        node->create_publisher<visualization_msgs::msg::Marker>("bounding_box", 1);
+    ims::visualizeBoundingBox(df, bb_pub, move_group0.getPlanningFrame());
+    */
+
+   // Set up the BFS heuristics.
+    std::vector<std::shared_ptr<ims::BFSRemoveTimeHeuristic>> bfs_heuristics;
+    for (std::string& move_group_name : move_group_names) {
+        bfs_heuristics.push_back(std::make_shared<ims::BFSRemoveTimeHeuristic>(df, move_group_name));
+    }
+
+    // Set up the action types.
+    StateType discretization{1, 1, 1, 1, 1, 1, 1, 1};  // In Degrees, with the last element is time in time-units.
+    ims::deg2rad(discretization, std::vector<bool>{true, true, true, true, true, true, true, false});
+    std::vector<ims::ManipulationType> action_types;
+    for (std::string& mprim_file_path : mprim_file_paths) {
+        auto action_type = ims::ManipulationType(mprim_file_path);
+        action_type.Discretization(discretization);
+        action_types.push_back(ims::ManipulationType(mprim_file_path));
+    }
+
+    // Set up the action spaces.
+    for (int i = 0; i < move_group_names.size(); i++) {
+        action_spaces.push_back(std::make_shared<ims::ManipulationConstrainedActionSpace>(
+            scene_interfaces[i], action_types[i], bfs_heuristics[i]));
+    }
 
 
-    auto full_path = boost::filesystem::path(__FILE__).parent_path().parent_path();
 
-    // Define Robot inteface to give commands and get info from moveit:
-    moveit::planning_interface::MoveGroupInterface move_group(node, group_name);
 
-    // get the number of joints
-    int num_joints = (int)move_group.getVariableCount();
 
-    std::string path_mprim = full_path.string() + "/config/manip_" + std::to_string(num_joints) + "dof.mprim";
+    RCLCPP_INFO_STREAM(node->get_logger(), GREEN << "DONE SCRIPT" << RESET);/*
+
+    // /*
 
     moveit::core::RobotStatePtr current_state = move_group.getCurrentState();
 
-    // check for collision
-    planning_scene::PlanningScenePtr planning_scene;
-    planning_scene.reset(new planning_scene::PlanningScene(move_group.getRobotModel()));
-    collision_detection::CollisionRequest collision_request;
-    collision_detection::CollisionResult collision_result;
-    planning_scene->checkCollision(collision_request, collision_result, *current_state);
-
-    auto df = ims::getDistanceFieldMoveIt();
-    // show the bounding box of the distance field
-    rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr bb_pub =
-        node->create_publisher<visualization_msgs::msg::Marker>("bounding_box", 1);
-
-    ims::MoveitInterface scene_interface(group_name);
-
-    // get the planning frame
-    // ims::visualizeBoundingBox(df, bb_pub, move_group.getPlanningFrame());
     auto* heuristic = new ims::BFSHeuristic(df, group_name);
 //    auto* heuristic = new ims::JointAnglesHeuristic;
-    double weight = 100.0;
-
+    double weight = 40.0;
     ims::wAStarParams params(heuristic, weight);
+
 
     ims::ManipulationType action_type (path_mprim);
     StateType discretization(num_joints, discret);
@@ -149,8 +175,7 @@ int main(int argc, char** argv) {
     StateType goal_state = start_state;
 
     // change the goal state
-    goal_state[0] = 90;
-
+    goal_state[0] = 70;
     goal_state[5] = 166;
 
 
@@ -163,7 +188,7 @@ int main(int argc, char** argv) {
     ims::normalizeAngles(goal_state, joint_limits);
     ims::roundStateToDiscretization(start_state, action_type.state_discretization_);
     ims::roundStateToDiscretization(goal_state, action_type.state_discretization_);
-
+    
     ims::wAStar planner(params);
     try {
         planner.initializePlanner(action_space, start_state, goal_state);
@@ -215,5 +240,6 @@ int main(int argc, char** argv) {
     RCLCPP_INFO(node->get_logger(), "Executing trajectory");
     move_group.execute(trajectory);
     // @}
+    */
     return 0;
 }

@@ -27,6 +27,7 @@ include_directories(
 # Declare the C++ library
 add_library(${PROJECT_NAME}
   src/confspace_test.cpp
+  src/xecbs_test.cpp
   include/manipulation_planning/action_space/manipulation_action_space.hpp
   include/manipulation_planning/common/moveit_scene_interface.hpp
   include/manipulation_planning/heuristics/manip_heuristics.hpp
@@ -40,9 +41,11 @@ include_directories(
   ${EIGEN3_INCLUDE_DIR}
 )
 
-# Declare a C++ executable
+###################
+# Test executables
+###################
+# Declare a C++ executable for configuration space test.
 add_executable(${PROJECT_NAME}_cspace_test src/confspace_test.cpp)
-
 # Link the library and dependencies to the executable
 target_link_libraries(${PROJECT_NAME}_cspace_test
   ${PROJECT_NAME}
@@ -57,7 +60,25 @@ target_link_libraries(${PROJECT_NAME}_cspace_test
   ${geometry_msgs_LIBRARIES}
 )
 
+# Declare a C++ executable for xecbs test.
+add_executable(${PROJECT_NAME}_xecbs_test src/xecbs_test.cpp)
+# Link the library and dependencies to the executable
+target_link_libraries(${PROJECT_NAME}_xecbs_test
+  ${PROJECT_NAME}
+  ${rclcpp_LIBRARIES}
+  ${moveit_core_LIBRARIES}
+  ${moveit_ros_planning_LIBRARIES}
+  ${moveit_ros_planning_interface_LIBRARIES}
+  ${moveit_msgs_LIBRARIES}
+  ${std_msgs_LIBRARIES}
+  /usr/local/lib/${search_LIBRARIES}
+  ${Eigen3_LIBRARIES}
+  ${geometry_msgs_LIBRARIES}
+)
+
+###################
 # Specify dependencies for the target
+###################
 ament_target_dependencies(${PROJECT_NAME}
   moveit_core
   moveit_ros_planning
@@ -74,6 +95,7 @@ ament_target_dependencies(${PROJECT_NAME}
 install(TARGETS
   ${PROJECT_NAME}
   ${PROJECT_NAME}_cspace_test
+  ${PROJECT_NAME}_xecbs_test
   DESTINATION lib/${PROJECT_NAME}
 )
 
