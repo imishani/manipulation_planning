@@ -79,13 +79,13 @@ public:
     /// @brief Constructor
     /// @param moveitInterface The moveit interface
     /// @param ManipulationType The manipulation type
-    ManipulationConstrainedActionSpace(const MoveitInterface &env,
+    ManipulationConstrainedActionSpace(MoveitInterface &env,
                             const ManipulationType &actions_ptr,
                             BFSHeuristic *bfs_heuristic = nullptr) : bfs_heuristic_(bfs_heuristic), ConstrainedActionSpace() {
         moveit_interface_ = std::make_shared<MoveitInterface>(env);
         manipulation_type_ = std::make_shared<ManipulationType>(actions_ptr);
         
-           // Get the joint limits.
+        // Get the joint limits.
         moveit_interface_->getJointLimits(joint_limits_);
 
         // Set the ros node for this class.
@@ -96,6 +96,9 @@ public:
 
         // Spin the node.
         rclcpp::spin_some(node_);
+
+        // Instantiate the ManipulationActionSpace class, for use of some of its methods.
+        manip_action_space_ = std::make_shared<ManipulationActionSpace>(env, actions_ptr, bfs_heuristic);
     }
 
     virtual void getActions(int state_id,

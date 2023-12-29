@@ -69,7 +69,10 @@ int main(int argc, char** argv) {
     // Create a ROS logger
     auto const logger = rclcpp::get_logger("confspace_test_node");
 
-    std::string group_name = "panda_arm";
+    // Get the ros param for group_name.
+    std::string group_name;
+    node->get_parameter_or("group_name", group_name, std::string("panda0_arm"));
+
     double discret = 5;
 
     // if (argc == 0) {
