@@ -27,14 +27,12 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 /*!
- * \file   manipulation_constrained_action_space.hpp
+ * \file   mramp_action_space.hpp
  * \author Yorai Shaoul (yorai@cmu.edu)
  * \date   Sept 6 2023
  */
+#pragma once 
 
-#ifndef MANIPULATION_PLANNING_MANIPULATION_EXPERIENCE_ACCELERATED_CONSTRAINEDACTIONSPACE_HPP
-#define MANIPULATION_PLANNING_MANIPULATION_EXPERIENCE_ACCELERATED_CONSTRAINEDACTIONSPACE_HPP
-/*
 // include standard libraries
 #include <iostream>
 #include <utility>
@@ -42,16 +40,16 @@
 
 // include ROS libraries
 #include <moveit/move_group_interface/move_group_interface.h>
-#include <ros/ros.h>
-// include tf to convert euler angles to quaternions
-#include <tf/transform_datatypes.h>
+#include <rclcpp/rclcpp.hpp>
 
 // project includes
 #include <manipulation_planning/common/moveit_scene_interface.hpp>
 #include <manipulation_planning/common/utils.hpp>
 #include <manipulation_planning/heuristics/manip_heuristics.hpp>
-#include <search/action_space/subcost_experience_accelerated_constrained_action_space.hpp>
+#include <search/action_space/subcost_action_space.hpp>
 #include <manipulation_planning/action_space/manipulation_action_space.hpp>
+
+
 
 namespace ims {
 
@@ -72,10 +70,11 @@ protected:
     /// @brief The BFS heuristic
     BFSHeuristic *bfs_heuristic_;
 
-    // TODO: delete: temp
+    /// @brief Visualize a point, keep the id of the marker.
     int vis_id_ = 0;
-    rclcpp::NodeHandle nh_;
-    rclcpp::Publisher vis_pub_;
+    /// @brief ROS node and marker publisher.
+    rclcpp::Node::SharedPtr node_;
+    rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr vis_pub_;
 
     // Instance of the ManipulationActionSpace class to use some of its methods.
     // Since the ManipulationActionSpace class does not have a default constructor, the line above does not work. So instead we set it to nullptr and instantiate it in the constructor.
@@ -85,7 +84,7 @@ public:
     /// @brief Constructor
     /// @param moveitInterface The moveit interface
     /// @param ManipulationType The manipulation type
-    ManipulationSubcostExperienceAcceleratedConstrainedActionSpace(const MoveitInterface &env,
+    ManipulationSubcostExperienceAcceleratedConstrainedActionSpace( MoveitInterface &env,
                             const ManipulationType &actions_ptr,
                             BFSHeuristic *bfs_heuristic = nullptr) : bfs_heuristic_(bfs_heuristic), SubcostExperienceAcceleratedConstrainedActionSpace() {
         moveit_interface_ = std::make_shared<MoveitInterface>(env);
@@ -93,8 +92,16 @@ public:
         
         // Get the joint limits.
         moveit_interface_->getJointLimits(joint_limits_);
-        vis_pub_ = nh_.advertise<visualization_msgs::msg::Marker>("visualization_marker", 0);
 
+        // Set the ros node for this class.
+        node_ = rclcpp::Node::make_shared("manipulation_action_space");
+
+        // Initialize the publisher for the visualization markers.
+        vis_pub_ = node_->create_publisher<visualization_msgs::msg::Marker>("visualization_marker", 0);
+
+        // Spin the node.
+        rclcpp::spin_some(node_);
+        
         // Instantiate the ManipulationActionSpace class, for use of some of its methods.
         manip_action_space_ = std::make_shared<ManipulationActionSpace>(env, actions_ptr, bfs_heuristic);
     }
@@ -261,9 +268,9 @@ public:
         marker.color.a = a;
         
         // Lifetime.
-        marker.lifetime = rclcpp::Duration(5.0);
+        marker.lifetime = rclcpp::Duration::from_seconds(5.0);
         // visualize
-        vis_pub_.publish(marker);
+        vis_pub_->publish(marker);
         vis_id_++;
     }
 
@@ -286,10 +293,10 @@ public:
         marker.color.a = 0.5;
 
         // Lifetime.
-        marker.lifetime = rclcpp::Duration(5.0);
+        marker.lifetime = rclcpp::Duration::from_seconds(5.0);
         
         // visualize
-        vis_pub_.publish(marker);
+        vis_pub_->publish(marker);
         vis_id_++;
     }
 
@@ -325,5 +332,3 @@ public:
     }
     };
 }  // namespace ims
-*/
-#endif  // MANIPULATION_PLANNING_MANIPULATION_EXPERIENCE_ACCELERATED_CONSTRAINEDACTIONSPACE_HPP

@@ -40,6 +40,7 @@
 // project includes
 #include <manipulation_planning/action_space/manipulation_action_space.hpp>
 #include <manipulation_planning/action_space/manipulation_constrained_action_space.hpp>
+#include <manipulation_planning/action_space/mramp_manipulation_action_space.hpp>
 #include <manipulation_planning/common/moveit_scene_interface.hpp>
 #include <search/planners/multi_agent/eaecbs.hpp>
 #include <search/planners/wastar.hpp>
@@ -86,13 +87,17 @@ int main(int argc, char** argv) {
     auto const logger = rclcpp::get_logger("xecbs_test_node");
 
     ///////////////////////////////////
-    // Search Action Spaces.
+    // Scene Interfaces.
     ///////////////////////////////////
+    StateType discretization{1, 1, 1, 1, 1, 1, 1, 1};  // In Degrees, with the last element is time in time-units.
+    std::vector<bool> state_valid_mask{true, true, true, true, true, true, true, false};
+    ims::deg2rad(discretization, state_valid_mask); // In Radians, the last element is time in time-units.
+    int num_joints = 7;
 
     // The relevant moveit groups.
     std::vector<std::string> move_group_names = {"panda0_arm", "panda1_arm", "panda2_arm", "panda3_arm"};
     std::vector<std::string> agent_names = {"panda0", "panda1", "panda2", "panda3"};
-    std::vector<std::shared_ptr<ims::ManipulationConstrainedActionSpace>> action_spaces;
+    std::vector<std::shared_ptr<ims::SubcostConstrainedActionSpace>> action_spaces;
 
     // Get the motion primitives file paths.
     std::vector<std::string> mprim_file_paths;
@@ -104,9 +109,49 @@ int main(int argc, char** argv) {
     auto df = ims::getDistanceFieldMoveIt();
 
     // Keep the copies of the scene interfaces.
-    std::vector<std::shared_ptr<ims::MoveitInterface>> scene_interfaces;
+    std::vector<ims::MoveitInterface> scene_interfaces;
     for (std::string& move_group_name : move_group_names) {
-        scene_interfaces.push_back(std::make_shared<ims::MoveitInterface>(move_group_name));
+        scene_interfaces.push_back(ims::MoveitInterface(move_group_name));
+    }
+
+    // Create a move group interface for the multi-agent.
+    //  find the move group prefix, add a "_multi_arm" suffix and create a move group.
+    std::string move_group_multi_name = "panda_multi_arm";
+    moveit::planning_interface::MoveGroupInterface move_group_multi(node, move_group_multi_name);
+
+
+    ///////////////////////////////////
+    // Start and goal states. Both in radians.
+    ///////////////////////////////////
+    std::vector<StateType> start_states;
+    std::vector<StateType> goal_states;
+
+    // Get the current state of each agent to set as start.
+    std::vector<moveit::core::RobotStatePtr> current_states;
+    for (std::string& move_group_name : move_group_names) {
+        moveit::planning_interface::MoveGroupInterface move_group(node, move_group_name);
+        current_states.push_back(move_group.getCurrentState());
+    }
+
+    // Set the start and goal states.
+    for (int i = 0; i < move_group_names.size(); i++) {
+        StateType start_state = std::vector<double>(num_joints, 0.0);
+        scene_interfaces[i].getCurrentState(start_state);
+        // Round to discretization.
+        ims::roundStateToDiscretization(start_state, discretization);
+        // Add time.
+        start_state.push_back(0);
+        start_states.push_back(start_state);
+    }
+
+
+    // Create a common goal for the sake of the example.
+    StateType goal_state{0, -29, 0, -85, 0, 57, 0, -1};
+    // Convert to radians.
+    ims::deg2rad(goal_state, state_valid_mask);
+    ims::roundStateToDiscretization(goal_state, discretization);
+    for (int i = 0; i < start_states.size(); i++){
+        goal_states.push_back(goal_state);
     }
 
     // Show the bounding box of the distance field.
@@ -118,111 +163,119 @@ int main(int argc, char** argv) {
     ims::visualizeBoundingBox(df, bb_pub, move_group0.getPlanningFrame());
     */
 
-   // Set up the BFS heuristics.
-    std::vector<std::shared_ptr<ims::BFSRemoveTimeHeuristic>> bfs_heuristics;
-    for (std::string& move_group_name : move_group_names) {
-        bfs_heuristics.push_back(std::make_shared<ims::BFSRemoveTimeHeuristic>(df, move_group_name));
-    }
+    ///////////////////////////////////
+    // Action Spaces.
+    ///////////////////////////////////
 
     // Set up the action types.
-    StateType discretization{1, 1, 1, 1, 1, 1, 1, 1};  // In Degrees, with the last element is time in time-units.
-    ims::deg2rad(discretization, std::vector<bool>{true, true, true, true, true, true, true, false});
-    std::vector<ims::ManipulationType> action_types;
+    std::vector<ims::MrampManipulationActionType> action_types;
     for (std::string& mprim_file_path : mprim_file_paths) {
-        auto action_type = ims::ManipulationType(mprim_file_path);
+        auto action_type = ims::MrampManipulationActionType(mprim_file_path);
         action_type.Discretization(discretization);
-        action_types.push_back(ims::ManipulationType(mprim_file_path));
+        action_types.push_back(action_type);
     }
 
     // Set up the action spaces.
     for (int i = 0; i < move_group_names.size(); i++) {
-        action_spaces.push_back(std::make_shared<ims::ManipulationConstrainedActionSpace>(
-            scene_interfaces[i], action_types[i], bfs_heuristics[i]));
+        std::string move_group_name = move_group_names[i];
+        auto* bfs_heuristic = new ims::BFSRemoveTimeHeuristic(df, move_group_name);
+        bfs_heuristic->setGoal(goal_states[i]);
+
+        action_spaces.push_back(std::make_shared<ims::MrampManipulationActionSpace>(
+                scene_interfaces[i], 
+                action_types[i], 
+                bfs_heuristic));
     }
 
+    ///////////////////////////////////
+    // Planner.
+    ///////////////////////////////////
+    double weight_low_level_heuristic = 55.0;
+    double low_level_focal_suboptimality =  1.3;
+    double high_level_focal_suboptimality = 1.3;
+    ims::EAECBSParams params_eaecbs;
+    params_eaecbs.weight_low_level_heuristic = weight_low_level_heuristic;
+    params_eaecbs.low_level_focal_suboptimality = low_level_focal_suboptimality;
+    params_eaecbs.high_level_focal_suboptimality = high_level_focal_suboptimality;
 
+    params_eaecbs.low_level_heuristic_ptrs;
+    for (size_t i = 0; i < move_group_names.size(); i++) {
+        params_eaecbs.low_level_heuristic_ptrs.push_back(new ims::EuclideanRemoveTimeHeuristic());
+    }
+    // Initialize the planner.
+    ims::MultiAgentPaths paths;
+    PlannerStats stats;
+    ims::EAECBS planner(params_eaecbs);
+    planner.initializePlanner(action_spaces, move_group_names, start_states, goal_states);
+    if (!planner.plan(paths)) {
+        RCLCPP_ERROR(node->get_logger(), "Failed to plan.");
+        return 0;
+    }
 
+    // Print the stats.
+    stats = planner.reportStats();
+    std::cout << GREEN << "Planning time: " << stats.time << " sec" << std::endl;
+    std::cout << "cost: " << stats.cost << std::endl;
+    std::cout << "Number of nodes expanded: " << stats.num_expanded << std::endl;
+    std::cout << "Number of nodes generated: " << stats.num_generated << std::endl;
+    std::cout << "suboptimality: " << stats.suboptimality << RESET << std::endl;
 
+    ///////////////////////////////////
+    // Move the robots.
+    ///////////////////////////////////
+    // Create a composite-state trajectory.
+    std::vector<StateType> path_composite;
+    MultiAgentPaths ids_and_paths;
+    for (int i{0}; i < move_group_names.size(); ++i) {
+        std::pair<int, PathType> id_and_path;
+        id_and_path.first = i;
+        id_and_path.second = paths[i];
+        ids_and_paths.insert(id_and_path);
+    }
+
+    // Pad the paths to the same length.
+    ims::padPathsToMaxLength(ids_and_paths);
+
+    // Create a composite path.
+    for (int i{0}; i < paths[0].size(); ++i) {
+        StateType composite_state;
+        for (int agent_id{0}; agent_id < move_group_names.size(); ++agent_id) {
+            PathType agent_path = ids_and_paths[agent_id];
+
+            composite_state.insert(composite_state.end(), agent_path[i].begin(), agent_path[i].end() -1);
+        }
+        path_composite.push_back(composite_state);
+    }
+
+    // Execute the path.
+    // A composite start state.
+    StateType start_state_composite;
+    for (int i{0}; i < move_group_names.size(); ++i) {
+        start_state_composite.insert(start_state_composite.end(), start_states[i].begin(), start_states[i].end() -1);
+    }
+
+    // A composite goal state.
+    StateType goal_state_composite;
+    for (int i{0}; i < move_group_names.size(); ++i) {
+        goal_state_composite.insert(goal_state_composite.end(), goal_states[i].begin(), goal_states[i].end() - 1);
+    }
+
+    // Profile and execute the path.
+    moveit_msgs::msg::RobotTrajectory trajectory;
+    ims::profileTrajectory(start_state_composite,
+                      goal_state_composite,
+                      path_composite,
+                      move_group_multi,
+                      trajectory);
+
+    RCLCPP_INFO(node->get_logger(), "Executing trajectory");
+    move_group_multi.execute(trajectory);
 
     RCLCPP_INFO_STREAM(node->get_logger(), GREEN << "DONE SCRIPT" << RESET);/*
 
     // /*
 
-    moveit::core::RobotStatePtr current_state = move_group.getCurrentState();
 
-    auto* heuristic = new ims::BFSHeuristic(df, group_name);
-//    auto* heuristic = new ims::JointAnglesHeuristic;
-    double weight = 40.0;
-    ims::wAStarParams params(heuristic, weight);
-
-
-    ims::ManipulationType action_type (path_mprim);
-    StateType discretization(num_joints, discret);
-    ims::deg2rad(discretization);
-    action_type.Discretization(discretization);
-
-//    std::shared_ptr<ims::ManipulationActionSpace> action_space = std::make_shared<ims::ManipulationActionSpace>(scene_interface, action_type);
-    std::shared_ptr<ims::ManipulationActionSpace> action_space = std::make_shared<ims::ManipulationActionSpace>(scene_interface, action_type, heuristic);
-
-    StateType start_state  = std::vector<double>(num_joints, 0.0);
-    const std::vector<std::string>& joint_names = move_group.getActiveJoints();
-    for (int i = 0; i < num_joints; i++) {
-        start_state[i] = current_state->getVariablePosition(joint_names[i]);
-        RCLCPP_INFO_STREAM(node->get_logger(), "Joint " << joint_names[i] << " is " << start_state[i]);
-    }
-    // make a goal_state a copy of start_state
-    ims::rad2deg(start_state);
-    StateType goal_state = start_state;
-
-    // change the goal state
-    goal_state[0] = 70;
-    goal_state[5] = 166;
-
-
-    ims::deg2rad(start_state); ims::deg2rad(goal_state);
-    // normalize the start and goal states
-    // get the joint limits
-    std::vector<std::pair<double, double>> joint_limits;
-    scene_interface.getJointLimits(joint_limits);
-    ims::normalizeAngles(start_state, joint_limits);
-    ims::normalizeAngles(goal_state, joint_limits);
-    ims::roundStateToDiscretization(start_state, action_type.state_discretization_);
-    ims::roundStateToDiscretization(goal_state, action_type.state_discretization_);
-    
-    ims::wAStar planner(params);
-    try {
-        planner.initializePlanner(action_space, start_state, goal_state);
-    }
-    catch (std::exception& e) {
-        std::cout << e.what() << std::endl;
-    }
-
-    std::vector<StateType> path_;
-    if (!planner.plan(path_)) {
-        RCLCPP_ERROR(node->get_logger(), "No path found");
-        return 0;
-    }
-    else {
-        RCLCPP_INFO_STREAM(node->get_logger(), GREEN << "Path found" << RESET);
-    }
-
-    // Print the path.
-    int counter = 0;
-    for (auto& state : path_) {
-        std::cout << "State: " << counter++ << ": ";
-        for (auto& val : state) {
-            std::cout << val << ", ";
-        }
-        std::cout << std::endl;
-    }
-
-    // report stats
-    PlannerStats stats = planner.reportStats();
-    RCLCPP_INFO_STREAM(node->get_logger(), "\n" << GREEN << "\t Planning time: " << stats.time << " sec" << std::endl
-                    << "\t cost: " << stats.cost << std::endl
-                    << "\t Path length: " << path_.size() << std::endl
-                    << "\t Number of nodes expanded: " << stats.num_expanded << std::endl
-                    << "\t Suboptimality: " << stats.suboptimality << RESET);
 
     // profile and execute the path
     // @{

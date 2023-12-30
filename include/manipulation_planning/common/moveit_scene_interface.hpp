@@ -595,6 +595,14 @@ public:
         return num_collision_checks_;
     }
 
+    inline std::vector<std::string> getJointNames() const {
+        return joint_names_;
+    }
+
+    void getCurrentState(StateType& state_val) const {
+        kinematic_state_->copyJointGroupPositions(joint_model_group, state_val);
+    }
+
     planning_scene_monitor::PlanningSceneMonitorPtr planning_scene_monitor_;
     std::shared_ptr<planning_scene::PlanningScene> planning_scene_;
     std::shared_ptr<moveit::planning_interface::PlanningSceneInterface> planning_scene_interface_;

@@ -43,7 +43,7 @@
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <visualization_msgs/msg/marker.hpp>
 #include <rclcpp/rclcpp.hpp>
-// include tf to convert euler angles to quaternions
+// Include tf to convert euler angles to quaternions.
 #include <tf2/transform_datatypes.h>
 #include <geometry_msgs/msg/pose.hpp>
 
