@@ -96,7 +96,7 @@ int main(int argc, char** argv) {
 
     // The relevant moveit groups.
     std::vector<std::string> move_group_names = {"panda0_arm", "panda1_arm", "panda2_arm", "panda3_arm"};
-    std::vector<std::string> agent_names = {"panda0", "panda1", "panda2", "panda3"};
+    std::vector<std::string> robot_names = {"panda0", "panda1", "panda2", "panda3"};
     std::vector<std::shared_ptr<ims::SubcostConstrainedActionSpace>> action_spaces;
 
     // Get the motion primitives file paths.
@@ -190,7 +190,7 @@ int main(int argc, char** argv) {
     ///////////////////////////////////
     // Planner.
     ///////////////////////////////////
-    double weight_low_level_heuristic = 55.0;
+    double weight_low_level_heuristic = 15.0;
     double low_level_focal_suboptimality =  1.3;
     double high_level_focal_suboptimality = 1.3;
     ims::EAECBSParams params_eaecbs;
@@ -223,7 +223,20 @@ int main(int argc, char** argv) {
     ///////////////////////////////////
     // Move the robots.
     ///////////////////////////////////
-    // Create a composite-state trajectory.
+
+    RCLCPP_INFO_STREAM(node->get_logger(), "Shortcutting paths.");
+    std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+
+    MultiAgentPaths smoothed_paths;
+    std::unordered_map<int, std::string> robot_names_map;
+    for (size_t i = 0; i < robot_names.size(); i++) {
+        robot_names_map[i] = robot_names[i];
+    }
+    planning_scene::PlanningScenePtr planning_scene(new planning_scene::PlanningScene(move_group_multi.getRobotModel()));
+    ims::shortcutMultiAgentPathsIterative(paths, move_group_multi, planning_scene, robot_names_map, smoothed_paths, 1.0);
+    paths = smoothed_paths;
+
+   // Create a composite-state trajectory.
     std::vector<StateType> path_composite;
     MultiAgentPaths ids_and_paths;
     for (int i{0}; i < move_group_names.size(); ++i) {
@@ -235,9 +248,10 @@ int main(int argc, char** argv) {
 
     // Pad the paths to the same length.
     ims::padPathsToMaxLength(ids_and_paths);
+    int T = ids_and_paths[0].size();
 
     // Create a composite path.
-    for (int i{0}; i < paths[0].size(); ++i) {
+    for (int i{0}; i < T; ++i) {
         StateType composite_state;
         for (int agent_id{0}; agent_id < move_group_names.size(); ++agent_id) {
             PathType agent_path = ids_and_paths[agent_id];
@@ -269,30 +283,10 @@ int main(int argc, char** argv) {
                       trajectory);
 
     RCLCPP_INFO(node->get_logger(), "Executing trajectory");
+    // Allow for large steps.
     move_group_multi.execute(trajectory);
 
-    RCLCPP_INFO_STREAM(node->get_logger(), GREEN << "DONE SCRIPT" << RESET);/*
+    RCLCPP_INFO_STREAM(node->get_logger(), GREEN << "DONE SCRIPT" << RESET);
 
-    // /*
-
-
-
-    // profile and execute the path
-    // @{
-    std::vector<StateType> traj;
-    for (auto& state : path_) {
-        traj.push_back(state);
-    }
-    moveit_msgs::msg::RobotTrajectory trajectory;
-    ims::profileTrajectory(start_state,
-                      goal_state,
-                      traj,
-                      move_group,
-                      trajectory);
-
-    RCLCPP_INFO(node->get_logger(), "Executing trajectory");
-    move_group.execute(trajectory);
-    // @}
-    */
     return 0;
 }
