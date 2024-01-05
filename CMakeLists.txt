@@ -27,7 +27,7 @@ include_directories(
 # Declare the C++ library
 add_library(${PROJECT_NAME}
   src/confspace_test.cpp
-  src/xecbs_test.cpp
+  src/mramp_test.cpp
   include/manipulation_planning/action_space/manipulation_action_space.hpp
   include/manipulation_planning/common/moveit_scene_interface.hpp
   include/manipulation_planning/heuristics/manip_heuristics.hpp
@@ -61,9 +61,9 @@ target_link_libraries(${PROJECT_NAME}_cspace_test
 )
 
 # Declare a C++ executable for xecbs test.
-add_executable(${PROJECT_NAME}_xecbs_test src/xecbs_test.cpp)
+add_executable(${PROJECT_NAME}_mramp_test src/mramp_test.cpp)
 # Link the library and dependencies to the executable
-target_link_libraries(${PROJECT_NAME}_xecbs_test
+target_link_libraries(${PROJECT_NAME}_mramp_test
   ${PROJECT_NAME}
   ${rclcpp_LIBRARIES}
   ${moveit_core_LIBRARIES}
@@ -95,7 +95,7 @@ ament_target_dependencies(${PROJECT_NAME}
 install(TARGETS
   ${PROJECT_NAME}
   ${PROJECT_NAME}_cspace_test
-  ${PROJECT_NAME}_xecbs_test
+  ${PROJECT_NAME}_mramp_test
   DESTINATION lib/${PROJECT_NAME}
 )
 

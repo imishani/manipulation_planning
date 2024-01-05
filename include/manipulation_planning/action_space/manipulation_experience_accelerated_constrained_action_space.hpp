@@ -274,6 +274,40 @@ public:
         vis_id_++;
     }
 
+    /// @brief Visualize a sphere.
+    void visualizeSphere(double x, double y, double z, double r, double a = 0.2) {
+        // Use the implementation from manipulation action space.
+        visualization_msgs::msg::Marker marker;
+        marker.header.frame_id = moveit_interface_->planning_scene_->getPlanningFrame();
+        marker.header.stamp = rclcpp::Time();
+        marker.ns = "graph";
+        marker.id = vis_id_;
+        marker.type = visualization_msgs::msg::Marker::SPHERE;
+        marker.action = visualization_msgs::msg::Marker::ADD;
+        marker.pose.position.x = x;
+        marker.pose.position.y = y;
+        marker.pose.position.z = z;
+        marker.pose.orientation.x = 0.0;
+        marker.pose.orientation.y = 0.0;
+        marker.pose.orientation.z = 0.0;
+        marker.pose.orientation.w = 1.0;
+
+        marker.scale.x = r;
+        marker.scale.y = r;
+        marker.scale.z = r;
+        // Red.
+        marker.color.r = 1.0;
+        marker.color.g = 0.0;
+        marker.color.b = 0.0;
+        marker.color.a = a;
+        
+        // Lifetime.
+        marker.lifetime = rclcpp::Duration::from_seconds(5.0);
+        // visualize
+        vis_pub_->publish(marker);
+        vis_id_++;
+    }
+
 
     /// @brief Visualize a state via its end effector pose in rviz for debugging
     /// @param pose

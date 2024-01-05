@@ -74,7 +74,7 @@ struct MrampManipulationActionType : ManipulationType {
                            std::make_pair(true, 0.4),   // long_dist
                            std::make_pair(false, 0.2),  // snap_xyz
                            std::make_pair(false, 0.2),  // snap_rpy
-                           std::make_pair(true, 0.04)); // snap_xyzrpy
+                           std::make_pair(true, 0.08)); // snap_xyzrpy
     }
 
     /// @brief Default destructor.
@@ -613,6 +613,7 @@ void MrampManipulationActionSpace::getActions(int state_id,
         pose.position.z = curr_state->state_mapped.at(2);
         // Use tf2::convert to convert Roll-Pitch-Yaw angles to Quaternion
         tf2::Quaternion quaternion;
+        // TODO(yorai): I think the conversion below is wrong.
         quaternion.setRPY(curr_state->state_mapped.at(3),
                         curr_state->state_mapped.at(4),
                         curr_state->state_mapped.at(5));
@@ -642,7 +643,6 @@ void MrampManipulationActionSpace::getActions(int state_id,
                 
                 if (snap_type == 0) {
                     // SNAP to goal.
-                    RCLCPP_INFO_STREAM(node_->get_logger(), CYAN << "SNAP to goal" << RESET);
                     StateType goal_state_val = bfs_heuristic_->goal_;
                     goal_state_val.push_back(curr_state_val.back() + manipulation_type_->state_discretization_.back());
                     action_seq.push_back(goal_state_val);
@@ -829,31 +829,24 @@ bool MrampManipulationActionSpace::isSatisfyingConstraints(const StateType& stat
                             continue;
                         }
 
-                        // If the constraint is a vertex constraint, check if the state is valid w.r.t the constraint.
-                        // Create a sphere world object for the sphere in question.
-                        SphereWorldObject sphere_world_object(sphere3d_constraint_ptr->center, sphere3d_constraint_ptr->radius);
-
-                        // Create a vector to hold this sphere.
-                        std::vector<SphereWorldObject> sphere_world_objects = {sphere_world_object};
-
-                        // Create a collisionsCollective to store any collisions found.
-                        CollisionsCollective collisions;
-
-                        // Check if the is valid when the sphere is included.
+                        // Remove time from the state.
                         StateType next_state_val_wo_time = {next_state_val.begin(), next_state_val.end() - 1};
-                        bool is_valid = moveit_interface_->isStateValid(next_state_val_wo_time, sphere_world_objects, collisions);
 
-                        // We only care about collisions with spheres. So if the state is not valid, we should check that the reason is a collision with a sphere.
-                        if (!is_valid) {
-                            for (auto& collision : collisions.getCollisions()) {
-                                // TODO(yoraish): check whether the collision is with a sphere in a less fragile way.
-                                if ((collision.body_type_0 == BodyType::WORLD_OBJECT || collision.body_type_1 == BodyType::WORLD_OBJECT)
-                                    && (collision.body_name_0.find("sphere") != std::string::npos || collision.body_name_1.find("sphere") != std::string::npos)) {
-                                    return false;
-                                }
-                            }
+                        // Get the point and the radius of the sphere.
+                        Eigen::Vector3d sphere_center = sphere3d_constraint_ptr->center;
+                        double sphere_radius = sphere3d_constraint_ptr->radius;
+
+                        // Visualize the sphere.
+                        this->visualizeSphere(sphere_center.x(), sphere_center.y(), sphere_center.z(), sphere_radius);
+
+                        // Check if the point distance to the robot is smaller than the radius.
+                        double distance_to_robot = -1;
+                        moveit_interface_->getDistanceToRobot(next_state_val_wo_time, sphere_center, sphere_radius, distance_to_robot);
+
+                        // If the distance is smaller than the radius, then the state is not valid.
+                        if (distance_to_robot < sphere_radius) {
+                            return false;
                         }
-
                     }
                     else {
                         throw std::runtime_error("Could not cast constraint to sphere3d constraint");

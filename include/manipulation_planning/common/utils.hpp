@@ -339,34 +339,34 @@ inline double geodesicDistance(const Eigen::Vector3d& q1, const Eigen::Vector3d&
 /// \param start The start joint state. type: StateType
 /// \param goal The goal joint state. type: StateType
 /// \param trajectory a vector of joint states. type: std::vector<StateType>
-/// \param move_group_ The move group object. type: moveit::planning_interface::MoveGroupInterface
+/// \param move_group The move group object. type: moveit::planning_interface::MoveGroupInterface
 /// \param trajectory_msg The output trajectory. type: moveit_msgs::msg::RobotTrajectory
 /// \return success bool
 inline bool profileTrajectory(const StateType& start,
                               const StateType& goal,
                               const std::vector<StateType>& trajectory,
-                              const moveit::planning_interface::MoveGroupInterface& move_group_,
+                              const moveit::planning_interface::MoveGroupInterface& move_group,
                               moveit_msgs::msg::RobotTrajectory& trajectory_msg,
                               double velocity_scaling_factor = 0.2,
                               double acceleration_scaling_factor = 0.2) {
-    trajectory_msg.joint_trajectory.header.frame_id = move_group_.getPlanningFrame();
-    trajectory_msg.joint_trajectory.joint_names = move_group_.getActiveJoints();
+    trajectory_msg.joint_trajectory.header.frame_id = move_group.getPlanningFrame();
+    trajectory_msg.joint_trajectory.joint_names = move_group.getActiveJoints();
     trajectory_msg.joint_trajectory.points.resize(trajectory.size());
 
     // check if current robot state is the same as the start state
-    auto current_state = move_group_.getCurrentState();
+    auto current_state = move_group.getCurrentState();
     std::vector<double> joint_values;
-    current_state->copyJointGroupPositions(move_group_.getName(), joint_values);
+    current_state->copyJointGroupPositions(move_group.getName(), joint_values);
     for (int i = 0; i < trajectory.size(); ++i) {
         trajectory_msg.joint_trajectory.points[i].positions = trajectory[i];
     }
 
     // Create a RobotTrajectory object
-    robot_trajectory::RobotTrajectory robot_trajectory(move_group_.getRobotModel(), move_group_.getName());
+    robot_trajectory::RobotTrajectory robot_trajectory(move_group.getRobotModel(), move_group.getName());
     // convert the trajectory vector to trajectory message
     moveit::core::RobotState start_state_moveit(robot_trajectory.getRobotModel());
     // set start_state_moveit to the start state of the trajectory
-    start_state_moveit.setJointGroupPositions(move_group_.getName(), trajectory[0]);
+    start_state_moveit.setJointGroupPositions(move_group.getName(), trajectory[0]);
     robot_trajectory.setRobotTrajectoryMsg(start_state_moveit, trajectory_msg);
 
     // Trajectory processing
@@ -545,9 +545,9 @@ inline std::shared_ptr<distance_field::PropagationDistanceField> getEmptyDistanc
 /// \param df_size_y The size of the distance field in y
 /// \param df_size_z The size of the distance field in z
 /// \param df_res The resolution of the distance field
-/// \param df_origin_x The origin of the distance field in x
-/// \param df_origin_y The origin of the distance field in y
-/// \param df_origin_z The origin of the distance field in z
+/// \param df_origin_x The origin (corner) of the distance field in x
+/// \param df_origin_y The origin (corner) of the distance field in y
+/// \param df_origin_z The origin (corner) of the distance field in z
 /// \param max_distance The maximum distance of the distance field
 /// \return The distance field
 inline std::shared_ptr<distance_field::PropagationDistanceField> getDistanceFieldMoveIt(double df_size_x = 3.0,
@@ -676,20 +676,20 @@ inline void getShapeOccupancy(const std::shared_ptr<distance_field::PropagationD
 /// \brief Get the occupied cells by the arm's robot_state in the distance field
 /// \param df The distance field
 /// \param robot_state The robot state
-/// \param move_group_ The move group object
+/// \param move_group The move group object
 /// \param occupied_cells The vector of occupied cells
 /// \return A vector of occupied cells
-inline void getRobotOccupancy(
+void getRobotOccupancy(
     const std::shared_ptr<distance_field::PropagationDistanceField>& df,
     moveit::core::RobotState& robot_state,
-    const std::unique_ptr<moveit::planning_interface::MoveGroupInterface>& move_group_,
+    const std::shared_ptr<moveit::planning_interface::MoveGroupInterface>& move_group,
     std::vector<std::vector<int>>& occupied_cells) {
     // Get the collision models of the robot
-    std::vector<const moveit::core::LinkModel*> link_models = robot_state.getJointModelGroup(move_group_->getName())->getLinkModels();
+    std::vector<const moveit::core::LinkModel*> link_models = robot_state.getJointModelGroup(move_group->getName())->getLinkModels();
     
     
     // delete all link models besides the first two:
-    link_models.erase(link_models.begin(), link_models.begin() + 2);
+    // link_models.erase(link_models.begin(), link_models.begin() + 2); // TODO(yoraish): Why?
 
     // get all the occupied cells
     for (auto& link : link_models) {
@@ -707,9 +707,53 @@ inline void getRobotOccupancy(
             df->addShapeToField(shape.get(), transform);
             std::vector<std::vector<int>> link_occupied_cells;
             getShapeOccupancy(df, *shape, transform, link_occupied_cells);
-            // add the occupied cells to the vector
+            // Add the occupied cells to the vector.
             occupied_cells.insert(occupied_cells.end(), link_occupied_cells.begin(),
                                   link_occupied_cells.end());
+        }
+    }
+}
+
+
+/// \brief Add the robot shape, as specified by its links model and state, to the distance field.
+/// \param df The distance field.
+/// \param robot_state The robot state.
+/// \param move_group The move group object.
+/// \return Nothing.
+// TODO(yoraish): have this also add the end-effector and any attached objects.
+void addRobotToDistanceField(
+    std::shared_ptr<distance_field::PropagationDistanceField>& df,
+    moveit::core::RobotState& robot_state,
+    const std::shared_ptr<moveit::planning_interface::MoveGroupInterface>& move_group) {
+    // Get the collision models of the robot
+    std::vector<const moveit::core::LinkModel*> link_models = robot_state.getJointModelGroup(move_group->getName())->getLinkModels();
+
+    // Get the collision model of the end-effector. 
+    const moveit::core::LinkModel* ee_link_model = robot_state.getLinkModel(move_group->getEndEffectorLink());
+    link_models.push_back(ee_link_model);
+    // Get other links of the end-effector. NOTE(yoraish): in the panda case, both fingers get the same transform. This is incorrect.
+    const std::vector<const moveit::core::JointModel*>& ee_attached_joints = ee_link_model->getChildJointModels();
+    for (const moveit::core::JointModel* joint_model : ee_attached_joints) {
+        const moveit::core::LinkModel* link_model = joint_model->getChildLinkModel();
+        link_models.push_back(link_model);
+    }
+
+    // TODO(yoraish): Get the collision models of the links in the attached objects.
+
+    // get all the occupied cells
+    for (auto& link : link_models) {
+        if (link->getName() == "world") {
+            continue;
+        }
+        if (link->getShapes().empty())
+            continue;
+        // for each shape in the link model get the occupied cells
+        for (auto& shape : link->getShapes()) {
+            // get the link pose in the world frame
+            //                // get the occupied cells
+            robot_state.updateLinkTransforms();
+            Eigen::Isometry3d transform = robot_state.getGlobalLinkTransform(link);
+            df->addShapeToField(shape.get(), transform);
         }
     }
 }
@@ -719,7 +763,7 @@ inline void getRobotOccupancy(
 /// \param publisher The publisher object
 /// \param frame_id The frame id
 /// \param id The marker id
-inline void visualizeOccupancy(const std::shared_ptr<distance_field::PropagationDistanceField>& df,
+void visualizeOccupancy(const std::shared_ptr<distance_field::PropagationDistanceField>& df,
                                const rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr& publisher,
                                const std::string& frame_id,
                                int id = 1) {
@@ -742,7 +786,7 @@ inline void visualizeOccupancy(const std::shared_ptr<distance_field::Propagation
     for (int x{0}; x < df->getXNumCells(); x++) {
         for (int y{0}; y < df->getYNumCells(); y++) {
             for (int z{0}; z < df->getZNumCells(); z++) {
-                if (df->getCell(x, y, z).distance_square_ == 0) {
+                if (df->getCell(x, y, z).distance_square_ <= df->getResolution() * df->getResolution() / 4.0) {
                     geometry_msgs::msg::Point p;
                     df->gridToWorld(x, y, z, p.x, p.y, p.z);
                     marker.points.push_back(p);
@@ -750,6 +794,47 @@ inline void visualizeOccupancy(const std::shared_ptr<distance_field::Propagation
                 }
             }
         }
+    }
+    publisher->publish(marker);
+}
+
+
+
+/// \brief Visualize a given list of cells in the distance field
+/// \param df The distance field
+/// \param occupied_cells
+/// \param publisher The publisher object
+/// \param frame_id The frame id
+/// \param id The marker id
+inline void visualizeDfGridCells(const std::shared_ptr<distance_field::PropagationDistanceField>& df,
+                                const std::vector<std::vector<int>>& cells,
+                                const rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr& publisher,
+                                const std::string& frame_id,
+                                int id = 1) {
+    visualization_msgs::msg::Marker marker;
+    marker.header.frame_id = frame_id;
+    marker.header.stamp = rclcpp::Time();
+    marker.ns = "occupied_cells";
+    marker.id = id;
+    marker.type = visualization_msgs::msg::Marker::CUBE_LIST;
+    marker.action = visualization_msgs::msg::Marker::ADD;
+    marker.scale.x = df->getResolution();
+    marker.scale.y = df->getResolution();
+    marker.scale.z = df->getResolution();
+    marker.color.a = 0.3;
+    marker.color.r = 0.5;
+    marker.color.g = 0.5;
+    marker.color.b = 0.0;
+    marker.pose.orientation.w = 1.0;
+    size_t num_occupied_cells = 0;
+    for (std::vector<int> cell : cells){
+        geometry_msgs::msg::Point p;
+        int x = cell[0];
+        int y = cell[1];
+        int z = cell[2];
+        df->gridToWorld(x, y, z, p.x, p.y, p.z);
+        marker.points.push_back(p);
+        num_occupied_cells++;
     }
     publisher->publish(marker);
 }

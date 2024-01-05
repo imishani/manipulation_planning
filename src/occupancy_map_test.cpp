@@ -25,7 +25,7 @@ int main(int argc, char** argv){
     spinner.start();
 
     // get the move group interface
-    moveit::planning_interface::MoveGroupInterfaceUniquePtr group = std::make_unique<moveit::planning_interface::MoveGroupInterface>("manipulator_1");
+    std::shared_ptr<moveit::planning_interface::MoveGroupInterface> group = std::make_shared<moveit::planning_interface::MoveGroupInterface>("manipulator_1");
     auto df = ims::getDistanceFieldMoveIt();
     // show the bounding box of the distance field
     rclcpp::Publisher bb_pub = nh.advertise<visualization_msgs::msg::Marker>("bb_marker", 10);

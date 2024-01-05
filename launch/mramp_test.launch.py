@@ -17,7 +17,7 @@ def generate_launch_description():
     ld = LaunchDescription([
             Node(
                 package='manipulation_planning', 
-                executable='manipulation_planning_xecbs_test', 
+                executable='manipulation_planning_mramp_test', 
                 output='screen',
             )
         ]

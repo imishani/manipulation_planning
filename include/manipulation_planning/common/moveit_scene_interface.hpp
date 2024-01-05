@@ -99,12 +99,14 @@ public:
         rclcpp::sleep_for(std::chrono::seconds(1));
         planning_scene_ = planning_scene_monitor_->getPlanningScene();
         group_name_ = group_name;
+        move_group_ = std::make_shared<moveit::planning_interface::MoveGroupInterface>(node_, group_name_);
+        frame_id_ = planning_scene_->getPlanningFrame();
 
         kinematic_state_ = std::make_shared<moveit::core::RobotState>(planning_scene_->getCurrentState());
         // joint model group
-        joint_model_group = kinematic_state_->getJointModelGroup(group_name_);
+        joint_model_group_ = kinematic_state_->getJointModelGroup(group_name_);
         // get the joint names
-        joint_names_ = joint_model_group->getActiveJointModelNames(); // TODO(yoraish): check this.
+        joint_names_ = joint_model_group_->getActiveJointModelNames(); // TODO(yoraish): check this.
         // get the number of joints
         num_joints_ = joint_names_.size();
 
@@ -161,14 +163,15 @@ public:
         rclcpp::sleep_for(std::chrono::seconds(1));
         planning_scene_ = planning_scene;
         group_name_ = group_name;
+        move_group_ = std::make_shared<moveit::planning_interface::MoveGroupInterface>(node_, group_name_);
         frame_id_ = planning_scene_->getPlanningFrame();
 
 
         kinematic_state_ = std::make_shared<moveit::core::RobotState>(planning_scene_->getCurrentState());
         // joint model group
-        joint_model_group = kinematic_state_->getJointModelGroup(group_name_);
+        joint_model_group_ = kinematic_state_->getJointModelGroup(group_name_);
         // get the joint names
-        joint_names_ = joint_model_group->getVariableNames();
+        joint_names_ = joint_model_group_->getVariableNames();
         // get the number of joints
         num_joints_ = joint_names_.size();
 
@@ -473,14 +476,14 @@ public:
         // resize the joint state
         joint_state.resize(num_joints_);
         // set joint model group as random, only the relevant kinematic group
-        kinematic_state_->setToRandomPositions(joint_model_group);
+        kinematic_state_->setToRandomPositions(joint_model_group_);
         // update
         planning_scene_monitor_->updateFrameTransforms();
         planning_scene_monitor_->updateSceneWithCurrentState();  // TODO: Is this needed?
         // set the pose
-        if (kinematic_state_->setFromIK(joint_model_group, pose, timeout)) {
+        if (kinematic_state_->setFromIK(joint_model_group_, pose, timeout)) {
             // get the joint values
-            kinematic_state_->copyJointGroupPositions(joint_model_group, joint_state);
+            kinematic_state_->copyJointGroupPositions(joint_model_group_, joint_state);
             return true;
         }
         else {
@@ -504,14 +507,14 @@ public:
         // resize the joint state
         joint_state.resize(num_joints_);
         // set the pose
-        kinematic_state_->setJointGroupPositions(joint_model_group, seed);
+        kinematic_state_->setJointGroupPositions(joint_model_group_, seed);
         // update
         planning_scene_monitor_->updateFrameTransforms();
         planning_scene_monitor_->updateSceneWithCurrentState();
         // add a consistency_limits of 0.1 to the seed
         std::vector<double> consistency_limits(num_joints_, consistency_limit);
         // get the tip link
-        const std::string &tip_link = joint_model_group->getLinkModelNames().back();
+        const std::string &tip_link = joint_model_group_->getLinkModelNames().back();
         Eigen::Isometry3d pose_eigen;
         // tf2::convert(pose, pose_eigen); // // tf::poseMsgToEigen(pose, pose_eigen);
         // Set translation.
@@ -523,10 +526,10 @@ public:
         pose_eigen.linear() = quat.toRotationMatrix();
         
         // Calculate IK.
-        if (kinematic_state_->setFromIK(joint_model_group, pose_eigen,
+        if (kinematic_state_->setFromIK(joint_model_group_, pose_eigen,
                                         tip_link, consistency_limits,
                                         timeout)) {
-            kinematic_state_->copyJointGroupPositions(joint_model_group, joint_state);
+            kinematic_state_->copyJointGroupPositions(joint_model_group_, joint_state);
             return true;
         }
         else {
@@ -542,12 +545,12 @@ public:
     bool calculateFK(const StateType &joint_state,
                      StateType &pose) {
         // set the joint state
-        kinematic_state_->setJointGroupPositions(joint_model_group, joint_state);
+        kinematic_state_->setJointGroupPositions(joint_model_group_, joint_state);
         // update
         planning_scene_monitor_->updateFrameTransforms();
         planning_scene_monitor_->updateSceneWithCurrentState();
         // get the tip link
-        const std::string &tip_link = joint_model_group->getLinkModelNames().back();
+        const std::string &tip_link = joint_model_group_->getLinkModelNames().back();
         // get the pose
         const Eigen::Isometry3d &end_effector_state = kinematic_state_->getGlobalLinkTransform(tip_link);
         // push to pose as a vector of x, y, z, r, p, y
@@ -564,7 +567,7 @@ public:
     /// @brief get the joint limits
     /// @param joint_limits The joint limits to store the limits
     void getJointLimits(std::vector<std::pair<double, double>> &joint_limits) const {  // TODO: check if this is the right way to do it
-        const auto &bounds = joint_model_group->getActiveJointModelsBounds();
+        const auto &bounds = joint_model_group_->getActiveJointModelsBounds();
         std::vector<double> min_vals, max_vals;
         for (int i = 0; i < num_joints_; i++) {
             const auto *jb = bounds[i];
@@ -600,15 +603,57 @@ public:
     }
 
     void getCurrentState(StateType& state_val) const {
-        kinematic_state_->copyJointGroupPositions(joint_model_group, state_val);
+        kinematic_state_->copyJointGroupPositions(joint_model_group_, state_val);
+    }
+
+    void getCurrentRobotStateMoveIt(moveit::core::RobotStatePtr& robot_state_ptr) const {
+        robot_state_ptr = kinematic_state_;
+    }
+
+    /// @brief Get the distance of a point to the robot. 
+    /// @param state The state of the robot.
+    /// @param point The point to get the distance to, specified in the world frame (the planning frame of the scene).
+    /// @param max_distance The maximum distance to check for. If a distance larger than this is found, the function returns this value.
+    /// @param distance The distance to the robot to be populated by the function.
+    void getDistanceToRobot(const StateType& state, const Eigen::Vector3d& point, double max_distance, double& distance) {
+        // Set the move group to the current state. NOTE(yoraish): check that this actually moves the robot.
+        // kinematic_state_->setJointGroupPositions(joint_model_group_, state);
+
+        // Set the state of the ego robot and reset the states of all others.
+        moveit::core::RobotState &current_scene_state = planning_scene_->getCurrentStateNonConst();
+        // Reset the scene.
+        current_scene_state.setToDefaultValues();
+        // Set the state of the ego robot.
+        current_scene_state.setJointGroupPositions(group_name_, state);
+
+        // Create a distance field around the point with a maximum distance of the radius.
+        std::string robot_base_link_name = kinematic_state_->getJointModelGroup(group_name_)->getLinkModelNames().at(0);
+        Eigen::Isometry3d robot_base_link_to_world = kinematic_state_->getFrameTransform(robot_base_link_name);
+        double df_extent_x = max_distance * 2;
+        double df_extent_y = max_distance * 2;
+        double df_extent_z = max_distance * 2;
+        double df_x_corner = point.x() - df_extent_x / 2.0;
+        double df_y_corner = point.y() - df_extent_y / 2.0;
+        double df_z_corner = point.z() - df_extent_z / 2.0;
+
+        std::shared_ptr<distance_field::PropagationDistanceField> df = ims::getEmptyDistanceField(df_extent_x, df_extent_y, df_extent_z, 0.05, df_x_corner, df_y_corner, df_z_corner, max_distance);
+        // Get the robot occupancy.
+        moveit::core::RobotState current_state = planning_scene_->getCurrentState();
+        ims::addRobotToDistanceField(df, current_state, move_group_);
+        std::chrono::steady_clock::time_point end_df = std::chrono::steady_clock::now();
+
+        // Evaluate the distance of the point in the df.
+        distance = df->getDistance(point.x(), point.y(), point.z());
+
     }
 
     planning_scene_monitor::PlanningSceneMonitorPtr planning_scene_monitor_;
     std::shared_ptr<planning_scene::PlanningScene> planning_scene_;
     std::shared_ptr<moveit::planning_interface::PlanningSceneInterface> planning_scene_interface_;
     std::string group_name_;
+    std::shared_ptr<moveit::planning_interface::MoveGroupInterface> move_group_;
     moveit::core::RobotStatePtr kinematic_state_;
-    const moveit::core::JointModelGroup *joint_model_group;
+    const moveit::core::JointModelGroup *joint_model_group_;
     std::vector<std::string> joint_names_;
     std::vector<std::pair<double, double>> joint_limits_;
     size_t num_joints_;

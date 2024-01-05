@@ -27,7 +27,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 /*!
- * \file   xecbs_test.cpp
+ * \file   mramp_test.cpp
  * \author Yorai Shaoul (yorai@cmu.edu)
  * \date   December 27 2023
 */
@@ -43,6 +43,7 @@
 #include <manipulation_planning/action_space/mramp_manipulation_action_space.hpp>
 #include <manipulation_planning/common/moveit_scene_interface.hpp>
 #include <search/planners/multi_agent/eaecbs.hpp>
+#include <search/planners/multi_agent/cbs_sphere3d.hpp>
 #include <search/planners/wastar.hpp>
 #include <manipulation_planning/heuristics/manip_heuristics.hpp>
 #include <manipulation_planning/common/utils.hpp>
@@ -75,7 +76,7 @@ int main(int argc, char** argv) {
     rclcpp::init(0, nullptr);
     rclcpp::NodeOptions node_options;
     node_options.automatically_declare_parameters_from_overrides(true);
-    auto node = rclcpp::Node::make_shared("xecbs_test_node", node_options);
+    auto node = rclcpp::Node::make_shared("mramp_test_node", node_options);
 
     // We spin up a SingleThreadedExecutor for the current state monitor to get information
     // about the robot's state.
@@ -84,7 +85,7 @@ int main(int argc, char** argv) {
     std::thread([&executor]() { executor.spin(); }).detach();
 
     // Create a ROS logger
-    auto const logger = rclcpp::get_logger("xecbs_test_node");
+    auto const logger = rclcpp::get_logger("mramp_test_node");
 
     ///////////////////////////////////
     // Scene Interfaces.
@@ -119,7 +120,6 @@ int main(int argc, char** argv) {
     std::string move_group_multi_name = "panda_multi_arm";
     moveit::planning_interface::MoveGroupInterface move_group_multi(node, move_group_multi_name);
 
-
     ///////////////////////////////////
     // Start and goal states. Both in radians.
     ///////////////////////////////////
@@ -127,11 +127,15 @@ int main(int argc, char** argv) {
     std::vector<StateType> goal_states;
 
     // Get the current state of each agent to set as start.
-    std::vector<moveit::core::RobotStatePtr> current_states;
-    for (std::string& move_group_name : move_group_names) {
-        moveit::planning_interface::MoveGroupInterface move_group(node, move_group_name);
-        current_states.push_back(move_group.getCurrentState());
+    std::vector<moveit::core::RobotStatePtr> current_moveit_robot_states;
+    for (int i =0; i < move_group_names.size(); i++){
+        moveit::core::RobotStatePtr current_state;
+        scene_interfaces.at(i).getCurrentRobotStateMoveIt(current_state);
+
+        current_moveit_robot_states.push_back(current_state);
     }
+
+    // Get the current state of each agent end-effector.
 
     // Set the start and goal states.
     for (int i = 0; i < move_group_names.size(); i++) {
@@ -145,23 +149,19 @@ int main(int argc, char** argv) {
     }
 
 
-    // Create a common goal for the sake of the example.
-    StateType goal_state{0, -29, 0, -85, 0, 57, 0, -1};
+    // Create a goal state each robot.
+    StateType goal_state0{0, -41, 0, -109, 0, 159, 0, -1};
+    // StateType goal_state0{90, -41, 0, -109, 0, 159, 0, -1};
+    StateType goal_state1{9, 7, -25, -91, 77, 101, -13, -1};
+    StateType goal_state2{0, -41, 0, -109, 0, 159, 0, -1};
+    StateType goal_state3{4, 0, -18, -93, 65, 111, -10, -1};
+    goal_states = {goal_state0, goal_state1, goal_state2, goal_state3};
     // Convert to radians.
-    ims::deg2rad(goal_state, state_valid_mask);
-    ims::roundStateToDiscretization(goal_state, discretization);
-    for (int i = 0; i < start_states.size(); i++){
-        goal_states.push_back(goal_state);
+    for (StateType& goal_state : goal_states) {
+        ims::deg2rad(goal_state, state_valid_mask);
+        ims::roundStateToDiscretization(goal_state, discretization);
     }
 
-    // Show the bounding box of the distance field.
-    /*
-    std::string move_group_name0 = move_group_names[0];
-    moveit::planning_interface::MoveGroupInterface move_group0(node, move_group_name0);
-    rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr bb_pub =
-        node->create_publisher<visualization_msgs::msg::Marker>("bounding_box", 1);
-    ims::visualizeBoundingBox(df, bb_pub, move_group0.getPlanningFrame());
-    */
 
     ///////////////////////////////////
     // Action Spaces.
@@ -187,33 +187,84 @@ int main(int argc, char** argv) {
                 bfs_heuristic));
     }
 
+    // Keep copies of action spaces casted to ConstrainedActionSpace (for CBS).
+    std::vector<std::shared_ptr<ims::ConstrainedActionSpace>> action_spaces_constrained;
+    for (auto& action_space : action_spaces) {
+        action_spaces_constrained.push_back(std::dynamic_pointer_cast<ims::ConstrainedActionSpace>(action_space));
+    }
+
     ///////////////////////////////////
     // Planner.
     ///////////////////////////////////
-    double weight_low_level_heuristic = 15.0;
-    double low_level_focal_suboptimality =  1.3;
-    double high_level_focal_suboptimality = 1.3;
-    ims::EAECBSParams params_eaecbs;
-    params_eaecbs.weight_low_level_heuristic = weight_low_level_heuristic;
-    params_eaecbs.low_level_focal_suboptimality = low_level_focal_suboptimality;
-    params_eaecbs.high_level_focal_suboptimality = high_level_focal_suboptimality;
-
-    params_eaecbs.low_level_heuristic_ptrs;
-    for (size_t i = 0; i < move_group_names.size(); i++) {
-        params_eaecbs.low_level_heuristic_ptrs.push_back(new ims::EuclideanRemoveTimeHeuristic());
-    }
-    // Initialize the planner.
+    std::string planner_name = "CBS_Sphere3d";
+    
     ims::MultiAgentPaths paths;
     PlannerStats stats;
-    ims::EAECBS planner(params_eaecbs);
-    planner.initializePlanner(action_spaces, move_group_names, start_states, goal_states);
-    if (!planner.plan(paths)) {
-        RCLCPP_ERROR(node->get_logger(), "Failed to plan.");
-        return 0;
+
+    if (planner_name == "xECBS") {
+            
+        double weight_low_level_heuristic = 55.0;
+        double low_level_focal_suboptimality =  1.3;
+        double high_level_focal_suboptimality = 1.3;
+        ims::EAECBSParams params_eaecbs;
+        params_eaecbs.weight_low_level_heuristic = weight_low_level_heuristic;
+        params_eaecbs.low_level_focal_suboptimality = low_level_focal_suboptimality;
+        params_eaecbs.high_level_focal_suboptimality = high_level_focal_suboptimality;
+
+        params_eaecbs.low_level_heuristic_ptrs;
+        for (size_t i = 0; i < move_group_names.size(); i++) {
+            params_eaecbs.low_level_heuristic_ptrs.push_back(new ims::EuclideanRemoveTimeHeuristic());
+        }
+        // Initialize the planner.
+        ims::EAECBS planner(params_eaecbs);
+        planner.initializePlanner(action_spaces, move_group_names, start_states, goal_states);
+        if (!planner.plan(paths)) {
+            RCLCPP_ERROR(node->get_logger(), "Failed to plan.");
+            return 0;
+        }
+        stats = planner.reportStats();
+    }
+
+    else if (planner_name == "CBS"){
+        // Set the parameters.
+        ims::CBSParams params_cbs;
+        for (size_t i = 0; i < move_group_names.size(); i++) {
+            params_cbs.low_level_heuristic_ptrs.push_back(new ims::EuclideanRemoveTimeHeuristic());
+        }
+        params_cbs.weight_low_level_heuristic = 55.0;
+        params_cbs.time_limit_ = 1000.0;
+
+        // Initialize the planner.
+        ims::CBS planner(params_cbs);
+        planner.initializePlanner(action_spaces_constrained, move_group_names, start_states, goal_states);
+        if (!planner.plan(paths)) {
+            RCLCPP_ERROR(node->get_logger(), "Failed to plan.");
+            return 0;
+        }
+        stats = planner.reportStats();
+    }
+
+
+    else if (planner_name == "CBS_Sphere3d"){
+        // Set the parameters.
+        ims::CBSSphere3dParams params_cbs;
+        for (size_t i = 0; i < move_group_names.size(); i++) {
+            params_cbs.low_level_heuristic_ptrs.push_back(new ims::EuclideanRemoveTimeHeuristic());
+        }
+        params_cbs.weight_low_level_heuristic = 55.0;
+        params_cbs.sphere3d_constraint_radius = 0.1;
+
+        // Initialize the planner.
+        ims::CBSSphere3d planner(params_cbs);
+        planner.initializePlanner(action_spaces_constrained, move_group_names, start_states, goal_states);
+        if (!planner.plan(paths)) {
+            RCLCPP_ERROR(node->get_logger(), "Failed to plan.");
+            return 0;
+        }
+        stats = planner.reportStats();
     }
 
     // Print the stats.
-    stats = planner.reportStats();
     std::cout << GREEN << "Planning time: " << stats.time << " sec" << std::endl;
     std::cout << "cost: " << stats.cost << std::endl;
     std::cout << "Number of nodes expanded: " << stats.num_expanded << std::endl;
