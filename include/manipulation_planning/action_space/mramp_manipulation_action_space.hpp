@@ -618,6 +618,11 @@ void MrampManipulationActionSpace::getActions(int state_id,
                         curr_state->state_mapped.at(4),
                         curr_state->state_mapped.at(5));
 
+        pose.orientation.x = quaternion.x();
+        pose.orientation.y = quaternion.y();
+        pose.orientation.z = quaternion.z();
+        pose.orientation.w = quaternion.w();
+
         this->visualizePose(pose);
         // this->VisualizePoint(curr_state->state_mapped.at(0), curr_state->state_mapped.at(1), curr_state->state_mapped.at(2));
         
@@ -1234,6 +1239,10 @@ void MrampManipulationActionSpace::getPathsConflicts(std::shared_ptr<MultiAgentP
                             // If the time of the collision is not integral, aka it was found when interpolating between states, then create a point3d conflict for each of the affected agents between their previous and next states.
                             if (weight_to != 1){
                                 Point3dConflict point3d_conflict(from_states, to_states, agent_ids, collision.contacts.at(0).point);
+
+                                // Add the conflict to the vector of conflicts.
+                                std::shared_ptr<Conflict> point3d_conflict_ptr = std::make_shared<Point3dConflict>(point3d_conflict);
+                                conflicts_ptrs.push_back(point3d_conflict_ptr);
                             }
 
                             else{

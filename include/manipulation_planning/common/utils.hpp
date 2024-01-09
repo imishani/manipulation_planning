@@ -340,7 +340,10 @@ inline double geodesicDistance(const Eigen::Vector3d& q1, const Eigen::Vector3d&
 /// \param goal The goal joint state. type: StateType
 /// \param trajectory a vector of joint states. type: std::vector<StateType>
 /// \param move_group The move group object. type: moveit::planning_interface::MoveGroupInterface
+/// \param velocity_scaling_factor The velocity scaling factor
+/// \param acceleration_scaling_factor The acceleration scaling factor
 /// \param trajectory_msg The output trajectory. type: moveit_msgs::msg::RobotTrajectory
+/// 
 /// \return success bool
 inline bool profileTrajectory(const StateType& start,
                               const StateType& goal,
@@ -724,18 +727,13 @@ void getRobotOccupancy(
 void addRobotToDistanceField(
     std::shared_ptr<distance_field::PropagationDistanceField>& df,
     moveit::core::RobotState& robot_state,
-    const std::shared_ptr<moveit::planning_interface::MoveGroupInterface>& move_group) {
+    const std::vector<std::string>& move_group_names) {
     // Get the collision models of the robot
-    std::vector<const moveit::core::LinkModel*> link_models = robot_state.getJointModelGroup(move_group->getName())->getLinkModels();
+    std::vector<const moveit::core::LinkModel*> link_models;
 
-    // Get the collision model of the end-effector. 
-    const moveit::core::LinkModel* ee_link_model = robot_state.getLinkModel(move_group->getEndEffectorLink());
-    link_models.push_back(ee_link_model);
-    // Get other links of the end-effector. NOTE(yoraish): in the panda case, both fingers get the same transform. This is incorrect.
-    const std::vector<const moveit::core::JointModel*>& ee_attached_joints = ee_link_model->getChildJointModels();
-    for (const moveit::core::JointModel* joint_model : ee_attached_joints) {
-        const moveit::core::LinkModel* link_model = joint_model->getChildLinkModel();
-        link_models.push_back(link_model);
+    for (std::string move_group_name : move_group_names){
+        std::vector<const moveit::core::LinkModel*> link_models_group = robot_state.getJointModelGroup(move_group_name)->getLinkModels();
+        link_models.insert(link_models.end(), link_models_group.begin(), link_models_group.end());
     }
 
     // TODO(yoraish): Get the collision models of the links in the attached objects.
@@ -777,7 +775,7 @@ void visualizeOccupancy(const std::shared_ptr<distance_field::PropagationDistanc
     marker.scale.x = df->getResolution();
     marker.scale.y = df->getResolution();
     marker.scale.z = df->getResolution();
-    marker.color.a = 0.3;
+    marker.color.a = 0.5;
     marker.color.r = 0.5;
     marker.color.g = 0.5;
     marker.color.b = 0.0;

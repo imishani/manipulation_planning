@@ -275,7 +275,7 @@ public:
     }
 
     /// @brief Visualize a sphere.
-    void visualizeSphere(double x, double y, double z, double r, double a = 0.2) {
+    void visualizeSphere(double x, double y, double z, double r, double a = 0.5) {
         // Use the implementation from manipulation action space.
         visualization_msgs::msg::Marker marker;
         marker.header.frame_id = moveit_interface_->planning_scene_->getPlanningFrame();

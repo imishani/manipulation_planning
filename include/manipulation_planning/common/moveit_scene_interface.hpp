@@ -96,9 +96,10 @@ public:
         planning_scene_monitor_->startStateMonitor();
         planning_scene_monitor_->startWorldGeometryMonitor();
         planning_scene_monitor_->requestPlanningSceneState();
-        rclcpp::sleep_for(std::chrono::seconds(1));
+        rclcpp::sleep_for(std::chrono::milliseconds(300));
         planning_scene_ = planning_scene_monitor_->getPlanningScene();
         group_name_ = group_name;
+
         move_group_ = std::make_shared<moveit::planning_interface::MoveGroupInterface>(node_, group_name_);
         frame_id_ = planning_scene_->getPlanningFrame();
 
@@ -143,11 +144,6 @@ public:
                                                               node_(rclcpp::Node::make_shared("moveit_interface_node")),
                                                                 logger_(rclcpp::get_logger("moveit_interface_node")) {
 
-        // rclcpp::init(0, nullptr);
-        // rclcpp::NodeOptions node_options;
-        // node_options.automatically_declare_parameters_from_overrides(true);
-        // node_ = rclcpp::Node::make_shared("moveit_interface_node", node_options);
-
         // We spin up a SingleThreadedExecutor for the current state monitor to get information
         // about the robot's state.
         executor_ptr_ = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
@@ -160,7 +156,7 @@ public:
         planning_scene_monitor_->startStateMonitor();
         planning_scene_monitor_->startWorldGeometryMonitor();
         planning_scene_monitor_->requestPlanningSceneState();
-        rclcpp::sleep_for(std::chrono::seconds(1));
+        rclcpp::sleep_for(std::chrono::milliseconds(300));
         planning_scene_ = planning_scene;
         group_name_ = group_name;
         move_group_ = std::make_shared<moveit::planning_interface::MoveGroupInterface>(node_, group_name_);
@@ -412,7 +408,7 @@ public:
         collision_request.max_contacts = 1000;
         collision_request.max_contacts_per_pair = 1;
         collision_request.verbose = verbose_;
-
+        
         planning_scene_->checkCollision(collision_request, collision_result);
         num_collision_checks_++;
 
@@ -551,7 +547,7 @@ public:
         planning_scene_monitor_->updateSceneWithCurrentState();
         // get the tip link
         const std::string &tip_link = joint_model_group_->getLinkModelNames().back();
-        // get the pose
+                // get the pose
         const Eigen::Isometry3d &end_effector_state = kinematic_state_->getGlobalLinkTransform(tip_link);
         // push to pose as a vector of x, y, z, r, p, y
         pose.resize(6);
@@ -639,18 +635,33 @@ public:
         std::shared_ptr<distance_field::PropagationDistanceField> df = ims::getEmptyDistanceField(df_extent_x, df_extent_y, df_extent_z, 0.05, df_x_corner, df_y_corner, df_z_corner, max_distance);
         // Get the robot occupancy.
         moveit::core::RobotState current_state = planning_scene_->getCurrentState();
-        ims::addRobotToDistanceField(df, current_state, move_group_);
+
+        assert (group_name_ee_ != "");
+
+        std::vector<std::string> move_group_names {group_name_, group_name_ee_};
+        ims::addRobotToDistanceField(df, current_state, move_group_names);
         std::chrono::steady_clock::time_point end_df = std::chrono::steady_clock::now();
 
         // Evaluate the distance of the point in the df.
         distance = df->getDistance(point.x(), point.y(), point.z());
 
+        // If verbose then also visualize the distance field.
+        if (verbose_) {
+            auto marker_pub = node_->create_publisher<visualization_msgs::msg::Marker>("occupancy", 1);
+            ims::visualizeOccupancy(df, marker_pub, frame_id_);
+        }
+
+    }
+
+    void setEndEffectorMoveGroupName(const std::string& group_name_ee) {
+        group_name_ee_ = group_name_ee;
     }
 
     planning_scene_monitor::PlanningSceneMonitorPtr planning_scene_monitor_;
     std::shared_ptr<planning_scene::PlanningScene> planning_scene_;
     std::shared_ptr<moveit::planning_interface::PlanningSceneInterface> planning_scene_interface_;
     std::string group_name_;
+    std::string group_name_ee_;
     std::shared_ptr<moveit::planning_interface::MoveGroupInterface> move_group_;
     moveit::core::RobotStatePtr kinematic_state_;
     const moveit::core::JointModelGroup *joint_model_group_;

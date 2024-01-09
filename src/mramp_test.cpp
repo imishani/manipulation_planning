@@ -68,24 +68,50 @@ std::string getMPrimFilePathFromMoveGroupName(rclcpp::Node::SharedPtr node, std:
     return path_mprim;
 }
 
+
+class MrampTestNode : public rclcpp::Node {
+public:
+    MrampTestNode() : Node("mramp_test_node") {
+
+        // Accept parameter planner_name.
+        // rclcpp::NodeOptions node_options;
+        // node_options.automatically_declare_parameters_from_overrides(true);
+        this->declare_parameter("planner_name", "planner_name_default");
+        planner_name_ = this->get_parameter("planner_name").as_string();
+        RCLCPP_INFO_STREAM(this->get_logger(), "planner_name: " << planner_name_);
+    }
+
+    ~MrampTestNode() {
+        rclcpp::shutdown();
+    }
+
+    std::string getPlannerName() {
+        return planner_name_;
+    }
+
+private:
+    std::string planner_name_;
+};
+
 int main(int argc, char** argv) {
 
     ///////////////////////////////////
     // ROS setup.
     ///////////////////////////////////
-    rclcpp::init(0, nullptr);
-    rclcpp::NodeOptions node_options;
-    node_options.automatically_declare_parameters_from_overrides(true);
-    auto node = rclcpp::Node::make_shared("mramp_test_node", node_options);
+    rclcpp::init(argc, argv);
+    // We create a node to get parameters.
+    auto node = std::make_shared<MrampTestNode>();
+    std::string planner_name_test;
+    // rclcpp::spin(node);
 
-    // We spin up a SingleThreadedExecutor for the current state monitor to get information
-    // about the robot's state.
-    rclcpp::executors::SingleThreadedExecutor executor;
-    executor.add_node(node);
-    std::thread([&executor]() { executor.spin(); }).detach();
+    // Spin.
+    rclcpp::executors::SingleThreadedExecutor executor_test;
+    executor_test.add_node(node);
+    std::thread([&executor_test]() { executor_test.spin(); }).detach();
 
+    // Run the test.
     // Create a ROS logger
-    auto const logger = rclcpp::get_logger("mramp_test_node");
+    auto const logger = node->get_logger();
 
     ///////////////////////////////////
     // Scene Interfaces.
@@ -97,8 +123,10 @@ int main(int argc, char** argv) {
 
     // The relevant moveit groups.
     std::vector<std::string> move_group_names = {"panda0_arm", "panda1_arm", "panda2_arm", "panda3_arm"};
+    std::vector<std::string> move_group_names_ee = {"panda0_hand", "panda1_hand", "panda2_hand", "panda3_hand"};
     std::vector<std::string> robot_names = {"panda0", "panda1", "panda2", "panda3"};
     std::vector<std::shared_ptr<ims::SubcostConstrainedActionSpace>> action_spaces;
+    std::vector<std::shared_ptr<ims::MrampManipulationActionSpace>> action_spaces_mramp;
 
     // Get the motion primitives file paths.
     std::vector<std::string> mprim_file_paths;
@@ -113,6 +141,11 @@ int main(int argc, char** argv) {
     std::vector<ims::MoveitInterface> scene_interfaces;
     for (std::string& move_group_name : move_group_names) {
         scene_interfaces.push_back(ims::MoveitInterface(move_group_name));
+    }
+
+    // Set the end effector names for each scene interface.
+    for (int i = 0; i < move_group_names.size(); i++) {
+        scene_interfaces[i].setEndEffectorMoveGroupName(move_group_names_ee[i]);
     }
 
     // Create a move group interface for the multi-agent.
@@ -150,9 +183,10 @@ int main(int argc, char** argv) {
 
 
     // Create a goal state each robot.
-    StateType goal_state0{0, -41, 0, -109, 0, 159, 0, -1};
-    // StateType goal_state0{90, -41, 0, -109, 0, 159, 0, -1};
+    // StateType goal_state0{0, -41, 0, -109, 0, 159, 0, -1};
+    StateType goal_state0{0, -5, 0, -156, 0, 152, 0, -1};
     StateType goal_state1{9, 7, -25, -91, 77, 101, -13, -1};
+    // StateType goal_state2{0, -41, 0, -109, 0, 159, 0, -1};
     StateType goal_state2{0, -41, 0, -109, 0, 159, 0, -1};
     StateType goal_state3{4, 0, -18, -93, 65, 111, -10, -1};
     goal_states = {goal_state0, goal_state1, goal_state2, goal_state3};
@@ -185,6 +219,11 @@ int main(int argc, char** argv) {
                 scene_interfaces[i], 
                 action_types[i], 
                 bfs_heuristic));
+
+        action_spaces_mramp.push_back(std::make_shared<ims::MrampManipulationActionSpace>(
+                scene_interfaces[i], 
+                action_types[i], 
+                bfs_heuristic));
     }
 
     // Keep copies of action spaces casted to ConstrainedActionSpace (for CBS).
@@ -196,7 +235,11 @@ int main(int argc, char** argv) {
     ///////////////////////////////////
     // Planner.
     ///////////////////////////////////
-    std::string planner_name = "CBS_Sphere3d";
+    std::string planner_name; // = "CBS_Sphere3d";
+    // std::string planner_name = "CBS";
+
+    // Get the name of the planner from a ros param.
+    node->get_parameter("planner_name", planner_name);
     
     ims::MultiAgentPaths paths;
     PlannerStats stats;
@@ -338,6 +381,5 @@ int main(int argc, char** argv) {
     move_group_multi.execute(trajectory);
 
     RCLCPP_INFO_STREAM(node->get_logger(), GREEN << "DONE SCRIPT" << RESET);
-
     return 0;
 }
