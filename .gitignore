@@ -9,3 +9,4 @@ devel/
 install/
 .vscode/*
 data/experiences/
+*.pyc

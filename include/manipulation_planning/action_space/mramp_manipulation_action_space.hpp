@@ -312,7 +312,7 @@ public:
 
         for (auto other_agent_id_and_path : constraints_collective_ptr_->getConstraintsContext()->agent_paths) {
             int other_agent_id = other_agent_id_and_path.first;
-            PathType other_agent_path = other_agent_id_and_path.second;
+            const PathType & other_agent_path  = other_agent_id_and_path.second;
 
             // Get the state of the other agent at the current time step. Get this from the constraints context.
             // The check here is for vertex conflicts.
@@ -840,18 +840,33 @@ bool MrampManipulationActionSpace::isSatisfyingConstraints(const StateType& stat
                         // Get the point and the radius of the sphere.
                         Eigen::Vector3d sphere_center = sphere3d_constraint_ptr->center;
                         double sphere_radius = sphere3d_constraint_ptr->radius;
+                        
+                        // Method I: check distance from robot to point.
+                        if (false){
+                            // Visualize the sphere.
+                            this->visualizeSphere(sphere_center.x(), sphere_center.y(), sphere_center.z(), sphere_radius);
 
-                        // Visualize the sphere.
-                        this->visualizeSphere(sphere_center.x(), sphere_center.y(), sphere_center.z(), sphere_radius);
+                            // Check if the point distance to the robot is smaller than the radius.
+                            double distance_to_robot = -1;
+                            moveit_interface_->getDistanceToRobot(next_state_val_wo_time, sphere_center, sphere_radius, distance_to_robot);
 
-                        // Check if the point distance to the robot is smaller than the radius.
-                        double distance_to_robot = -1;
-                        moveit_interface_->getDistanceToRobot(next_state_val_wo_time, sphere_center, sphere_radius, distance_to_robot);
-
-                        // If the distance is smaller than the radius, then the state is not valid.
-                        if (distance_to_robot < sphere_radius) {
-                            return false;
+                            // If the distance is smaller than the radius, then the state is not valid.
+                            if (distance_to_robot < sphere_radius) {
+                                return false;
+                            }
                         }
+
+                        // Method II: check collision between robot and sphere.
+                        else{
+                            // Visualize the sphere.
+                            this->visualizeSphere(sphere_center.x(), sphere_center.y(), sphere_center.z(), sphere_radius);
+
+                            bool is_colliding = moveit_interface_->isRobotCollidingWithSphere(next_state_val_wo_time, sphere_center, sphere_radius);
+                            if (is_colliding) {
+                                return false;
+                            }
+                        }
+
                     }
                     else {
                         throw std::runtime_error("Could not cast constraint to sphere3d constraint");

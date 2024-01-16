@@ -185,8 +185,12 @@ public:
     };
 
     /// @brief Destructor
-    ~MoveitInterface() override = default;
-
+    ~MoveitInterface() {
+        // Stop the executor.
+        executor_ptr_->cancel();
+        executor_ptr_.reset();
+    }
+    
     /// @brief check if the state is valid
     /// @param state The state to check
     /// @return True if the state is valid, false otherwise
@@ -612,9 +616,6 @@ public:
     /// @param max_distance The maximum distance to check for. If a distance larger than this is found, the function returns this value.
     /// @param distance The distance to the robot to be populated by the function.
     void getDistanceToRobot(const StateType& state, const Eigen::Vector3d& point, double max_distance, double& distance) {
-        // Set the move group to the current state. NOTE(yoraish): check that this actually moves the robot.
-        // kinematic_state_->setJointGroupPositions(joint_model_group_, state);
-
         // Set the state of the ego robot and reset the states of all others.
         moveit::core::RobotState &current_scene_state = planning_scene_->getCurrentStateNonConst();
         // Reset the scene.
@@ -650,6 +651,64 @@ public:
             auto marker_pub = node_->create_publisher<visualization_msgs::msg::Marker>("occupancy", 1);
             ims::visualizeOccupancy(df, marker_pub, frame_id_);
         }
+    }
+
+    /// @brief Get the distance of a point to the robot. 
+    /// @param state The state of the robot.
+    /// @param point The point to get the distance to, specified in the world frame (the planning frame of the scene).
+    /// @param max_distance The maximum distance to check for. If a distance larger than this is found, the function returns this value.
+    /// @param distance The distance to the robot to be populated by the function.
+    bool isRobotCollidingWithSphere(const StateType& state, const Eigen::Vector3d& point, double radius) {
+        // Set the state of the ego robot and reset the states of all others.
+        moveit::core::RobotState &current_scene_state = planning_scene_->getCurrentStateNonConst();
+        // Reset the scene.
+        current_scene_state.setToDefaultValues();
+        // Set the state of the ego robot.
+        current_scene_state.setJointGroupPositions(group_name_, state);
+
+        // Add a sphere to the scene.
+        moveit_msgs::msg::CollisionObject collision_object;
+        collision_object.id = "constraint_sphere";
+        collision_object.header.frame_id = frame_id_;
+        shapes::ShapeMsg collision_object_shape_msg;
+        auto *shape = new shapes::Sphere(radius);
+        shapes::constructMsgFromShape(shape, collision_object_shape_msg);
+        geometry_msgs::msg::Pose collision_object_pose;
+        collision_object_pose.position.x = point.x();
+        collision_object_pose.position.y = point.y();
+        collision_object_pose.position.z = point.z();
+
+        collision_object_pose.orientation.x = 0.0;
+        collision_object_pose.orientation.y = 0.0;
+        collision_object_pose.orientation.z = 0.0;
+        collision_object_pose.orientation.w = 1.0;
+
+        collision_object.primitives.push_back(boost::get<shape_msgs::msg::SolidPrimitive>(collision_object_shape_msg));
+        collision_object.primitive_poses.push_back(collision_object_pose);
+        collision_object.operation = moveit_msgs::msg::CollisionObject::ADD;
+
+        // Update the planning scene.
+        // planning_scene_interface_->applyCollisionObject(collision_object);  // For visualization. TODO: remove.
+        planning_scene_->processCollisionObjectMsg(collision_object);       // For collision checking.
+
+        // Check if the sphere is in collision.
+        collision_detection::CollisionRequest collision_request;
+        collision_detection::CollisionResult collision_result;
+        collision_request.contacts = true;
+        collision_request.max_contacts = 1;
+        collision_request.max_contacts_per_pair = 1;
+        collision_request.verbose = verbose_;
+        collision_request.group_name = group_name_;
+
+        planning_scene_->checkCollision(collision_request, collision_result);
+        num_collision_checks_++;
+
+        // Remove the sphere from the scene.
+        collision_object.operation = collision_object.REMOVE;
+        // planning_scene_interface_->applyCollisionObject(collision_object);  // For visualization. TODO: remove.
+        planning_scene_->processCollisionObjectMsg(collision_object);       // For collision checking.
+
+        return collision_result.collision;
 
     }
 
