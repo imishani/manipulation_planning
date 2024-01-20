@@ -234,7 +234,7 @@ public:
                 }
             }
 
-            if (!discontinuity && isStateToStateValid(curr_state_val, new_state_val) && isSatisfyingConstraints(curr_state_val, new_state_val)) {
+            if (!discontinuity && isStateToStateValid(curr_state_val, new_state_val) && isSatisfyingAllConstraints(curr_state_val, new_state_val)) {
                 // create a new state
                 int next_state_ind = getOrCreateRobotState(new_state_val);
 
@@ -281,7 +281,7 @@ public:
                 }
             }
 
-            if (!discontinuity && isStateToStateValid(curr_state_val, new_state_val) && isSatisfyingConstraints(curr_state_val, new_state_val)) {
+            if (!discontinuity && isStateToStateValid(curr_state_val, new_state_val) && isSatisfyingAllConstraints(curr_state_val, new_state_val)) {
                 // create a new state
                 int next_state_ind = getOrCreateRobotState(new_state_val);
 
@@ -425,9 +425,9 @@ public:
             }
 
             // Check constraint satisfaction.
-            bool is_satisfying_constraints = isSatisfyingConstraints(curr_state_val, new_state_val);
+            bool is_satisfying_constraints = isSatisfyingAllConstraints(curr_state_val, new_state_val);
 
-            // if (!discontinuity && isStateToStateValid(curr_state_val, new_state_val) && isSatisfyingConstraints(curr_state_val, new_state_val)) {
+            // if (!discontinuity && isStateToStateValid(curr_state_val, new_state_val) && isSatisfyingAllConstraints(curr_state_val, new_state_val)) {
             if (transition_valid_wrt_scene && is_satisfying_constraints) {
                 // create a new state
                 int next_state_ind = getOrCreateRobotState(new_state_val);
@@ -490,12 +490,18 @@ public:
     /// @brief Whether a path is valid.
     bool isPathValid(const PathType &path) override;
 
+    /// @brief Whether the state is satisfying a specific constraint.
+    /// @param state_val The state value to check. Timed.
+    /// @param next_state_val The next state value to check. Timed.
+    /// @param constraint_ptr The constraint to check.
+    /// @return True if the constraint is satisfied, false otherwise.
+    bool isSatisfyingConstraint(const StateType &state_val, const StateType &next_state_val, const std::shared_ptr<Constraint> &constraint_ptr);
 
-    /// @brief Whether the state is satisfying the constraints imposed on its timestamp.
-    /// @param state_val The state value to check.
-    /// @param next_state_val
-    /// @return
-    bool isSatisfyingConstraints(const StateType &state_val, const StateType &next_state_val);
+    /// @brief Get the safe intervals for a given state configuration. Untimed.
+    /// @param state_val 
+    /// @param next_state_val 
+    /// @param safe_intervals 
+    void getSafeIntervals(int state_id, std::vector<SafeIntervalType>& safe_intervals) override;
 
     /// @brief Get the conflicts from a set of paths.
     /// @param paths The paths to check for conflicts.
@@ -765,329 +771,645 @@ int bodyNameToAgentId(std::string body_name, std::vector<std::string> agent_name
 }
 
 
-bool MrampManipulationActionSpace::isSatisfyingConstraints(const StateType& state_val, const StateType& next_state_val) {
-    // Check against constraints. Answers "can I transition to the next state given constraints? Assuming I can be at the current state."
-    // TODO(yoraish): check for time first.  If there are no constraints at this timestep, then the state is valid w.r.t constraints.
+bool MrampManipulationActionSpace::isSatisfyingConstraint(const StateType &state_val, const StateType &next_state_val, const std::shared_ptr<Constraint> &constraint_ptr){
+    // Check if the constraint is a vertex constraint or an edge constraint.
+    switch (constraint_ptr->type) {
 
-    // Otherwise, check if the state is valid w.r.t the constraints.
-    // Iterate over the constraints. Those are in the pointer to the constraints collective, within a set pointer called constraints_ptr_.
-    if (!constraints_collective_ptr_->getConstraints().empty()) {
-        // Loop through the vector, and get a reference to each one of the elements.
-        for (auto& constraint_ptr : constraints_collective_ptr_->getConstraints()) {
-
-            // Check if the constraint is a vertex constraint or an edge constraint.
-            switch (constraint_ptr->type) {
-
-                /////////////////////////
-                // Vertex constraints. //
-                /////////////////////////
-                case ims::ConstraintType::VERTEX: {
-                    // Convert to a vertex constraint pointer to get access to its members.
-                    auto* vertex_constraint_ptr = dynamic_cast<ims::VertexConstraint*>(constraint_ptr.get());
-                    if (vertex_constraint_ptr != nullptr) {
-                        // If the constraint is a vertex constraint, check if the state is valid w.r.t the constraint.
-                        bool is_valid_wrt_constraint = false;
-                        // TODO(yoraish): create a check state equality helper.
-                        for (int i{0}; i < vertex_constraint_ptr->state.size(); i++) {
-                            if (vertex_constraint_ptr->state[i] != next_state_val[i]) {
-                                is_valid_wrt_constraint = true;
-                                break;
-                            }
-                        }
-                        if (!is_valid_wrt_constraint){
-                            return false;
-                        }
+        /////////////////////////
+        // Vertex constraints. //
+        /////////////////////////
+        case ims::ConstraintType::VERTEX: {
+            // Convert to a vertex constraint pointer to get access to its members.
+            auto* vertex_constraint_ptr = dynamic_cast<ims::VertexConstraint*>(constraint_ptr.get());
+            if (vertex_constraint_ptr != nullptr) {
+                // If the constraint is a vertex constraint, check if the state is valid w.r.t the constraint.
+                bool is_valid_wrt_constraint = false;
+                // TODO(yoraish): create a check state equality helper.
+                for (int i{0}; i < vertex_constraint_ptr->state.size(); i++) {
+                    if (vertex_constraint_ptr->state[i] != next_state_val[i]) {
+                        is_valid_wrt_constraint = true;
+                        break;
                     }
-                    else {
-                        throw std::runtime_error("Could not cast constraint to vertex constraint");
-                    }
-                    break;
                 }
-
-                /////////////////////////
-                // Edge constraints.   //
-                /////////////////////////
-                case ims::ConstraintType::EDGE: {
-                    // Convert to an edge constraint pointer to get access to its members.
-                    auto* edge_constraint_ptr = dynamic_cast<ims::EdgeConstraint*>(constraint_ptr.get());
-                    if (edge_constraint_ptr != nullptr) {
-                        // If the constraint is an edge constraint, check if the state is valid w.r.t the constraint.
-                        if (edge_constraint_ptr->state_from == state_val && edge_constraint_ptr->state_to == next_state_val) {
-                            return false;
-                        }
-                    }
-                    else {
-                        throw std::runtime_error("Could not cast constraint to edge constraint");
-                    }
-                    break;
+                if (!is_valid_wrt_constraint){
+                    return false;
                 }
-
-                /////////////////////////
-                // Sphere3D constraints./
-                /////////////////////////
-                case ims::ConstraintType::SPHERE3D: {
-                    // Convert to a sphere 3d constraint pointer to get access to its members.
-                    auto* sphere3d_constraint_ptr = dynamic_cast<ims::Sphere3dConstraint*>(constraint_ptr.get());
-                    if (sphere3d_constraint_ptr != nullptr) {
-                        // Check for equality of time.
-                        if (sphere3d_constraint_ptr->time != next_state_val.back()) {
-                            continue;
-                        }
-
-                        // Remove time from the state.
-                        StateType next_state_val_wo_time = {next_state_val.begin(), next_state_val.end() - 1};
-
-                        // Get the point and the radius of the sphere.
-                        Eigen::Vector3d sphere_center = sphere3d_constraint_ptr->center;
-                        double sphere_radius = sphere3d_constraint_ptr->radius;
-                        
-                        // Method I: check distance from robot to point.
-                        if (false){
-                            // Visualize the sphere.
-                            this->visualizeSphere(sphere_center.x(), sphere_center.y(), sphere_center.z(), sphere_radius);
-
-                            // Check if the point distance to the robot is smaller than the radius.
-                            double distance_to_robot = -1;
-                            moveit_interface_->getDistanceToRobot(next_state_val_wo_time, sphere_center, sphere_radius, distance_to_robot);
-
-                            // If the distance is smaller than the radius, then the state is not valid.
-                            if (distance_to_robot < sphere_radius) {
-                                return false;
-                            }
-                        }
-
-                        // Method II: check collision between robot and sphere.
-                        else{
-                            // Visualize the sphere.
-                            this->visualizeSphere(sphere_center.x(), sphere_center.y(), sphere_center.z(), sphere_radius);
-
-                            bool is_colliding = moveit_interface_->isRobotCollidingWithSphere(next_state_val_wo_time, sphere_center, sphere_radius);
-                            if (is_colliding) {
-                                return false;
-                            }
-                        }
-
-                    }
-                    else {
-                        throw std::runtime_error("Could not cast constraint to sphere3d constraint");
-                    }
-                    break;
-                }
-
-                /////////////////////////
-                // Vertex Avoidance.   //
-                /////////////////////////
-                case ims::ConstraintType::VERTEX_AVOIDANCE: {
-                    // Convert to a vertex avoidance constraint pointer to get access to its members.
-                    auto* vertex_avoidance_constraint_ptr = dynamic_cast<ims::VertexAvoidanceConstraint*>(constraint_ptr.get());
-                    if (vertex_avoidance_constraint_ptr != nullptr) {
-
-                        // Check for equality of time.
-                        TimeType next_state_time = next_state_val.back();
-                        if (vertex_avoidance_constraint_ptr->time != next_state_time && vertex_avoidance_constraint_ptr->time != -1) {
-                            continue;
-                        }
- 
-                        // Check if the agent state is valid when the states of all other higher-priority agents are set in the scene.
-                        // Make sure that we have agent names here. This is needed for move-group setting.
-                        if (vertex_avoidance_constraint_ptr->agent_names_to_avoid.size() != vertex_avoidance_constraint_ptr->agent_ids_to_avoid.size()) {
-                            throw std::runtime_error("Agent names and agent ids to avoid are not the same in vertex avoidance constraint.");
-                        }
-
-                        // Get the agent names and the agent ids.
-                        std::vector<std::string> agent_names_to_avoid = vertex_avoidance_constraint_ptr->agent_names_to_avoid;
-                        std::vector<int> agent_ids_to_avoid = vertex_avoidance_constraint_ptr->agent_ids_to_avoid;
-
-                        // Get the agent states at this time from the context.
-                        std::vector<StateType> agent_states_to_avoid;
-                        for (auto agent_id : agent_ids_to_avoid) {
-                            // Get the agent state. This is either the state of the other agent in its context-path at the timestep of the next state or at the goal state of the other agent, if it already reached its goal by this time.
-                            TimeType agent_to_avoid_time = std::min(next_state_time, (TimeType) constraints_collective_ptr_->getConstraintsContext()->agent_paths.at(agent_id).back().back());
-
-                            StateType agent_state_to_avoid = constraints_collective_ptr_->getConstraintsContext()->agent_paths.at(agent_id).at(agent_to_avoid_time);
-                            StateType agent_state_to_avoid_wo_time = {agent_state_to_avoid.begin(), agent_state_to_avoid.end() - 1};
-                            
-                            // Add the agent state to the vector.
-                            agent_states_to_avoid.push_back(agent_state_to_avoid_wo_time);
-                        }
-
-                        // Check if the state is valid when the agent states are set in the scene.
-                        CollisionsCollective collisions;
-                        StateType next_state_val_wo_time = {next_state_val.begin(), next_state_val.end() - 1};
-                        bool is_valid = moveit_interface_->isStateValid(next_state_val_wo_time, agent_names_to_avoid, agent_states_to_avoid, collisions);
-
-                        // If there is a collision, then we are no good. Otherwise keep going through constraints.
-                        if (!is_valid) {
-                            return false;
-                        }
-                    }
-                    else {
-                        throw std::runtime_error("Could not cast constraint to vertex avoidance constraint");
-                    }
-                    break;
-                }
-
-                /////////////////////////
-                // Edge Avoidance.     //
-                /////////////////////////
-                case ims::ConstraintType::EDGE_AVOIDANCE: {
-                    // Convert to an edge avoidance constraint pointer to get access to its members.
-                    auto *edge_avoidance_constraint_ptr = dynamic_cast<ims::EdgeAvoidanceConstraint *>(constraint_ptr.get());
-                    // dynamic_cast<ims::EdgeAvoidanceConstraint *>(constraint_ptr.get());
-
-                    if (edge_avoidance_constraint_ptr == nullptr) {
-                        throw std::runtime_error("Could not cast constraint to edge avoidance constraint");
-                    }
-
-                    // Check for equality of time.
-                    TimeType state_t_to = next_state_val.back();
-                    TimeType state_t_from = state_val.back();
-                    TimeType constrain_t_from = edge_avoidance_constraint_ptr->t_from;
-                    TimeType constrain_t_to = edge_avoidance_constraint_ptr->t_to;
-
-                    if (constrain_t_from != -1 && constrain_t_to != -1) {
-                        if (state_t_from != constrain_t_from || state_t_to != constrain_t_to) {
-                            continue;
-                        }
-                    }
-
-                    // Check if the agent state is valid when the states of all other higher-priority agents are set in the scene.
-                    // Make sure that we have agent names here. This is needed for move-group setting.
-                    std::vector<std::string> agent_names_to_avoid = edge_avoidance_constraint_ptr->agent_names_to_avoid;
-                    if (agent_names_to_avoid.size() != edge_avoidance_constraint_ptr->agent_ids_to_avoid.size()) {
-                        throw std::runtime_error("Agent names and agent ids to avoid are not the same in edge avoidance constraint.");
-                    }
-
-                    // Get the agent ids.
-                    std::vector<int> other_agent_ids = edge_avoidance_constraint_ptr->agent_ids_to_avoid;
-
-                    // Get the agent states at this time from the context.
-                    std::vector<StateType> other_agent_states_from;
-                    std::vector<StateType> other_agent_states_to;
-
-                    for (auto agent_id : other_agent_ids) {
-                        // Get the other agent states.
-                        TimeType other_agent_time_from = std::min(state_t_from, (TimeType) constraints_collective_ptr_->getConstraintsContext()->agent_paths.at(agent_id).back().back());
-                        StateType other_agent_state_from = constraints_collective_ptr_->getConstraintsContext()->agent_paths.at(agent_id).at(other_agent_time_from);
-                        
-                        TimeType other_agent_time_to = std::min(state_t_to, (TimeType) constraints_collective_ptr_->getConstraintsContext()->agent_paths.at(agent_id).back().back());
-                        StateType other_agent_state_to = constraints_collective_ptr_->getConstraintsContext()->agent_paths.at(agent_id).at(other_agent_time_to);
-
-                        // Add the agent state to the vector.
-                        other_agent_states_from.push_back(other_agent_state_from);
-                        other_agent_states_to.push_back(other_agent_state_to);
-                    }
-
-                    // Check if the state is valid when the agent states are set in the scene.
-                    CollisionsCollective collisions;
-                    bool is_transition_valid = isStateToStateValid(state_val, next_state_val, agent_names_to_avoid, other_agent_states_from, other_agent_states_to, collisions);
-
-                    // If there is a collision, then we are no good. Otherwise keep going through constraints.
-                    if (!is_transition_valid) {
-                        return false;
-                    }
-                    break;
-                }
-
-                ///////////////////////////////
-                // Vertex State Avoidance.   //
-                ///////////////////////////////
-                case ims::ConstraintType::VERTEX_STATE_AVOIDANCE: {
-                    // Convert to a vertex avoidance constraint pointer to get access to its members.
-                    auto* vertex_state_avoidance_constraint_ptr = dynamic_cast<ims::VertexStateAvoidanceConstraint*>(constraint_ptr.get());
-                    if (vertex_state_avoidance_constraint_ptr != nullptr) {
-
-                        // Check for equality of time.
-                        TimeType next_state_time = next_state_val.back();
-                        if (vertex_state_avoidance_constraint_ptr->getTimeInterval().second != next_state_time) {
-                            continue;
-                        }
- 
-                        // Check if the agent state is valid when the states of all other higher-priority agents are set in the scene.
-                        // Make sure that we have agent names here: we get them from the constraints context. This is needed for move-group setting.
-                        std::vector<StateType> agent_states_to_avoid = vertex_state_avoidance_constraint_ptr->agent_states_to_avoid;
-                        std::vector<int> agent_ids_to_avoid = vertex_state_avoidance_constraint_ptr->agent_ids_to_avoid;
-                        std::vector<std::string> agent_names = constraints_collective_ptr_->getConstraintsContext()->agent_names;
-                        std::vector<std::string> agent_names_to_avoid;
-                        for (int agent_id_to_avoid : agent_ids_to_avoid) {
-                            agent_names_to_avoid.push_back(agent_names.at(agent_id_to_avoid));
-                        }
-
-                        // Remove time from the states to avoid.
-                        std::vector<StateType> agent_states_to_avoid_wo_time;
-                        for (auto agent_state_to_avoid : agent_states_to_avoid) {
-                            StateType agent_state_to_avoid_wo_time = {agent_state_to_avoid.begin(), agent_state_to_avoid.end() - 1};
-                            agent_states_to_avoid_wo_time.push_back(agent_state_to_avoid_wo_time);
-                        }
-
-                        // Check if the state is valid when the agent states are set in the scene.
-                        CollisionsCollective collisions;
-                        StateType next_state_val_wo_time = {next_state_val.begin(), next_state_val.end() - 1};
-                        bool is_valid = moveit_interface_->isStateValid(next_state_val_wo_time, agent_names_to_avoid, agent_states_to_avoid_wo_time, collisions);
-
-                        // If there is a collision, then we are no good. Otherwise keep going through constraints.
-                        if (!is_valid) {
-                            return false;
-                        }
-                    }
-                    else {
-                        throw std::runtime_error("Could not cast constraint to vertex state avoidance constraint");
-                    }
-                    break;
-                }
-
-
-                /////////////////////////////
-                // Edge State Avoidance.   //
-                /////////////////////////////
-                case ims::ConstraintType::EDGE_STATE_AVOIDANCE: {
-                    // Convert to an edge avoidance constraint pointer to get access to its members.
-                    auto *edge_avoidance_constraint_ptr = dynamic_cast<ims::EdgeStateAvoidanceConstraint *>(constraint_ptr.get());
-
-                    if (edge_avoidance_constraint_ptr == nullptr) {
-                        throw std::runtime_error("Could not cast constraint to edge state avoidance constraint");
-                    }
-
-                    // Check for equality of time.
-                    TimeType state_t_to = next_state_val.back();
-                    TimeType state_t_from = state_val.back();
-                    TimeType constrain_t_from = edge_avoidance_constraint_ptr->getTimeInterval().first;
-                    TimeType constrain_t_to = edge_avoidance_constraint_ptr->getTimeInterval().second;
-
-                    if (state_t_from != constrain_t_from || state_t_to != constrain_t_to) {
-                        continue;
-                    }
-
-                    // Check if the agent state is valid when the states of all other higher-priority agents are set in the scene.
-                    // Make sure that we have agent names here, which we get from the context. This is needed for move-group setting.
-                    std::vector<std::string> agent_names = constraints_collective_ptr_->getConstraintsContext()->agent_names;
-                    std::vector<int> other_agent_ids = edge_avoidance_constraint_ptr->agent_ids_to_avoid;
-                    std::vector<std::string> agent_names_to_avoid;
-                    for (int agent_id_to_avoid : edge_avoidance_constraint_ptr->agent_ids_to_avoid) {
-                        agent_names_to_avoid.push_back(agent_names.at(agent_id_to_avoid));
-                    }
-
-                    // Get the agent states at this time from the context.
-                    std::vector<StateType> other_agent_states_from = edge_avoidance_constraint_ptr->agent_states_from;
-                    std::vector<StateType> other_agent_states_to = edge_avoidance_constraint_ptr->agent_states_to;
-
-                    // Check if the state is valid when the agent states are set in the scene.
-                    CollisionsCollective collisions;
-                    bool is_transition_valid = isStateToStateValid(state_val, next_state_val, agent_names_to_avoid, other_agent_states_from, other_agent_states_to, collisions);
-
-                    // If there is a collision, then we are no good. Otherwise keep going through constraints.
-                    if (!is_transition_valid) {
-                        return false;
-                    }
-                    break;
-                }
-
-
-            } // End of switch.
+            }
+            else {
+                throw std::runtime_error("Could not cast constraint to vertex constraint");
+            }
+            break;
         }
-    }
+
+        /////////////////////////
+        // Edge constraints.   //
+        /////////////////////////
+        case ims::ConstraintType::EDGE: {
+            // Convert to an edge constraint pointer to get access to its members.
+            auto* edge_constraint_ptr = dynamic_cast<ims::EdgeConstraint*>(constraint_ptr.get());
+            if (edge_constraint_ptr != nullptr) {
+                // If the constraint is an edge constraint, check if the state is valid w.r.t the constraint.
+                if (edge_constraint_ptr->state_from == state_val && edge_constraint_ptr->state_to == next_state_val) {
+                    return false;
+                }
+            }
+            else {
+                throw std::runtime_error("Could not cast constraint to edge constraint");
+            }
+            break;
+        }
+
+        /////////////////////////
+        // Sphere3D constraints./
+        /////////////////////////
+        case ims::ConstraintType::SPHERE3D: {
+            // Convert to a sphere 3d constraint pointer to get access to its members.
+            auto* sphere3d_constraint_ptr = dynamic_cast<ims::Sphere3dConstraint*>(constraint_ptr.get());
+            if (sphere3d_constraint_ptr != nullptr) {
+                // Check for equality of time.
+                if (sphere3d_constraint_ptr->time != next_state_val.back()) {
+                    // continue;
+                    return true;
+                }
+
+                // Remove time from the state.
+                StateType next_state_val_wo_time = {next_state_val.begin(), next_state_val.end() - 1};
+
+                // Get the point and the radius of the sphere.
+                Eigen::Vector3d sphere_center = sphere3d_constraint_ptr->center;
+                double sphere_radius = sphere3d_constraint_ptr->radius;
+                
+                // Method I: check distance from robot to point.
+                if (false){
+                    // Visualize the sphere.
+                    this->visualizeSphere(sphere_center.x(), sphere_center.y(), sphere_center.z(), sphere_radius);
+
+                    // Check if the point distance to the robot is smaller than the radius.
+                    double distance_to_robot = -1;
+                    moveit_interface_->getDistanceToRobot(next_state_val_wo_time, sphere_center, sphere_radius, distance_to_robot);
+
+                    // If the distance is smaller than the radius, then the state is not valid.
+                    if (distance_to_robot < sphere_radius) {
+                        return false;
+                    }
+                }
+
+                // Method II: check collision between robot and sphere.
+                else{
+                    // Visualize the sphere.
+                    this->visualizeSphere(sphere_center.x(), sphere_center.y(), sphere_center.z(), sphere_radius);
+
+                    bool is_colliding = moveit_interface_->isRobotCollidingWithSphere(next_state_val_wo_time, sphere_center, sphere_radius);
+                    if (is_colliding) {
+                        return false;
+                    }
+                }
+            }
+            else {
+                throw std::runtime_error("Could not cast constraint to sphere3d constraint");
+            }
+            break;
+        }
+
+        /////////////////////////
+        // Vertex Avoidance.   //
+        /////////////////////////
+        case ims::ConstraintType::VERTEX_AVOIDANCE: {
+            // Convert to a vertex avoidance constraint pointer to get access to its members.
+            auto* vertex_avoidance_constraint_ptr = dynamic_cast<ims::VertexAvoidanceConstraint*>(constraint_ptr.get());
+            if (vertex_avoidance_constraint_ptr != nullptr) {
+
+                // Check for equality of time.
+                TimeType next_state_time = next_state_val.back();
+                if (vertex_avoidance_constraint_ptr->time != next_state_time && vertex_avoidance_constraint_ptr->time != -1) {
+                    // continue;
+                    return true;
+                }
+
+                // Check if the agent state is valid when the states of all other higher-priority agents are set in the scene.
+                // Make sure that we have agent names here. This is needed for move-group setting.
+                if (vertex_avoidance_constraint_ptr->agent_names_to_avoid.size() != vertex_avoidance_constraint_ptr->agent_ids_to_avoid.size()) {
+                    throw std::runtime_error("Agent names and agent ids to avoid are not the same in vertex avoidance constraint.");
+                }
+
+                // Get the agent names and the agent ids.
+                std::vector<std::string> agent_names_to_avoid = vertex_avoidance_constraint_ptr->agent_names_to_avoid;
+                std::vector<int> agent_ids_to_avoid = vertex_avoidance_constraint_ptr->agent_ids_to_avoid;
+
+                // Get the agent states at this time from the context.
+                std::vector<StateType> agent_states_to_avoid;
+                for (auto agent_id : agent_ids_to_avoid) {
+                    // Get the agent state. This is either the state of the other agent in its context-path at the timestep of the next state or at the goal state of the other agent, if it already reached its goal by this time.
+                    TimeType agent_to_avoid_time = std::min(next_state_time, (TimeType) constraints_collective_ptr_->getConstraintsContext()->agent_paths.at(agent_id).back().back());
+
+                    StateType agent_state_to_avoid = constraints_collective_ptr_->getConstraintsContext()->agent_paths.at(agent_id).at(agent_to_avoid_time);
+                    StateType agent_state_to_avoid_wo_time = {agent_state_to_avoid.begin(), agent_state_to_avoid.end() - 1};
+                    
+                    // Add the agent state to the vector.
+                    agent_states_to_avoid.push_back(agent_state_to_avoid_wo_time);
+                }
+
+                // Check if the state is valid when the agent states are set in the scene.
+                CollisionsCollective collisions;
+                StateType next_state_val_wo_time = {next_state_val.begin(), next_state_val.end() - 1};
+                bool is_valid = moveit_interface_->isStateValid(next_state_val_wo_time, agent_names_to_avoid, agent_states_to_avoid, collisions);
+
+                // If there is a collision, then we are no good. Otherwise keep going through constraints.
+                if (!is_valid) {
+                    return false;
+                }
+            }
+            else {
+                throw std::runtime_error("Could not cast constraint to vertex avoidance constraint");
+            }
+            break;
+        }
+
+        /////////////////////////
+        // Edge Avoidance.     //
+        /////////////////////////
+        case ims::ConstraintType::EDGE_AVOIDANCE: {
+            // Convert to an edge avoidance constraint pointer to get access to its members.
+            auto *edge_avoidance_constraint_ptr = dynamic_cast<ims::EdgeAvoidanceConstraint *>(constraint_ptr.get());
+            // dynamic_cast<ims::EdgeAvoidanceConstraint *>(constraint_ptr.get());
+
+            if (edge_avoidance_constraint_ptr == nullptr) {
+                throw std::runtime_error("Could not cast constraint to edge avoidance constraint");
+            }
+
+            // Check for equality of time.
+            TimeType state_t_to = next_state_val.back();
+            TimeType state_t_from = state_val.back();
+            TimeType constrain_t_from = edge_avoidance_constraint_ptr->t_from;
+            TimeType constrain_t_to = edge_avoidance_constraint_ptr->t_to;
+
+            if (constrain_t_from != -1 && constrain_t_to != -1) {
+                // Require that the state is in the time interval of the constraint.
+                if (state_t_from != constrain_t_from || state_t_to != constrain_t_to) {
+                    // continue;
+                    return true;
+                }
+            }
+
+            // Check if the agent state is valid when the states of all other higher-priority agents are set in the scene.
+            // Make sure that we have agent names here. This is needed for move-group setting.
+            std::vector<std::string> agent_names_to_avoid = edge_avoidance_constraint_ptr->agent_names_to_avoid;
+            if (agent_names_to_avoid.size() != edge_avoidance_constraint_ptr->agent_ids_to_avoid.size()) {
+                throw std::runtime_error("Agent names and agent ids to avoid are not the same in edge avoidance constraint.");
+            }
+
+            // Get the agent ids.
+            std::vector<int> other_agent_ids = edge_avoidance_constraint_ptr->agent_ids_to_avoid;
+
+            // Get the agent states at this time from the context.
+            std::vector<StateType> other_agent_states_from;
+            std::vector<StateType> other_agent_states_to;
+
+            for (auto agent_id : other_agent_ids) {
+                // Get the other agent states.
+                TimeType other_agent_time_from = std::min(state_t_from, (TimeType) constraints_collective_ptr_->getConstraintsContext()->agent_paths.at(agent_id).back().back());
+                StateType other_agent_state_from = constraints_collective_ptr_->getConstraintsContext()->agent_paths.at(agent_id).at(other_agent_time_from);
+                
+                TimeType other_agent_time_to = std::min(state_t_to, (TimeType) constraints_collective_ptr_->getConstraintsContext()->agent_paths.at(agent_id).back().back());
+                StateType other_agent_state_to = constraints_collective_ptr_->getConstraintsContext()->agent_paths.at(agent_id).at(other_agent_time_to);
+
+                // Add the agent state to the vector.
+                other_agent_states_from.push_back(other_agent_state_from);
+                other_agent_states_to.push_back(other_agent_state_to);
+            }
+
+            // Check if the state is valid when the agent states are set in the scene.
+            CollisionsCollective collisions;
+            bool is_transition_valid = isStateToStateValid(state_val, next_state_val, agent_names_to_avoid, other_agent_states_from, other_agent_states_to, collisions);
+
+            // If there is a collision, then we are no good. Otherwise keep going through constraints.
+            if (!is_transition_valid) {
+                return false;
+            }
+            break;
+        }
+
+        ///////////////////////////////
+        // Vertex State Avoidance.   //
+        ///////////////////////////////
+        case ims::ConstraintType::VERTEX_STATE_AVOIDANCE: {
+            // Convert to a vertex avoidance constraint pointer to get access to its members.
+            auto* vertex_state_avoidance_constraint_ptr = dynamic_cast<ims::VertexStateAvoidanceConstraint*>(constraint_ptr.get());
+            if (vertex_state_avoidance_constraint_ptr != nullptr) {
+
+                // Check for equality of time.
+                TimeType next_state_time = next_state_val.back();
+                if (vertex_state_avoidance_constraint_ptr->getTimeInterval().second != next_state_time) {
+                    // continue;
+                    return true;
+                }
+
+                // Check if the agent state is valid when the states of all other higher-priority agents are set in the scene.
+                // Make sure that we have agent names here: we get them from the constraints context. This is needed for move-group setting.
+                std::vector<StateType> agent_states_to_avoid = vertex_state_avoidance_constraint_ptr->agent_states_to_avoid;
+                std::vector<int> agent_ids_to_avoid = vertex_state_avoidance_constraint_ptr->agent_ids_to_avoid;
+                std::vector<std::string> agent_names = constraints_collective_ptr_->getConstraintsContext()->agent_names;
+                std::vector<std::string> agent_names_to_avoid;
+                for (int agent_id_to_avoid : agent_ids_to_avoid) {
+                    agent_names_to_avoid.push_back(agent_names.at(agent_id_to_avoid));
+                }
+
+                // Remove time from the states to avoid.
+                std::vector<StateType> agent_states_to_avoid_wo_time;
+                for (auto agent_state_to_avoid : agent_states_to_avoid) {
+                    StateType agent_state_to_avoid_wo_time = {agent_state_to_avoid.begin(), agent_state_to_avoid.end() - 1};
+                    agent_states_to_avoid_wo_time.push_back(agent_state_to_avoid_wo_time);
+                }
+
+                // Check if the state is valid when the agent states are set in the scene.
+                CollisionsCollective collisions;
+                StateType next_state_val_wo_time = {next_state_val.begin(), next_state_val.end() - 1};
+                bool is_valid = moveit_interface_->isStateValid(next_state_val_wo_time, agent_names_to_avoid, agent_states_to_avoid_wo_time, collisions);
+
+                // If there is a collision, then we are no good. Otherwise keep going through constraints.
+                if (!is_valid) {
+                    return false;
+                }
+            }
+            else {
+                throw std::runtime_error("Could not cast constraint to vertex state avoidance constraint");
+            }
+            break;
+        }
+
+
+        /////////////////////////////
+        // Edge State Avoidance.   //
+        /////////////////////////////
+        case ims::ConstraintType::EDGE_STATE_AVOIDANCE: {
+            // Convert to an edge avoidance constraint pointer to get access to its members.
+            auto *edge_avoidance_constraint_ptr = dynamic_cast<ims::EdgeStateAvoidanceConstraint *>(constraint_ptr.get());
+
+            if (edge_avoidance_constraint_ptr == nullptr) {
+                throw std::runtime_error("Could not cast constraint to edge state avoidance constraint");
+            }
+
+            // Check for equality of time.
+            TimeType state_t_to = next_state_val.back();
+            TimeType state_t_from = state_val.back();
+            TimeType constrain_t_from = edge_avoidance_constraint_ptr->getTimeInterval().first;
+            TimeType constrain_t_to = edge_avoidance_constraint_ptr->getTimeInterval().second;
+
+            if (state_t_from != constrain_t_from || state_t_to != constrain_t_to) {
+                // continue;
+                return true;
+            }
+
+            // Check if the agent state is valid when the states of all other higher-priority agents are set in the scene.
+            // Make sure that we have agent names here, which we get from the context. This is needed for move-group setting.
+            std::vector<std::string> agent_names = constraints_collective_ptr_->getConstraintsContext()->agent_names;
+            std::vector<int> other_agent_ids = edge_avoidance_constraint_ptr->agent_ids_to_avoid;
+            std::vector<std::string> agent_names_to_avoid;
+            for (int agent_id_to_avoid : edge_avoidance_constraint_ptr->agent_ids_to_avoid) {
+                agent_names_to_avoid.push_back(agent_names.at(agent_id_to_avoid));
+            }
+
+            // Get the agent states at this time from the context.
+            std::vector<StateType> other_agent_states_from = edge_avoidance_constraint_ptr->agent_states_from;
+            std::vector<StateType> other_agent_states_to = edge_avoidance_constraint_ptr->agent_states_to;
+
+            // Check if the state is valid when the agent states are set in the scene.
+            CollisionsCollective collisions;
+            bool is_transition_valid = isStateToStateValid(state_val, next_state_val, agent_names_to_avoid, other_agent_states_from, other_agent_states_to, collisions);
+
+            // If there is a collision, then we are no good. Otherwise keep going through constraints.
+            if (!is_transition_valid) {
+                return false;
+            }
+            break;
+        }
+    } // End of switch.
     return true;
 }
+
+// bool MrampManipulationActionSpace::isSatisfyingAllConstraints(const StateType& state_val, const StateType& next_state_val) {
+//     // Check against constraints. Answers "can I transition to the next state given constraints? Assuming I can be at the current state."
+//     // TODO(yoraish): check for time first.  If there are no constraints at this timestep, then the state is valid w.r.t constraints.
+
+//     // Otherwise, check if the state is valid w.r.t the constraints.
+//     // Iterate over the constraints. Those are in the pointer to the constraints collective, within a set pointer called constraints_ptr_.
+//     if (!constraints_collective_ptr_->getConstraints().empty()) {
+//         // Loop through the vector, and get a reference to each one of the elements.
+//         for (auto& constraint_ptr : constraints_collective_ptr_->getConstraints()) {
+
+//             // Check if the constraint is a vertex constraint or an edge constraint.
+//             switch (constraint_ptr->type) {
+
+//                 /////////////////////////
+//                 // Vertex constraints. //
+//                 /////////////////////////
+//                 case ims::ConstraintType::VERTEX: {
+//                     // Convert to a vertex constraint pointer to get access to its members.
+//                     auto* vertex_constraint_ptr = dynamic_cast<ims::VertexConstraint*>(constraint_ptr.get());
+//                     if (vertex_constraint_ptr != nullptr) {
+//                         // If the constraint is a vertex constraint, check if the state is valid w.r.t the constraint.
+//                         bool is_valid_wrt_constraint = false;
+//                         // TODO(yoraish): create a check state equality helper.
+//                         for (int i{0}; i < vertex_constraint_ptr->state.size(); i++) {
+//                             if (vertex_constraint_ptr->state[i] != next_state_val[i]) {
+//                                 is_valid_wrt_constraint = true;
+//                                 break;
+//                             }
+//                         }
+//                         if (!is_valid_wrt_constraint){
+//                             return false;
+//                         }
+//                     }
+//                     else {
+//                         throw std::runtime_error("Could not cast constraint to vertex constraint");
+//                     }
+//                     break;
+//                 }
+
+//                 /////////////////////////
+//                 // Edge constraints.   //
+//                 /////////////////////////
+//                 case ims::ConstraintType::EDGE: {
+//                     // Convert to an edge constraint pointer to get access to its members.
+//                     auto* edge_constraint_ptr = dynamic_cast<ims::EdgeConstraint*>(constraint_ptr.get());
+//                     if (edge_constraint_ptr != nullptr) {
+//                         // If the constraint is an edge constraint, check if the state is valid w.r.t the constraint.
+//                         if (edge_constraint_ptr->state_from == state_val && edge_constraint_ptr->state_to == next_state_val) {
+//                             return false;
+//                         }
+//                     }
+//                     else {
+//                         throw std::runtime_error("Could not cast constraint to edge constraint");
+//                     }
+//                     break;
+//                 }
+
+//                 /////////////////////////
+//                 // Sphere3D constraints./
+//                 /////////////////////////
+//                 case ims::ConstraintType::SPHERE3D: {
+//                     // Convert to a sphere 3d constraint pointer to get access to its members.
+//                     auto* sphere3d_constraint_ptr = dynamic_cast<ims::Sphere3dConstraint*>(constraint_ptr.get());
+//                     if (sphere3d_constraint_ptr != nullptr) {
+//                         // Check for equality of time.
+//                         if (sphere3d_constraint_ptr->time != next_state_val.back()) {
+//                             continue;
+//                         }
+
+//                         // Remove time from the state.
+//                         StateType next_state_val_wo_time = {next_state_val.begin(), next_state_val.end() - 1};
+
+//                         // Get the point and the radius of the sphere.
+//                         Eigen::Vector3d sphere_center = sphere3d_constraint_ptr->center;
+//                         double sphere_radius = sphere3d_constraint_ptr->radius;
+                        
+//                         // Method I: check distance from robot to point.
+//                         if (false){
+//                             // Visualize the sphere.
+//                             this->visualizeSphere(sphere_center.x(), sphere_center.y(), sphere_center.z(), sphere_radius);
+
+//                             // Check if the point distance to the robot is smaller than the radius.
+//                             double distance_to_robot = -1;
+//                             moveit_interface_->getDistanceToRobot(next_state_val_wo_time, sphere_center, sphere_radius, distance_to_robot);
+
+//                             // If the distance is smaller than the radius, then the state is not valid.
+//                             if (distance_to_robot < sphere_radius) {
+//                                 return false;
+//                             }
+//                         }
+
+//                         // Method II: check collision between robot and sphere.
+//                         else{
+//                             // Visualize the sphere.
+//                             this->visualizeSphere(sphere_center.x(), sphere_center.y(), sphere_center.z(), sphere_radius);
+
+//                             bool is_colliding = moveit_interface_->isRobotCollidingWithSphere(next_state_val_wo_time, sphere_center, sphere_radius);
+//                             if (is_colliding) {
+//                                 return false;
+//                             }
+//                         }
+
+//                     }
+//                     else {
+//                         throw std::runtime_error("Could not cast constraint to sphere3d constraint");
+//                     }
+//                     break;
+//                 }
+
+//                 /////////////////////////
+//                 // Vertex Avoidance.   //
+//                 /////////////////////////
+//                 case ims::ConstraintType::VERTEX_AVOIDANCE: {
+//                     // Convert to a vertex avoidance constraint pointer to get access to its members.
+//                     auto* vertex_avoidance_constraint_ptr = dynamic_cast<ims::VertexAvoidanceConstraint*>(constraint_ptr.get());
+//                     if (vertex_avoidance_constraint_ptr != nullptr) {
+
+//                         // Check for equality of time.
+//                         TimeType next_state_time = next_state_val.back();
+//                         if (vertex_avoidance_constraint_ptr->time != next_state_time && vertex_avoidance_constraint_ptr->time != -1) {
+//                             continue;
+//                         }
+ 
+//                         // Check if the agent state is valid when the states of all other higher-priority agents are set in the scene.
+//                         // Make sure that we have agent names here. This is needed for move-group setting.
+//                         if (vertex_avoidance_constraint_ptr->agent_names_to_avoid.size() != vertex_avoidance_constraint_ptr->agent_ids_to_avoid.size()) {
+//                             throw std::runtime_error("Agent names and agent ids to avoid are not the same in vertex avoidance constraint.");
+//                         }
+
+//                         // Get the agent names and the agent ids.
+//                         std::vector<std::string> agent_names_to_avoid = vertex_avoidance_constraint_ptr->agent_names_to_avoid;
+//                         std::vector<int> agent_ids_to_avoid = vertex_avoidance_constraint_ptr->agent_ids_to_avoid;
+
+//                         // Get the agent states at this time from the context.
+//                         std::vector<StateType> agent_states_to_avoid;
+//                         for (auto agent_id : agent_ids_to_avoid) {
+//                             // Get the agent state. This is either the state of the other agent in its context-path at the timestep of the next state or at the goal state of the other agent, if it already reached its goal by this time.
+//                             TimeType agent_to_avoid_time = std::min(next_state_time, (TimeType) constraints_collective_ptr_->getConstraintsContext()->agent_paths.at(agent_id).back().back());
+
+//                             StateType agent_state_to_avoid = constraints_collective_ptr_->getConstraintsContext()->agent_paths.at(agent_id).at(agent_to_avoid_time);
+//                             StateType agent_state_to_avoid_wo_time = {agent_state_to_avoid.begin(), agent_state_to_avoid.end() - 1};
+                            
+//                             // Add the agent state to the vector.
+//                             agent_states_to_avoid.push_back(agent_state_to_avoid_wo_time);
+//                         }
+
+//                         // Check if the state is valid when the agent states are set in the scene.
+//                         CollisionsCollective collisions;
+//                         StateType next_state_val_wo_time = {next_state_val.begin(), next_state_val.end() - 1};
+//                         bool is_valid = moveit_interface_->isStateValid(next_state_val_wo_time, agent_names_to_avoid, agent_states_to_avoid, collisions);
+
+//                         // If there is a collision, then we are no good. Otherwise keep going through constraints.
+//                         if (!is_valid) {
+//                             return false;
+//                         }
+//                     }
+//                     else {
+//                         throw std::runtime_error("Could not cast constraint to vertex avoidance constraint");
+//                     }
+//                     break;
+//                 }
+
+//                 /////////////////////////
+//                 // Edge Avoidance.     //
+//                 /////////////////////////
+//                 case ims::ConstraintType::EDGE_AVOIDANCE: {
+//                     // Convert to an edge avoidance constraint pointer to get access to its members.
+//                     auto *edge_avoidance_constraint_ptr = dynamic_cast<ims::EdgeAvoidanceConstraint *>(constraint_ptr.get());
+//                     // dynamic_cast<ims::EdgeAvoidanceConstraint *>(constraint_ptr.get());
+
+//                     if (edge_avoidance_constraint_ptr == nullptr) {
+//                         throw std::runtime_error("Could not cast constraint to edge avoidance constraint");
+//                     }
+
+//                     // Check for equality of time.
+//                     TimeType state_t_to = next_state_val.back();
+//                     TimeType state_t_from = state_val.back();
+//                     TimeType constrain_t_from = edge_avoidance_constraint_ptr->t_from;
+//                     TimeType constrain_t_to = edge_avoidance_constraint_ptr->t_to;
+
+//                     if (constrain_t_from != -1 && constrain_t_to != -1) {
+//                         if (state_t_from != constrain_t_from || state_t_to != constrain_t_to) {
+//                             continue;
+//                         }
+//                     }
+
+//                     // Check if the agent state is valid when the states of all other higher-priority agents are set in the scene.
+//                     // Make sure that we have agent names here. This is needed for move-group setting.
+//                     std::vector<std::string> agent_names_to_avoid = edge_avoidance_constraint_ptr->agent_names_to_avoid;
+//                     if (agent_names_to_avoid.size() != edge_avoidance_constraint_ptr->agent_ids_to_avoid.size()) {
+//                         throw std::runtime_error("Agent names and agent ids to avoid are not the same in edge avoidance constraint.");
+//                     }
+
+//                     // Get the agent ids.
+//                     std::vector<int> other_agent_ids = edge_avoidance_constraint_ptr->agent_ids_to_avoid;
+
+//                     // Get the agent states at this time from the context.
+//                     std::vector<StateType> other_agent_states_from;
+//                     std::vector<StateType> other_agent_states_to;
+
+//                     for (auto agent_id : other_agent_ids) {
+//                         // Get the other agent states.
+//                         TimeType other_agent_time_from = std::min(state_t_from, (TimeType) constraints_collective_ptr_->getConstraintsContext()->agent_paths.at(agent_id).back().back());
+//                         StateType other_agent_state_from = constraints_collective_ptr_->getConstraintsContext()->agent_paths.at(agent_id).at(other_agent_time_from);
+                        
+//                         TimeType other_agent_time_to = std::min(state_t_to, (TimeType) constraints_collective_ptr_->getConstraintsContext()->agent_paths.at(agent_id).back().back());
+//                         StateType other_agent_state_to = constraints_collective_ptr_->getConstraintsContext()->agent_paths.at(agent_id).at(other_agent_time_to);
+
+//                         // Add the agent state to the vector.
+//                         other_agent_states_from.push_back(other_agent_state_from);
+//                         other_agent_states_to.push_back(other_agent_state_to);
+//                     }
+
+//                     // Check if the state is valid when the agent states are set in the scene.
+//                     CollisionsCollective collisions;
+//                     bool is_transition_valid = isStateToStateValid(state_val, next_state_val, agent_names_to_avoid, other_agent_states_from, other_agent_states_to, collisions);
+
+//                     // If there is a collision, then we are no good. Otherwise keep going through constraints.
+//                     if (!is_transition_valid) {
+//                         return false;
+//                     }
+//                     break;
+//                 }
+
+//                 ///////////////////////////////
+//                 // Vertex State Avoidance.   //
+//                 ///////////////////////////////
+//                 case ims::ConstraintType::VERTEX_STATE_AVOIDANCE: {
+//                     // Convert to a vertex avoidance constraint pointer to get access to its members.
+//                     auto* vertex_state_avoidance_constraint_ptr = dynamic_cast<ims::VertexStateAvoidanceConstraint*>(constraint_ptr.get());
+//                     if (vertex_state_avoidance_constraint_ptr != nullptr) {
+
+//                         // Check for equality of time.
+//                         TimeType next_state_time = next_state_val.back();
+//                         if (vertex_state_avoidance_constraint_ptr->getTimeInterval().second != next_state_time) {
+//                             continue;
+//                         }
+ 
+//                         // Check if the agent state is valid when the states of all other higher-priority agents are set in the scene.
+//                         // Make sure that we have agent names here: we get them from the constraints context. This is needed for move-group setting.
+//                         std::vector<StateType> agent_states_to_avoid = vertex_state_avoidance_constraint_ptr->agent_states_to_avoid;
+//                         std::vector<int> agent_ids_to_avoid = vertex_state_avoidance_constraint_ptr->agent_ids_to_avoid;
+//                         std::vector<std::string> agent_names = constraints_collective_ptr_->getConstraintsContext()->agent_names;
+//                         std::vector<std::string> agent_names_to_avoid;
+//                         for (int agent_id_to_avoid : agent_ids_to_avoid) {
+//                             agent_names_to_avoid.push_back(agent_names.at(agent_id_to_avoid));
+//                         }
+
+//                         // Remove time from the states to avoid.
+//                         std::vector<StateType> agent_states_to_avoid_wo_time;
+//                         for (auto agent_state_to_avoid : agent_states_to_avoid) {
+//                             StateType agent_state_to_avoid_wo_time = {agent_state_to_avoid.begin(), agent_state_to_avoid.end() - 1};
+//                             agent_states_to_avoid_wo_time.push_back(agent_state_to_avoid_wo_time);
+//                         }
+
+//                         // Check if the state is valid when the agent states are set in the scene.
+//                         CollisionsCollective collisions;
+//                         StateType next_state_val_wo_time = {next_state_val.begin(), next_state_val.end() - 1};
+//                         bool is_valid = moveit_interface_->isStateValid(next_state_val_wo_time, agent_names_to_avoid, agent_states_to_avoid_wo_time, collisions);
+
+//                         // If there is a collision, then we are no good. Otherwise keep going through constraints.
+//                         if (!is_valid) {
+//                             return false;
+//                         }
+//                     }
+//                     else {
+//                         throw std::runtime_error("Could not cast constraint to vertex state avoidance constraint");
+//                     }
+//                     break;
+//                 }
+
+
+//                 /////////////////////////////
+//                 // Edge State Avoidance.   //
+//                 /////////////////////////////
+//                 case ims::ConstraintType::EDGE_STATE_AVOIDANCE: {
+//                     // Convert to an edge avoidance constraint pointer to get access to its members.
+//                     auto *edge_avoidance_constraint_ptr = dynamic_cast<ims::EdgeStateAvoidanceConstraint *>(constraint_ptr.get());
+
+//                     if (edge_avoidance_constraint_ptr == nullptr) {
+//                         throw std::runtime_error("Could not cast constraint to edge state avoidance constraint");
+//                     }
+
+//                     // Check for equality of time.
+//                     TimeType state_t_to = next_state_val.back();
+//                     TimeType state_t_from = state_val.back();
+//                     TimeType constrain_t_from = edge_avoidance_constraint_ptr->getTimeInterval().first;
+//                     TimeType constrain_t_to = edge_avoidance_constraint_ptr->getTimeInterval().second;
+
+//                     if (state_t_from != constrain_t_from || state_t_to != constrain_t_to) {
+//                         continue;
+//                     }
+
+//                     // Check if the agent state is valid when the states of all other higher-priority agents are set in the scene.
+//                     // Make sure that we have agent names here, which we get from the context. This is needed for move-group setting.
+//                     std::vector<std::string> agent_names = constraints_collective_ptr_->getConstraintsContext()->agent_names;
+//                     std::vector<int> other_agent_ids = edge_avoidance_constraint_ptr->agent_ids_to_avoid;
+//                     std::vector<std::string> agent_names_to_avoid;
+//                     for (int agent_id_to_avoid : edge_avoidance_constraint_ptr->agent_ids_to_avoid) {
+//                         agent_names_to_avoid.push_back(agent_names.at(agent_id_to_avoid));
+//                     }
+
+//                     // Get the agent states at this time from the context.
+//                     std::vector<StateType> other_agent_states_from = edge_avoidance_constraint_ptr->agent_states_from;
+//                     std::vector<StateType> other_agent_states_to = edge_avoidance_constraint_ptr->agent_states_to;
+
+//                     // Check if the state is valid when the agent states are set in the scene.
+//                     CollisionsCollective collisions;
+//                     bool is_transition_valid = isStateToStateValid(state_val, next_state_val, agent_names_to_avoid, other_agent_states_from, other_agent_states_to, collisions);
+
+//                     // If there is a collision, then we are no good. Otherwise keep going through constraints.
+//                     if (!is_transition_valid) {
+//                         return false;
+//                     }
+//                     break;
+//                 }
+
+
+//             } // End of switch.
+//         }
+//     }
+//     return true;
+// }
 
 
 void MrampManipulationActionSpace::getPathsConflicts(std::shared_ptr<MultiAgentPaths> paths, std::vector<std::shared_ptr<Conflict>> &conflicts_ptrs, const std::vector<ConflictType> & conflict_types, int max_conflicts, const std::vector<std::string> &agent_names, TimeType time_start, TimeType time_end)  {
@@ -1336,6 +1658,9 @@ bool MrampManipulationActionSpace::multiAgentStateToStateConnector(const MultiAg
     throw std::runtime_error("multiAgentStateToStateConnector is not implemented for ManipulationActionSpace");
 }
 
+void ims::MrampManipulationActionSpace::getSafeIntervals(int state_id, std::vector<SafeIntervalType>& safe_intervals){
+    throw std::runtime_error("getSafeIntervals is not implemented for ManipulationActionSpace");
+}
 
 
 }  // namespace ims

@@ -1215,6 +1215,54 @@ std::unordered_map<int, bool> isMultiAgentPathValid(MultiAgentPaths paths,
     return agent_validity;
 }
 
+
+bool isPathValid(PathType path,
+                 const moveit::planning_interface::MoveGroupInterface& move_group,
+                 const planning_scene::PlanningScenePtr& planning_scene,
+                 int num_intermediate_states = 3) {
+
+    // Add intermediate states to the path. These are interpolated between the states of the individual paths to verify transitions are okay.
+    densifyPath(path, num_intermediate_states);
+
+    // Iterate over the composite state path and check for validity.
+    collision_detection::CollisionRequest collision_request;
+    collision_request.verbose = false;
+    collision_request.group_name = move_group.getName();
+    collision_request.contacts = true;
+    collision_request.max_contacts = 1000;
+    collision_detection::CollisionResult collision_result;
+    moveit::core::RobotState robot_state = planning_scene->getCurrentStateNonConst();
+
+    // Print all the collision objects in the scene.
+    std::vector<std::string> collision_object_names = planning_scene->getWorld()->getObjectIds();
+    std::cout << "Collision objects in the scene: ";
+    for (auto name : collision_object_names) {
+        std::cout << name << ", ";
+    }
+    std::cout << "\n";
+
+    // Iterate over the states and mark any agents that is in collision as invalid.
+    for (int t = 0; t < path.size(); t++) {
+        StateType agent_state = path[t];
+
+        // Check if the state is valid.
+        robot_state.setJointGroupPositions(move_group.getName(), agent_state);
+        collision_result.clear();
+        planning_scene->checkCollision(collision_request, collision_result, robot_state);
+
+        // If there is no collision, then the the state is valid for all agents.
+        if (!collision_result.collision) {
+            continue;
+        }
+        else {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+
 /// @brief Smooth a set of paths, one for each agent.
 bool smoothMultiAgentPaths(MultiAgentPaths paths,
                            const moveit::planning_interface::MoveGroupInterface& move_group_multi,
@@ -1545,6 +1593,151 @@ bool shortcutPath(std::string agent_name,
 
     return true;
 }
+
+
+/// @brief Shortcut a path of a single agent agains a set static scene.
+/// @param path The path to shortcut.
+/// @param move_group The move group of the agent.
+/// @param planning_scene The planning scene.
+/// @param smoothed_path The smoothed path.
+/// @param timeout The timeout for the planning.
+bool shortcutPath(const PathType & path,
+                  const moveit::planning_interface::MoveGroupInterface& move_group,
+                  const planning_scene::PlanningScenePtr& planning_scene,
+                  PathType& smoothed_path,
+                  double timeout = 1.0) {
+    // Keep track of the current t0 and t1 for the agent. These are indices pointing to the current start and end times of the tentative addition to the smoothed path. This addition is an interpolation between the current t0 and t1 on the individual path.
+    int agent_t0 = 0;
+    int agent_t1 = 1;
+
+    smoothed_path.clear();
+
+    // Get the maximal time of the paths.
+    double t_max = path.size() - 1;
+
+    // If the length of the paths is less than or equal to 2, then there is nothing to smooth.
+    if (t_max <= 2) {
+        smoothed_path = path;
+        return true;
+    }
+
+    // Keep track of the current shortcut segment for the agent.
+    PathType agent_shortcut_segment;
+
+    // Iterate over the timesteps.
+    for (TimeType t{2}; t < t_max; t++) {
+        // std::cout << "\n========\nStarting smoothing iteration at t= " << t << "\n";
+
+        // Iterate over the agents and check if the transition from min(agent_t0s) to max(agent_t1s) is valid for the multi-agent transition. For each agent that fails, add the transition from t0 to t1-1 to the smoothed path and set the t0 and t1 to t1 and t1+1, respectively.
+        int t0 = agent_t0;
+        int t1 = t;
+
+        // Construct the agent path to test for validity.
+            PathType agent_path_to_test;
+
+            // For the portion interpolating between t0 and t1, add the interpolated state to the path to test. This includes the state at t0 and t1.
+            for (int tt = t0; tt <= t1; tt++) {
+                // Get the state at t0 and t1.
+                StateType state_t0 = path[t0];
+                StateType state_t1 = path[t1];
+
+                // Interpolate between the states.
+                StateType state_t = state_t0;
+                for (int i = 0; i < state_t.size(); i++) {
+                    state_t[i] = state_t0[i] + (state_t1[i] - state_t0[i]) * (tt - t0) / (t1 - t0);
+                }
+
+                // Add the state to the path to test.
+                agent_path_to_test.push_back(state_t);
+            }
+
+
+        // Test the validity of this multi-agent transition. Do this by asking for paths conflicts.
+        // std::cout << "testing a transition from t0= " << t0 << " to t1= " << t1 << "\n";
+        bool is_agent_path_to_test_valid = isPathValid(agent_path_to_test,
+                                            move_group,
+                                            planning_scene, 10);
+
+        // Check if the shortcut is valid. If so, increase t1 by 1. Else, add the shortcut segment to the smoothed path and set t0 to t1 and t1 to t1+1.
+        if (is_agent_path_to_test_valid) {
+            std::cout << ">>> Agent succeeded with t0= " << t0 << " and t1= " << t1 << "\n";
+
+            // Store the current segment as successful. This is the paths to test segment between the agent t0 and t1.
+            PathType agent_successful_segment;
+            for (StateType state : agent_path_to_test) {
+                if (state.back() >= t0 && state.back() <= t1) {
+                    agent_successful_segment.push_back(state);
+                }
+            }
+            agent_shortcut_segment = agent_successful_segment;
+        }
+
+        // If the shortcut failed, add the transition from t0 to t1-1 to the smoothed path (should be stored already) and set the t0 and t1 to t1 and t1+1, respectively.
+        else {
+            std::cout << ">>> Agent failed with t0= " << t0 << " and t1= " << t1 << "\n";
+            // If there has been no successful transition before, then add the steps on the individual path to the smoothed path.
+            if (agent_shortcut_segment.size() == 0) {
+                for (int tt = t0; tt < t1; tt++) {
+                    smoothed_path.push_back(path[tt]);
+                }
+            }
+
+            // Otherwise, add the successful segment to the smoothed path.
+            else {
+                for (StateType state : agent_shortcut_segment) {
+                    smoothed_path.push_back(state);
+                }
+                agent_shortcut_segment.clear();
+            }
+
+            // Set the t0 and t1 to t1 and t1+1, respectively.
+            agent_t0 = t1;
+            agent_t1 = t1 + 1;
+
+            // std::cout << ">>> Agent " << agent_id << " failed, setting t0= " << agent_t0 << " and t1= " << agent_t1 << "\n";
+        }
+    }
+
+    // If the smoothed path segment is non-empty, add it to the smoothed paths.
+    if (agent_shortcut_segment.size() > 0) {
+        for (StateType state : agent_shortcut_segment) {
+            smoothed_path.push_back(state);
+        }
+    }
+
+    // Add the last state of the paths to the smoothed paths.
+    smoothed_path.push_back(path.back());
+
+    return true;
+}
+
+void shortcutTimedPath(const PathType & path,
+                       const moveit::planning_interface::MoveGroupInterface& move_group,
+                       const planning_scene::PlanningScenePtr& planning_scene,
+                       PathType& smoothed_path,
+                       double timeout = 1.0) {
+    // Remove the time dimension of the path and keep track of it. Add it back after smoothing.
+    std::vector<double> times;
+    PathType path_wo_time = path;
+    for (StateType& state : path_wo_time) {
+        times.push_back(state.back());
+        state.pop_back();
+    }
+    // Shortcut the path.
+    PathType smoothed_path_wo_time;
+    shortcutPath(path_wo_time, move_group, planning_scene, smoothed_path_wo_time, timeout);
+
+    // TEST TEST TEST.
+    // Check if the smoothed path is valid.
+    isPathValid(smoothed_path_wo_time, move_group, planning_scene, 10);
+
+    // Add the time dimension back.
+    for (int i{0}; i < smoothed_path_wo_time.size(); ++i) {
+        smoothed_path_wo_time[i].push_back(times[i]);
+    }
+    smoothed_path = smoothed_path_wo_time;
+}
+
 
 /// @brief Shortcut paths for multiple agents. Going one at a time around.
 bool shortcutMultiAgentPathsIterative(

@@ -716,6 +716,10 @@ public:
         group_name_ee_ = group_name_ee;
     }
 
+    std::shared_ptr<planning_scene::PlanningScene> getPlanningSceneMoveit() {
+        return planning_scene_;
+    }
+
     planning_scene_monitor::PlanningSceneMonitorPtr planning_scene_monitor_;
     std::shared_ptr<planning_scene::PlanningScene> planning_scene_;
     std::shared_ptr<moveit::planning_interface::PlanningSceneInterface> planning_scene_interface_;
