@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.0.2)
 project(manipulation_planning)
 
+# fix the cmake_policy warning
+if(POLICY CMP0148)
+    cmake_policy(SET CMP0148 OLD)
+endif()
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
 
@@ -173,6 +177,14 @@ target_link_libraries(${PROJECT_NAME}_cspace_test
         ${eigen_LIBRARIES}
         /usr/local/lib/${search_LIBRARIES}
         )
+
+add_executable(${PROJECT_NAME}_mgs src/run_manip_mgs.cpp)
+
+target_link_libraries(${PROJECT_NAME}_mgs
+        ${catkin_LIBRARIES}
+        ${eigen_LIBRARIES}
+        /usr/local/lib/${search_LIBRARIES}
+)
 
 add_executable(${PROJECT_NAME}_wspace_test src/workspace_test.cpp)
 

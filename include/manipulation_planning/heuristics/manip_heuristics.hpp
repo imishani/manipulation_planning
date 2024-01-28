@@ -292,7 +292,7 @@ public:
                                      y,
                                      z);
         if (!bfs_->inBounds(x, y, z))
-            throw std::runtime_error("goal is out of bounds");
+            throw std::runtime_error("BFS Heuristic: goal is out of bounds");
 
         m_goal_cells.emplace_back(x, y, z);
 

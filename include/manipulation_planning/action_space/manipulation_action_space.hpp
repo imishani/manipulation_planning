@@ -374,7 +374,7 @@ struct ManipulationType : ActionType {
 
 /// @class ManipulationActionSpace
 /// @brief A class that implements the ActionSpace for Moveit
-class ManipulationActionSpace : public ActionSpace {
+class ManipulationActionSpace : virtual public ActionSpace {
 protected:
     /// @brief Manipulation type
     std::shared_ptr<ManipulationType> manipulation_type_;
@@ -440,7 +440,8 @@ public:
                 // if the action is snap, then the next state is the goal state
                 // TODO: Add the option to have a goal state defined in ws even if planning in conf space
                 if (action[0] == INF_DOUBLE) {
-                    action_seq.push_back(bfs_heuristic_->goal_);  // TODO: It is wierd that I am using the heuristic here
+//                    action_seq.push_back(bfs_heuristic_->goal_);  // TODO: It is wierd that I am using the heuristic here
+                    action_seq.push_back(states_.at(1)->state);  // TODO: It is wierd that I am using the heuristic here
                 }
                 else {
                     // push back the new state after the action
