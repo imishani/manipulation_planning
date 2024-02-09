@@ -204,14 +204,22 @@ protected:
 public:
     BFSHeuristic() : BFSHeuristic(getDistanceFieldMoveIt()) {
 
-        // Start the node for moveit.
-        node_ = rclcpp::Node::make_shared("bfs_heuristic_node");
+        // Set the ros node for this class.
+        static int node_id = -1;
+        node_id ++;
+        std::string node_name = "bfs_heuristic" + std::to_string(node_id);
+        node_ = rclcpp::Node::make_shared(node_name);
+
     }
 
     explicit BFSHeuristic(std::shared_ptr<distance_field::PropagationDistanceField> distance_field_,
                           const std::string& group_name = "manipulator_1") {
-        //  Initialize the ros node.
-        node_ = rclcpp::Node::make_shared("bfs_heuristic_node");
+        // Set the ros node for this class.
+        static int node_id = -1;
+        node_id ++;
+        std::string node_name = "bfs_heuristic" + std::to_string(node_id);
+        node_ = rclcpp::Node::make_shared(node_name);
+
 
         m_distanceField = std::move(distance_field_);
         // setup robot move group and planning scene

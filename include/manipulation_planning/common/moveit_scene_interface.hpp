@@ -76,13 +76,19 @@ private:
     std::shared_ptr<rclcpp::executors::SingleThreadedExecutor> executor_ptr_;
 
     // A ROS2 logger.
-    rclcpp::Logger logger_ = rclcpp::get_logger("moveit_interface_node");
+    // rclcpp::Logger logger_;
 
 public:
     /// @brief Constructor
-    explicit MoveitInterface(const std::string &group_name) :
-                                                              node_(rclcpp::Node::make_shared("moveit_interface_node")),
-                                                                logger_(rclcpp::get_logger("moveit_interface_node")) {
+    explicit MoveitInterface(const std::string &group_name) {
+
+        // ROS node.
+        // Set the ros node for this class.
+        static int node_id = -1;
+        node_id ++;
+        std::string node_name = "moveit_scene_interface" + std::to_string(node_id);
+        node_ = rclcpp::Node::make_shared(node_name);
+        // logger_ = rclcpp::get_logger(node_name);
 
         // We spin up a SingleThreadedExecutor for the current state monitor to get information
         // about the robot's state.
@@ -140,9 +146,14 @@ public:
     };
 
     /// @brief Constructor with the option to set the planning scene.
-    explicit MoveitInterface(const std::string &group_name, planning_scene::PlanningScenePtr &planning_scene) :
-                                                              node_(rclcpp::Node::make_shared("moveit_interface_node")),
-                                                                logger_(rclcpp::get_logger("moveit_interface_node")) {
+    explicit MoveitInterface(const std::string &group_name, planning_scene::PlanningScenePtr &planning_scene) {
+
+        // ROS node.
+        // Set the ros node for this class.
+        static int node_id = -1;
+        node_id ++;
+        std::string node_name = "moveit_scene_interface" + std::to_string(node_id);
+        node_ = rclcpp::Node::make_shared(node_name);
 
         // We spin up a SingleThreadedExecutor for the current state monitor to get information
         // about the robot's state.
@@ -487,7 +498,7 @@ public:
             return true;
         }
         else {
-            RCLCPP_INFO(logger_, "No IK solution found without using seed");
+            RCLCPP_INFO(node_->get_logger(), "No IK solution found without using seed");
             return false;
         }
     }
@@ -533,7 +544,7 @@ public:
             return true;
         }
         else {
-            RCLCPP_INFO(logger_, "No IK solution found using seed");
+            RCLCPP_INFO(node_->get_logger(), "No IK solution found using seed");
             return false;
         }
     }

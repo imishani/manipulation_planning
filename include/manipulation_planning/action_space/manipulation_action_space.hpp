@@ -401,7 +401,12 @@ public:
         moveit_interface_->getJointLimits(joint_limits_);
 
         // Set the ros node for this class.
-        node_ = rclcpp::Node::make_shared("manipulation_action_space");
+        static int node_id = -1;
+        node_id ++;
+        std::string node_name = "manipulation_action_space" + std::to_string(node_id);
+        node_ = rclcpp::Node::make_shared(node_name);
+        RCLCPP_INFO(node_->get_logger(), "Created node %s", node_name.c_str());
+
 
         // Initialize the publisher for the visualization markers.
         vis_pub_ = node_->create_publisher<visualization_msgs::msg::Marker>("visualization_marker", 0);
@@ -762,7 +767,7 @@ public:
                 // add the state to the successors
                 successors.push_back(next_state_ind);
                 // add the cost
-                costs.push_back(1000);
+                costs.push_back(1);
             }
         }
         return true;
