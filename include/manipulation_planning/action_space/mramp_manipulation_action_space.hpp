@@ -966,7 +966,7 @@ bool MrampManipulationActionSpace::isSatisfyingConstraint(const StateType &state
 
 
         /////////////////////////
-        // Vertex Avoidance.   //
+        // Vertex PRIORITY.   //
         /////////////////////////
         case ims::ConstraintType::VERTEX_PRIORITY: {
             // Convert to a vertex avoidance constraint pointer to get access to its members.
@@ -1020,7 +1020,7 @@ bool MrampManipulationActionSpace::isSatisfyingConstraint(const StateType &state
         }
 
         /////////////////////////
-        // Edge Avoidance.     //
+        // Edge PRIORITY.     //
         /////////////////////////
         case ims::ConstraintType::EDGE_PRIORITY: {
             // Convert to an edge avoidance constraint pointer to get access to its members.
@@ -1064,6 +1064,60 @@ bool MrampManipulationActionSpace::isSatisfyingConstraint(const StateType &state
                 TimeType other_agent_time_from = std::min(state_t_from, (TimeType) constraints_collective_ptr_->getConstraintsContext()->agent_paths.at(agent_id).back().back());
                 StateType other_agent_state_from = constraints_collective_ptr_->getConstraintsContext()->agent_paths.at(agent_id).at(other_agent_time_from);
                 
+                TimeType other_agent_time_to = std::min(state_t_to, (TimeType) constraints_collective_ptr_->getConstraintsContext()->agent_paths.at(agent_id).back().back());
+                StateType other_agent_state_to = constraints_collective_ptr_->getConstraintsContext()->agent_paths.at(agent_id).at(other_agent_time_to);
+
+                // Add the agent state to the vector.
+                other_agent_states_from.push_back(other_agent_state_from);
+                other_agent_states_to.push_back(other_agent_state_to);
+            }
+
+            // Check if the state is valid when the agent states are set in the scene.
+            CollisionsCollective collisions;
+            bool is_transition_valid = isStateToStateValid(state_val, next_state_val, agent_names_to_avoid, other_agent_states_from, other_agent_states_to, collisions);
+
+            // If there is a collision, then we are no good. Otherwise keep going through constraints.
+            if (!is_transition_valid) {
+                return false;
+            }
+            break;
+        }
+
+
+        /////////////////////////
+        // Path PRIORITY.     //
+        /////////////////////////
+        case ims::ConstraintType::PATH_PRIORITY: {
+            // Convert to an edge avoidance constraint pointer to get access to its members.
+            auto *path_priority_constraint_ptr = dynamic_cast<ims::PathPriorityConstraint *>(constraint_ptr.get());
+
+            if (path_priority_constraint_ptr == nullptr) {
+                throw std::runtime_error("Could not cast constraint to edge avoidance constraint");
+            }
+
+            // Check for equality of time.
+            TimeType state_t_to = next_state_val.back();
+            TimeType state_t_from = state_val.back();
+
+            // Check if the agent state is valid when the states of all other higher-priority agents are set in the scene.
+            // Make sure that we have agent names here. This is needed for move-group setting.
+            std::vector<std::string> agent_names_to_avoid = path_priority_constraint_ptr->agent_names_to_avoid;
+            if (agent_names_to_avoid.size() != path_priority_constraint_ptr->agent_ids_to_avoid.size()) {
+                throw std::runtime_error("Agent names and agent ids to avoid are not the same in edge avoidance constraint.");
+            }
+
+            // Get the agent ids.
+            std::vector<int> other_agent_ids = path_priority_constraint_ptr->agent_ids_to_avoid;
+
+            // Get the agent states at this time from the context.
+            std::vector<StateType> other_agent_states_from;
+            std::vector<StateType> other_agent_states_to;
+
+            for (auto agent_id : other_agent_ids) {
+                // Get the other agent states.
+                TimeType other_agent_time_from = std::min(state_t_from, (TimeType) constraints_collective_ptr_->getConstraintsContext()->agent_paths.at(agent_id).back().back());
+                StateType other_agent_state_from = constraints_collective_ptr_->getConstraintsContext()->agent_paths.at(agent_id).at(other_agent_time_from);
+
                 TimeType other_agent_time_to = std::min(state_t_to, (TimeType) constraints_collective_ptr_->getConstraintsContext()->agent_paths.at(agent_id).back().back());
                 StateType other_agent_state_to = constraints_collective_ptr_->getConstraintsContext()->agent_paths.at(agent_id).at(other_agent_time_to);
 
