@@ -45,6 +45,7 @@
 #include <search/planners/multi_agent/eaecbs.hpp>
 #include <search/planners/multi_agent/cbs_sphere3d.hpp>
 #include <search/planners/wastar.hpp>
+#include <search/planners/multi_agent/cbs_sipp.hpp>
 #include <manipulation_planning/heuristics/manip_heuristics.hpp>
 #include <manipulation_planning/common/utils.hpp>
 
@@ -307,7 +308,28 @@ int main(int argc, char** argv) {
         stats = planner.reportStats();
     }
 
+    else if (planner_name == "CBS_SIPP"){
+        // Set the parameters.
+        ims::CBSSIPPParams params_cbs;
+        for (size_t i = 0; i < move_group_names.size(); i++) {
+            params_cbs.low_level_heuristic_ptrs.push_back(new ims::EuclideanRemoveTimeHeuristic());
+        }
+        params_cbs.weight_low_level_heuristic = 55.0;
+        params_cbs.time_limit_ = 10.0;
+        params_cbs.verbose = false;
+
+        // Initialize the planner.
+        ims::CBSSIPP planner(params_cbs);
+        planner.initializePlanner(action_spaces_constrained, move_group_names, start_states, goal_states);
+        if (!planner.plan(paths)) {
+            RCLCPP_ERROR(node->get_logger(), "Failed to plan.");
+            return 0;
+        }
+        stats = planner.reportStats();
+    }
+
     // Print the stats.
+    std::cout << GREEN << "Planner: " << planner_name << RESET << "\n";
     std::cout << GREEN << "Planning time: " << stats.time << " sec" << std::endl;
     std::cout << "cost: " << stats.cost << std::endl;
     std::cout << "Number of nodes expanded: " << stats.num_expanded << std::endl;
@@ -330,13 +352,15 @@ int main(int argc, char** argv) {
     ims::shortcutMultiAgentPathsIterative(paths, move_group_multi, planning_scene, robot_names_map, smoothed_paths, 1.0);
     paths = smoothed_paths;
 
-   // Create a composite-state trajectory.
+    // Create a composite-state trajectory.
+    moveit_msgs::msg::RobotTrajectory trajectory;
+    int num_agents = paths.size();
     std::vector<StateType> path_composite;
     MultiAgentPaths ids_and_paths;
-    for (int i{0}; i < move_group_names.size(); ++i) {
+    for (int i{0}; i < num_agents; ++i) {
         std::pair<int, PathType> id_and_path;
         id_and_path.first = i;
-        id_and_path.second = paths[i];
+        id_and_path.second = paths.at(i);
         ids_and_paths.insert(id_and_path);
     }
 
@@ -347,7 +371,7 @@ int main(int argc, char** argv) {
     // Create a composite path.
     for (int i{0}; i < T; ++i) {
         StateType composite_state;
-        for (int agent_id{0}; agent_id < move_group_names.size(); ++agent_id) {
+        for (int agent_id{0}; agent_id < num_agents; ++agent_id) {
             PathType agent_path = ids_and_paths[agent_id];
 
             composite_state.insert(composite_state.end(), agent_path[i].begin(), agent_path[i].end() -1);
@@ -358,23 +382,21 @@ int main(int argc, char** argv) {
     // Execute the path.
     // A composite start state.
     StateType start_state_composite;
-    for (int i{0}; i < move_group_names.size(); ++i) {
+    for (int i{0}; i < num_agents; ++i) {
         start_state_composite.insert(start_state_composite.end(), start_states[i].begin(), start_states[i].end() -1);
     }
 
     // A composite goal state.
     StateType goal_state_composite;
-    for (int i{0}; i < move_group_names.size(); ++i) {
+    for (int i{0}; i < num_agents; ++i) {
         goal_state_composite.insert(goal_state_composite.end(), goal_states[i].begin(), goal_states[i].end() - 1);
     }
 
-    // Profile and execute the path.
-    moveit_msgs::msg::RobotTrajectory trajectory;
     ims::profileTrajectory(start_state_composite,
-                      goal_state_composite,
-                      path_composite,
-                      move_group_multi,
-                      trajectory);
+                    goal_state_composite,
+                    path_composite,
+                    move_group_multi,
+                    trajectory);
 
     RCLCPP_INFO(node->get_logger(), "Executing trajectory");
     // Allow for large steps.

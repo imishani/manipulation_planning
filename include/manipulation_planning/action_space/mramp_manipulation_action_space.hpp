@@ -148,6 +148,9 @@ private:
     /// @brief A map from a state to a set of collisions. If the state is valid, the number of collisions within the collective is zero.
     std::map<StateType, CollisionsCollective, StateTypeHash> state_to_collisions_map_;
 
+    /// @brief The number of controllable degrees of freedom.
+    int num_dof_;
+
 protected:
     /// @brief The manipulation type
     std::shared_ptr<MrampManipulationActionType> manipulation_type_;
@@ -159,6 +162,13 @@ protected:
     rclcpp::Node::SharedPtr node_;
 
 public:
+    /// @brief Strip time off of state vectors. These may include time, if so it is removed, otherwise the state is returned as is.
+    /// @param state The state to strip time from.
+    /// @return The state without time.
+    inline StateType getUntimedConfiguration(const StateType &state) {
+        return {state.begin(), state.begin() + num_dof_};
+    }
+
     /// @brief Constructor
     /// @param moveitInterface The moveit interface
     /// @param MrampManipulationActionType The manipulation type
@@ -169,6 +179,7 @@ public:
         std::cout << "MrampManipulationActionSpace constructor" << std::endl;
         manipulation_type_ = std::make_shared<MrampManipulationActionType>(actions_ptr);
         state_angles_valid_mask_ = manipulation_type_->GetStateAnglesValidMask();
+        num_dof_ = std::count(state_angles_valid_mask_.begin(), state_angles_valid_mask_.end(), true);
 
         // Set the ros node for this class.
         static int node_id = -1;
@@ -328,7 +339,7 @@ public:
             TimeType agent_time = next_state_val.back();
             TimeType other_agent_time = std::min(other_agent_last_time, agent_time);
             StateType other_agent_state = other_agent_path.at(other_agent_time);
-            StateType other_agent_state_wo_time = {other_agent_state.begin(), other_agent_state.end() - 1};
+            StateType other_agent_state_wo_time = getUntimedConfiguration(other_agent_state);
 
             // Check if the state is valid w.r.t the constraint.
             std::string other_agent_move_group_name = constraints_collective_ptr_->getConstraintsContext()->agent_names.at(other_agent_id);
@@ -341,7 +352,7 @@ public:
         }
 
         CollisionsCollective collisions;
-        StateType next_state_wo_time = {next_state_val.begin(), next_state_val.end() - 1};
+        StateType next_state_wo_time = getUntimedConfiguration(next_state_val);
         bool is_valid = isStateValid(next_state_wo_time, other_move_group_names, other_agent_states_to_wo_time, collisions);
         int num_conflicts = collisions.getCollisions().size();
 
@@ -408,8 +419,8 @@ public:
             }
 
             // Check if the state transition is already recorded as valid or invalid in the experience collective.
-            StateType curr_state_wo_time = {curr_state_val.begin(), curr_state_val.end() - 1};
-            StateType new_state_wo_time = {new_state_val.begin(), new_state_val.end() - 1};
+            StateType curr_state_wo_time = getUntimedConfiguration(curr_state_val);
+            StateType new_state_wo_time = getUntimedConfiguration(new_state_val);
             std::pair <StateType, StateType> state_transition = std::make_pair(curr_state_wo_time, new_state_wo_time);
             bool transition_valid_wrt_scene;
 
@@ -506,7 +517,7 @@ public:
     /// @param state_val 
     /// @param next_state_val 
     /// @param safe_intervals 
-    // void getSafeIntervals(int state_id, std::vector<SafeIntervalType>& safe_intervals) override;
+//     void getSafeIntervals(int state_id, std::vector<SafeIntervalType>& safe_intervals) override;
 
     /// @brief Get the conflicts from a set of paths.
     /// @param paths The paths to check for conflicts.
@@ -549,7 +560,7 @@ bool MrampManipulationActionSpace::isStateValid(const StateType &state_val) {
         case ManipulationType::SpaceType::ConfigurationSpace: {
             // Check for collisions with world objects.
             // Remove time.
-            StateType state_val_wo_time = StateType(state_val.begin(), state_val.end() - 1);
+            StateType state_val_wo_time = getUntimedConfiguration(state_val);
 
             // Create a collisions object to store any collisions found.
             CollisionsCollective collisions;
@@ -592,12 +603,17 @@ bool MrampManipulationActionSpace::isStateValid(const StateType &state,
     return moveit_interface_->isStateValid(state, other_move_group_names, other_move_group_states, collisions_collective);
 }
 
-
 void MrampManipulationActionSpace::getActions(int state_id,
                                               std::vector<ActionSequence> &actions_seq,
                                               bool check_validity) {
+    // This state may or may not have a time component to it.
     auto curr_state = this->getRobotState(state_id);
     auto curr_state_val = curr_state->state;
+    // If it does not, add a time-zero component.
+    bool is_state_timed = curr_state_val.size() == num_dof_ + 1;
+    if (!is_state_timed) {
+        curr_state_val.push_back(0);
+    }
     if (bfs_heuristic_ == nullptr) {
         auto actions = manipulation_type_->getPrimActions();
         for (int i{0}; i < actions.size(); i++) {
@@ -606,12 +622,17 @@ void MrampManipulationActionSpace::getActions(int state_id,
             // push back the new state after the action
             StateType next_state_val(curr_state_val.size());
             std::transform(curr_state_val.begin(), curr_state_val.end(), action.begin(), next_state_val.begin(), std::plus<>());
+            // Do not add the action if the state is not timed and the action is a wait.
+            bool is_action_wait = std::all_of(action.begin(), action.end() - 1, [](double val) { return val == 0; });
+            if (!is_state_timed && is_action_wait) {
+                continue;
+            }
             actions_seq.push_back(action_seq);
         }
     }
     else {
         // Remove the time component from the state.
-        StateType curr_state_val_wo_time = {curr_state_val.begin(), curr_state_val.end() - 1};
+        StateType curr_state_val_wo_time = getUntimedConfiguration(curr_state_val);
 
         if (curr_state->state_mapped.empty()) {
             moveit_interface_->calculateFK(curr_state_val_wo_time, curr_state->state_mapped);
@@ -647,6 +668,10 @@ void MrampManipulationActionSpace::getActions(int state_id,
  
         for (int i{0}; i < actions.size(); i++) {
             auto action = actions[i];
+            bool is_action_wait = std::all_of(action.begin(), action.end() - 1, [](double val) { return val == 0; });
+            if (!is_state_timed && is_action_wait) {
+                continue;
+            }
             ActionSequence action_seq{curr_state_val};
             // if the action is snap, then the next state is the goal state
             // TODO: Add the option to have a goal state defined in ws even if planning in conf space
@@ -692,6 +717,15 @@ void MrampManipulationActionSpace::getActions(int state_id,
             actions_seq.push_back(action_seq);
         }
     }
+
+    // If the state is not timed, strip time from all the states in the action sequences.
+    if (!is_state_timed) {
+        for (auto &action_seq : actions_seq) {
+            for (auto &state : action_seq) {
+                state.pop_back();
+            }
+        }
+    }
 }
 
 bool MrampManipulationActionSpace::isPathValid(const PathType &path) {
@@ -708,15 +742,15 @@ bool MrampManipulationActionSpace::isPathValid(const PathType &path) {
 bool MrampManipulationActionSpace::isStateToStateValid(const StateType &state_from, const StateType &state_to, const std::vector<std::string> &other_move_group_names, const std::vector<StateType> &other_agent_states_from, const std::vector<StateType> &other_agent_states_to, CollisionsCollective& collisions_collective){
 
     // The agent states without time.
-    StateType state_from_wo_time = {state_from.begin(), state_from.end() - 1};
-    StateType state_to_wo_time = {state_to.begin(), state_to.end() - 1};
+    StateType state_from_wo_time = getUntimedConfiguration(state_from);
+    StateType state_to_wo_time = getUntimedConfiguration(state_to);
 
     // The other agent states without time.
     std::vector<StateType> other_states_from_wo_time;
     std::vector<StateType> other_states_to_wo_time;
     for (size_t i{0}; i < other_agent_states_from.size(); i++) {
-        other_states_from_wo_time.push_back(StateType(other_agent_states_from[i].begin(), other_agent_states_from[i].end() - 1));
-        other_states_to_wo_time.push_back(StateType(other_agent_states_to[i].begin(), other_agent_states_to[i].end() - 1));
+        other_states_from_wo_time.push_back(getUntimedConfiguration(other_agent_states_from[i]));
+        other_states_to_wo_time.push_back(getUntimedConfiguration(other_agent_states_to[i]));
     }
     
     // Interpolate between the states at time t_from and time t_to. We use the timesteps [dt, 2dt, ... 1] to include the states at time t_to and not at time t_from in the check. This operates under the assumption that the initial state was already tested for validity.
@@ -827,6 +861,8 @@ bool MrampManipulationActionSpace::isSatisfyingConstraint(const StateType &state
         /////////////////////////
         // Sphere3D constraints./
         /////////////////////////
+        // TODO(yoraish): this needs to change into an interpolation. The sphere constraints are marked with a time interval,
+        // and all interpolated configurations that fall within this interval should be checked for validity.
         case ims::ConstraintType::SPHERE3D: {
             // Convert to a sphere 3d constraint pointer to get access to its members.
             auto* sphere3d_constraint_ptr = dynamic_cast<ims::Sphere3dConstraint*>(constraint_ptr.get());
@@ -838,7 +874,7 @@ bool MrampManipulationActionSpace::isSatisfyingConstraint(const StateType &state
                 }
 
                 // Remove time from the state.
-                StateType next_state_val_wo_time = {next_state_val.begin(), next_state_val.end() - 1};
+                StateType next_state_val_wo_time = getUntimedConfiguration(next_state_val);
 
                 // Get the point and the radius of the sphere.
                 Eigen::Vector3d sphere_center = sphere3d_constraint_ptr->center;
@@ -890,7 +926,7 @@ bool MrampManipulationActionSpace::isSatisfyingConstraint(const StateType &state
                 }
 
                 // Remove time from the state.
-                StateType next_state_val_wo_time = {next_state_val.begin(), next_state_val.end() - 1};
+                StateType next_state_val_wo_time = getUntimedConfiguration(next_state_val);
 
                 // Get the point and the radius of the sphere.
                 Eigen::Vector3d sphere_center = sphere3d_constraint_ptr->center;
@@ -943,7 +979,7 @@ bool MrampManipulationActionSpace::isSatisfyingConstraint(const StateType &state
                 }
 
                 // Remove time from the state.
-                StateType next_state_val_wo_time = {next_state_val.begin(), next_state_val.end() - 1};
+                StateType next_state_val_wo_time = getUntimedConfiguration(next_state_val);
 
                 // Get the point and the radius of the sphere.
                 Eigen::Vector3d sphere_center = sphere3d_constraint_ptr->center;
@@ -997,7 +1033,7 @@ bool MrampManipulationActionSpace::isSatisfyingConstraint(const StateType &state
                     TimeType agent_to_avoid_time = std::min(next_state_time, (TimeType) constraints_collective_ptr_->getConstraintsContext()->agent_paths.at(agent_id).back().back());
 
                     StateType agent_state_to_avoid = constraints_collective_ptr_->getConstraintsContext()->agent_paths.at(agent_id).at(agent_to_avoid_time);
-                    StateType agent_state_to_avoid_wo_time = {agent_state_to_avoid.begin(), agent_state_to_avoid.end() - 1};
+                    StateType agent_state_to_avoid_wo_time = getUntimedConfiguration(agent_state_to_avoid);
                     
                     // Add the agent state to the vector.
                     agent_states_to_avoid.push_back(agent_state_to_avoid_wo_time);
@@ -1005,7 +1041,7 @@ bool MrampManipulationActionSpace::isSatisfyingConstraint(const StateType &state
 
                 // Check if the state is valid when the agent states are set in the scene.
                 CollisionsCollective collisions;
-                StateType next_state_val_wo_time = {next_state_val.begin(), next_state_val.end() - 1};
+                StateType next_state_val_wo_time = getUntimedConfiguration(next_state_val);
                 bool is_valid = moveit_interface_->isStateValid(next_state_val_wo_time, agent_names_to_avoid, agent_states_to_avoid, collisions);
 
                 // If there is a collision, then we are no good. Otherwise keep going through constraints.
@@ -1165,13 +1201,13 @@ bool MrampManipulationActionSpace::isSatisfyingConstraint(const StateType &state
                 // Remove time from the states to avoid.
                 std::vector<StateType> agent_states_to_avoid_wo_time;
                 for (auto agent_state_to_avoid : agent_states_to_avoid) {
-                    StateType agent_state_to_avoid_wo_time = {agent_state_to_avoid.begin(), agent_state_to_avoid.end() - 1};
+                    StateType agent_state_to_avoid_wo_time = getUntimedConfiguration(agent_state_to_avoid);
                     agent_states_to_avoid_wo_time.push_back(agent_state_to_avoid_wo_time);
                 }
 
                 // Check if the state is valid when the agent states are set in the scene.
                 CollisionsCollective collisions;
-                StateType next_state_val_wo_time = {next_state_val.begin(), next_state_val.end() - 1};
+                StateType next_state_val_wo_time = getUntimedConfiguration(next_state_val);
                 bool is_valid = moveit_interface_->isStateValid(next_state_val_wo_time, agent_names_to_avoid, agent_states_to_avoid_wo_time, collisions);
 
                 // If there is a collision, then we are no good. Otherwise keep going through constraints.
@@ -1491,9 +1527,9 @@ bool MrampManipulationActionSpace::multiAgentStateToStateConnector(const MultiAg
     throw std::runtime_error("multiAgentStateToStateConnector is not implemented for ManipulationActionSpace");
 }
 
-// void ims::MrampManipulationActionSpace::getSafeIntervals(int state_id, std::vector<SafeIntervalType>& safe_intervals){
-    // throw std::runtime_error("getSafeIntervals is not implemented for ManipulationActionSpace");
-// }
+//  void ims::MrampManipulationActionSpace::getSafeIntervals(int state_id, std::vector<SafeIntervalType>& safe_intervals){
+//      throw std::runtime_error("getSafeIntervals is not implemented for ManipulationActionSpace");
+//  }
 
 
 }  // namespace ims

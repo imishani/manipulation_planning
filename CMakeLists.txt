@@ -12,6 +12,7 @@ find_package(std_msgs REQUIRED)
 find_package(search REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(yaml-cpp REQUIRED)
 
 # Add include directories
 include_directories(
@@ -44,36 +45,39 @@ include_directories(
 ###################
 # Test executables
 ###################
-# Declare a C++ executable for configuration space test.
-add_executable(${PROJECT_NAME}_cspace_test src/confspace_test.cpp)
-# Link the library and dependencies to the executable
-target_link_libraries(${PROJECT_NAME}_cspace_test
-  ${PROJECT_NAME}
-  ${rclcpp_LIBRARIES}
-  ${moveit_core_LIBRARIES}
-  ${moveit_ros_planning_LIBRARIES}
-  ${moveit_ros_planning_interface_LIBRARIES}
-  ${moveit_msgs_LIBRARIES}
-  ${std_msgs_LIBRARIES}
-  /usr/local/lib/${search_LIBRARIES}
-  ${Eigen3_LIBRARIES}
-  ${geometry_msgs_LIBRARIES}
-)
+## Declare a C++ executable for configuration space test.
+#add_executable(${PROJECT_NAME}_cspace_test src/confspace_test.cpp)
+## Link the library and dependencies to the executable
+#target_link_libraries(${PROJECT_NAME}_cspace_test
+#  ${PROJECT_NAME}
+#  ${rclcpp_LIBRARIES}
+#  ${moveit_core_LIBRARIES}
+#  ${moveit_ros_planning_LIBRARIES}
+#  ${moveit_ros_planning_interface_LIBRARIES}
+#  ${moveit_msgs_LIBRARIES}
+#  ${std_msgs_LIBRARIES}
+#  /usr/local/lib/${search_LIBRARIES}
+#  ${Eigen3_LIBRARIES}
+#  ${geometry_msgs_LIBRARIES}
+#)
 
 # Declare a C++ executable for xecbs test.
 add_executable(${PROJECT_NAME}_mramp_test src/mramp_test.cpp)
 # Link the library and dependencies to the executable
 target_link_libraries(${PROJECT_NAME}_mramp_test
-  ${PROJECT_NAME}
-  ${rclcpp_LIBRARIES}
-  ${moveit_core_LIBRARIES}
-  ${moveit_ros_planning_LIBRARIES}
-  ${moveit_ros_planning_interface_LIBRARIES}
-  ${moveit_msgs_LIBRARIES}
-  ${std_msgs_LIBRARIES}
-  /usr/local/lib/${search_LIBRARIES}
-  ${Eigen3_LIBRARIES}
-  ${geometry_msgs_LIBRARIES}
+    yaml-cpp
+    /usr/local/lib/${search_LIBRARIES}
+)
+ament_target_dependencies(${PROJECT_NAME}_mramp_test
+  rclcpp
+  moveit_core
+  moveit_ros_planning_interface
+  moveit_ros_planning
+  std_msgs
+  Eigen3
+  geometry_msgs
+  moveit_msgs
+  yaml-cpp
 )
 
 ###################
@@ -94,7 +98,7 @@ ament_target_dependencies(${PROJECT_NAME}
 # Install targets
 install(TARGETS
   ${PROJECT_NAME}
-  ${PROJECT_NAME}_cspace_test
+#  ${PROJECT_NAME}_cspace_test
   ${PROJECT_NAME}_mramp_test
   DESTINATION lib/${PROJECT_NAME}
 )
