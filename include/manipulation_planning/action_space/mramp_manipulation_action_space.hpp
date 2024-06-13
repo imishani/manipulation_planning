@@ -151,6 +151,9 @@ private:
     /// @brief The number of controllable degrees of freedom.
     int num_dof_;
 
+    // Whether the action space removes time from states obtained from the action type. This means that all stored states are timeless.
+    bool is_remove_time_;
+
 protected:
     /// @brief The manipulation type
     std::shared_ptr<MrampManipulationActionType> manipulation_type_;
@@ -174,7 +177,8 @@ public:
     /// @param MrampManipulationActionType The manipulation type
     MrampManipulationActionSpace(MoveitInterface &env,
                                  const MrampManipulationActionType &actions_ptr,
-                                 BFSHeuristic *bfs_heuristic = nullptr) : ManipulationSubcostExperienceAcceleratedConstrainedActionSpace(env, actions_ptr, bfs_heuristic),
+                                 BFSHeuristic *bfs_heuristic = nullptr,
+                                 bool is_remove_time = false) : is_remove_time_(is_remove_time), ManipulationSubcostExperienceAcceleratedConstrainedActionSpace(env, actions_ptr, bfs_heuristic),
                                  RoadmapActionSpace() {
         std::cout << "MrampManipulationActionSpace constructor" << std::endl;
         manipulation_type_ = std::make_shared<MrampManipulationActionType>(actions_ptr);
@@ -235,7 +239,8 @@ public:
             // Check if the state went through a discontinuity.
             bool discontinuity{false};
 
-            // Check for maximum absolute action TODO(yoraish): check this in time.
+            // Check for maximum absolute action.
+            // Note that, below, we only apply the actions on the dimensions that exist in the state. If the action has time and the state does not then we discard the time.
             for (int i{0}; i < curr_state_val.size(); i++) {
                 if (manipulation_type_->state_angles_valid_mask_[i]) {
                     if (new_state_val[i] < joint_limits_[i].first || new_state_val[i] > joint_limits_[i].second) {
@@ -245,9 +250,18 @@ public:
                 }
             }
 
-            if (!discontinuity && isStateToStateValid(curr_state_val, new_state_val) && isSatisfyingAllConstraints(curr_state_val, new_state_val)) {
+            if (!discontinuity && isStateToStateValid(curr_state_val, new_state_val)) {
+                // If the state is timed, then also check for validity wrt constraints.
+                bool is_state_timed = curr_state_val.size() == num_dof_ + 1;
+                if (is_state_timed) {
+                    if (!isSatisfyingAllConstraints(curr_state_val, new_state_val)) {
+                        continue;
+                    }
+                }
+
                 // create a new state
                 int next_state_ind = getOrCreateRobotState(new_state_val);
+//                std::cout << "Creating RobotState with index: " << next_state_ind << " for state: " << new_state_val << std::endl;
 
                 // Add the state to the successors.
                 successors.push_back(next_state_ind);                
@@ -292,9 +306,19 @@ public:
                 }
             }
 
-            if (!discontinuity && isStateToStateValid(curr_state_val, new_state_val) && isSatisfyingAllConstraints(curr_state_val, new_state_val)) {
+            if (!discontinuity && isStateToStateValid(curr_state_val, new_state_val)) {
+                // If the state is timed, then also check for validity wrt constraints.
+                bool is_state_timed = curr_state_val.size() == num_dof_ + 1;
+                if (is_state_timed) {
+                    if (!isSatisfyingAllConstraints(curr_state_val, new_state_val)) {
+                        continue;
+                    }
+                }
+
                 // create a new state
                 int next_state_ind = getOrCreateRobotState(new_state_val);
+
+//                std::cout << "Creating (subcostt) RobotState with index: " << next_state_ind << " for state: " << new_state_val << std::endl;
 
                 // Add the state to the successors.
                 successors.push_back(next_state_ind);                
@@ -314,7 +338,7 @@ public:
         return true;
     }
 
-    void computeTransitionConflictsCost(const StateType& state_val, const StateType& next_state_val, double & conflicts_cost){
+    void computeTransitionConflictsCost(const StateType& state_val, const StateType& next_state_val, double & conflicts_cost) {
 
         // Aggregate the states of the other agents and their names from the constraints context.
         // std::vector<StateType> other_agent_states_from;
@@ -359,6 +383,16 @@ public:
         // Set the cost.
         conflicts_cost = (double)num_conflicts;
     }
+
+    void getTransitionSubcost(const StateType& state_val_from, const StateType& state_val_to, double & subcost) override {
+        // Compute the subcosts. Do this by checking if the next state is in collision with the current-paths of the other agents at the next time step.
+        double transition_conflict_cost = 0;
+        computeTransitionConflictsCost(state_val_from, state_val_to, transition_conflict_cost);
+
+        // Set the subcost.
+        subcost = transition_conflict_cost;
+    }
+
 
     inline bool getSuccessors(int curr_state_ind,
                               std::vector<int> &successors,

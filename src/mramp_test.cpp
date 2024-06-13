@@ -233,6 +233,12 @@ int main(int argc, char** argv) {
         action_spaces_constrained.push_back(std::dynamic_pointer_cast<ims::ConstrainedActionSpace>(action_space));
     }
 
+    // Keep copies of action spaces casted to SubcostConstrainedActionSpace (for ECBS).
+    std::vector<std::shared_ptr<ims::SubcostConstrainedActionSpace>> action_spaces_subcost_constrained;
+    for (auto& action_space : action_spaces) {
+        action_spaces_subcost_constrained.push_back(std::dynamic_pointer_cast<ims::SubcostConstrainedActionSpace>(action_space));
+    }
+
     ///////////////////////////////////
     // Planner.
     ///////////////////////////////////
@@ -244,12 +250,11 @@ int main(int argc, char** argv) {
     
     ims::MultiAgentPaths paths;
     PlannerStats stats;
-
+    double weight_low_level_heuristic = 55.0;
+    double low_level_focal_suboptimality =  1.3;
+    double high_level_focal_suboptimality = 1.3;
     if (planner_name == "xECBS") {
-            
-        double weight_low_level_heuristic = 55.0;
-        double low_level_focal_suboptimality =  1.3;
-        double high_level_focal_suboptimality = 1.3;
+
         ims::EAECBSParams params_eaecbs;
         params_eaecbs.weight_low_level_heuristic = weight_low_level_heuristic;
         params_eaecbs.low_level_focal_suboptimality = low_level_focal_suboptimality;
@@ -275,7 +280,7 @@ int main(int argc, char** argv) {
         for (size_t i = 0; i < move_group_names.size(); i++) {
             params_cbs.low_level_heuristic_ptrs.push_back(new ims::EuclideanRemoveTimeHeuristic());
         }
-        params_cbs.weight_low_level_heuristic = 55.0;
+        params_cbs.weight_low_level_heuristic = weight_low_level_heuristic;
         params_cbs.time_limit_ = 1000.0;
 
         // Initialize the planner.
@@ -295,7 +300,7 @@ int main(int argc, char** argv) {
         for (size_t i = 0; i < move_group_names.size(); i++) {
             params_cbs.low_level_heuristic_ptrs.push_back(new ims::EuclideanRemoveTimeHeuristic());
         }
-        params_cbs.weight_low_level_heuristic = 55.0;
+        params_cbs.weight_low_level_heuristic = weight_low_level_heuristic;
         params_cbs.sphere3d_constraint_radius = 0.1;
 
         // Initialize the planner.
@@ -310,11 +315,11 @@ int main(int argc, char** argv) {
 
     else if (planner_name == "CBS_SIPP"){
         // Set the parameters.
-        ims::CBSSIPPParams params_cbs;
+        ims::CBSParams params_cbs;
         for (size_t i = 0; i < move_group_names.size(); i++) {
-            params_cbs.low_level_heuristic_ptrs.push_back(new ims::EuclideanRemoveTimeHeuristic());
+            params_cbs.low_level_heuristic_ptrs.push_back(new ims::EuclideanHeuristic());
         }
-        params_cbs.weight_low_level_heuristic = 55.0;
+        params_cbs.weight_low_level_heuristic = weight_low_level_heuristic;
         params_cbs.time_limit_ = 10.0;
         params_cbs.verbose = false;
 
@@ -327,6 +332,51 @@ int main(int argc, char** argv) {
         }
         stats = planner.reportStats();
     }
+
+    else if (planner_name == "ECBS"){
+        // Set the parameters.
+        ims::ECBSParams params_ecbs;
+        for (size_t i = 0; i < move_group_names.size(); i++) {
+            params_ecbs.low_level_heuristic_ptrs.push_back(new ims::EuclideanRemoveTimeHeuristic());
+            params_ecbs.low_level_focal_suboptimality = low_level_focal_suboptimality;
+            params_ecbs.high_level_focal_suboptimality = high_level_focal_suboptimality;
+        }
+        params_ecbs.weight_low_level_heuristic = weight_low_level_heuristic;
+        params_ecbs.time_limit_ = 100.0;
+        params_ecbs.verbose = false;
+
+        // Initialize the planner.
+        ims::ECBS planner(params_ecbs);
+        planner.initializePlanner(action_spaces_subcost_constrained, move_group_names, start_states, goal_states);
+        if (!planner.plan(paths)) {
+            RCLCPP_ERROR(node->get_logger(), "Failed to plan.");
+            return 0;
+        }
+        stats = planner.reportStats();
+    }
+
+    else if (planner_name == "ECBS_SIPP"){
+        // Set the parameters.
+        ims::ECBSParams params_ecbs;
+        for (size_t i = 0; i < move_group_names.size(); i++) {
+            params_ecbs.low_level_heuristic_ptrs.push_back(new ims::EuclideanHeuristic());
+            params_ecbs.low_level_focal_suboptimality = low_level_focal_suboptimality;
+            params_ecbs.high_level_focal_suboptimality = high_level_focal_suboptimality;
+        }
+        params_ecbs.weight_low_level_heuristic = weight_low_level_heuristic;
+        params_ecbs.time_limit_ = 100.0;
+        params_ecbs.verbose = false;
+
+        // Initialize the planner.
+        ims::ECBSSIPP planner(params_ecbs);
+        planner.initializePlanner(action_spaces_subcost_constrained, move_group_names, start_states, goal_states);
+        if (!planner.plan(paths)) {
+            RCLCPP_ERROR(node->get_logger(), "Failed to plan.");
+            return 0;
+        }
+        stats = planner.reportStats();
+    }
+
 
     // Print the stats.
     std::cout << GREEN << "Planner: " << planner_name << RESET << "\n";
