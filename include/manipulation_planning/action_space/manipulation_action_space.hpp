@@ -610,7 +610,7 @@ public:
     /// @param resolution The resolution of the path (default: 0.005 rad)
     /// @return The interpolated path
     static PathType interpolatePath(const StateType &start, const StateType &end,
-                                    const double resolution = 0.05) {
+                                    const double resolution = 0.1) {
         // TODO: Currently only works for configuration space
         assert(start.size() == end.size());
         PathType path;

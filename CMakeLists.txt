@@ -61,24 +61,26 @@ include_directories(
 #  ${geometry_msgs_LIBRARIES}
 #)
 
-# Declare a C++ executable for xecbs test.
-add_executable(${PROJECT_NAME}_mramp_test src/mramp_test.cpp)
-# Link the library and dependencies to the executable
-target_link_libraries(${PROJECT_NAME}_mramp_test
-    yaml-cpp
-    /usr/local/lib/${search_LIBRARIES}
-)
-ament_target_dependencies(${PROJECT_NAME}_mramp_test
-  rclcpp
-  moveit_core
-  moveit_ros_planning_interface
-  moveit_ros_planning
-  std_msgs
-  Eigen3
-  geometry_msgs
-  moveit_msgs
-  yaml-cpp
-)
+# ==================== MRAMP TEST ====================
+## Declare a C++ executable for xecbs test.
+#add_executable(${PROJECT_NAME}_mramp_test src/mramp_test.cpp)
+## Link the library and dependencies to the executable
+#target_link_libraries(${PROJECT_NAME}_mramp_test
+#    yaml-cpp
+#    /usr/local/lib/${search_LIBRARIES}
+#)
+#ament_target_dependencies(${PROJECT_NAME}_mramp_test
+#  rclcpp
+#  moveit_core
+#  moveit_ros_planning_interface
+#  moveit_ros_planning
+#  std_msgs
+#  Eigen3
+#  geometry_msgs
+#  moveit_msgs
+#  yaml-cpp
+#)
+# ==================== END MRAMP TEST ====================
 
 ###################
 # Specify dependencies for the target
@@ -96,21 +98,21 @@ ament_target_dependencies(${PROJECT_NAME}
 )
 
 # Install targets
-install(TARGETS
-  ${PROJECT_NAME}
-#  ${PROJECT_NAME}_cspace_test
-  ${PROJECT_NAME}_mramp_test
-  DESTINATION lib/${PROJECT_NAME}
-)
-
-# Install header files
-install(DIRECTORY include/
-  DESTINATION include
-)
-
-# Install launch files, config files, and other resources
-install(DIRECTORY launch config
-  DESTINATION share/${PROJECT_NAME}
-)
+#install(TARGETS
+#  ${PROJECT_NAME}
+##  ${PROJECT_NAME}_cspace_test
+##  ${PROJECT_NAME}_mramp_test # === MRAMP TEST ===
+#  DESTINATION lib/${PROJECT_NAME}
+#)
+#
+## Install header files
+#install(DIRECTORY include/
+#  DESTINATION include
+#)
+#
+## Install launch files, config files, and other resources
+#install(DIRECTORY launch config
+#  DESTINATION share/${PROJECT_NAME}
+#)
 
 ament_package()

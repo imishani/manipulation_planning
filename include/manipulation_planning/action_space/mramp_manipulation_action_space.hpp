@@ -525,7 +525,7 @@ public:
 
     /// @brief Is the path between two robot states valid.
     inline bool isStateToStateValid(const StateType &start, const StateType &end) {
-        PathType path = interpolatePath(start, end);
+        PathType path = interpolatePath(start, end, 0.2);
         return isPathValid(path);
     }
 
@@ -773,7 +773,12 @@ bool MrampManipulationActionSpace::isPathValid(const PathType &path) {
     return false;
 }
 
-bool MrampManipulationActionSpace::isStateToStateValid(const StateType &state_from, const StateType &state_to, const std::vector<std::string> &other_move_group_names, const std::vector<StateType> &other_agent_states_from, const std::vector<StateType> &other_agent_states_to, CollisionsCollective& collisions_collective){
+bool MrampManipulationActionSpace::isStateToStateValid(const StateType &state_from,
+                                                       const StateType &state_to,
+                                                       const std::vector<std::string> &other_move_group_names,
+                                                       const std::vector<StateType> &other_agent_states_from,
+                                                       const std::vector<StateType> &other_agent_states_to,
+                                                       CollisionsCollective& collisions_collective){
 
     // The agent states without time.
     StateType state_from_wo_time = getUntimedConfiguration(state_from);
@@ -827,14 +832,34 @@ bool MrampManipulationActionSpace::isStateToStateValid(const StateType &state_fr
     return true;
 }
 
-// TODO(yoraish): make into class method. Also find a better way to do this, it is a termporary hack.
-int bodyNameToAgentId(std::string body_name, std::vector<std::string> agent_names) {
+// TODO(yoraish): make into class method. Also find a better way to do this, it is a temporary hack.
+/// @brief Get the agent id from a body name. Also get a mask on the state vector that is 1 in all dimensions that are affected by a conflict on this body (usually link).
+int bodyNameToAgentIdAndStateMask(std::string body_name, std::vector<std::string> agent_names, std::vector<bool> & state_mask) {
+    /// @brief A map between link names and a state mask of the kinematic subchain from the base to the link.
+    /// @note This is only good for panda arms and is a test. The last element is time and is always included.
+    std::unordered_map<std::string, std::vector<bool>>link_name_to_state_mask_ = {
+        {"link0",      {true, false, false, false, false, false, false, true}},
+        {"link1",      {true, true, false, false, false, false, false, true}},
+        {"link2",      {true, true, true, false, false, false, false, true}},
+        {"link3",      {true, true, true, true, false, false, false, true}},
+        {"link4",      {true, true, true, true, true, false, false, true}},
+        {"link5",      {true, true, true, true, true, true, false, true}},
+        {"link6",      {true, true, true, true, true, true, true, true}},
+        {"link7",      {true, true, true, true, true, true, true, true}},
+        {"hand",       {true, true, true, true, true, true, true, true}},
+        {"rightfinger",{true, true, true, true, true, true, true, true}},
+        {"leftfinger", {true, true, true, true, true, true, true, true}},
+    };
+
+
     // If the substring before the first underscore is similar in both the body name and the agent name, then return the agent id.
     for (int i{0}; i < agent_names.size(); i++) {
         auto agent_name = agent_names[i];
         auto body_name_substr = body_name.substr(0, body_name.find("_"));
+        auto link_name_substr = body_name.substr(body_name.find("_") + 1, body_name.size());
         auto agent_name_substr = agent_name.substr(0, agent_name.find("_"));
         if (body_name_substr == agent_name_substr) {
+            state_mask = link_name_to_state_mask_.at(link_name_substr);
             return i;
         }
     }
@@ -855,19 +880,25 @@ bool MrampManipulationActionSpace::isSatisfyingConstraint(const StateType &state
             // Convert to a vertex constraint pointer to get access to its members.
             auto* vertex_constraint_ptr = dynamic_cast<ims::VertexConstraint*>(constraint_ptr.get());
             if (vertex_constraint_ptr != nullptr) {
-                // If the constraint is a vertex constraint, check if the state is valid w.r.t the constraint.
-                bool is_valid_wrt_constraint = false;
-                // TODO(yoraish): create a check state equality helper.
-                for (int i{0}; i < vertex_constraint_ptr->state.size(); i++) {
-                    if (vertex_constraint_ptr->state[i] != next_state_val[i]) {
-                        is_valid_wrt_constraint = true;
-                        break;
+                // If there is no state constraint mask, then just check if the state is equal to the constraint state.
+                if (vertex_constraint_ptr->state_constrained_mask.empty()) {
+                    return vertex_constraint_ptr->state != next_state_val;
+                }
+                else{
+                    std::cout << "vertex constraint with mask\n";
+                    std::cout << "state: " << vertex_constraint_ptr->state << std::endl;
+                    std::cout << "next_state_val: " << next_state_val << std::endl;
+                    std::cout << "mask: " << vertex_constraint_ptr->state_constrained_mask << std::endl;
+                    for (size_t state_dim{0}; state_dim < vertex_constraint_ptr->state.size(); state_dim++) {
+                        if (vertex_constraint_ptr->state_constrained_mask[state_dim] &&
+                        vertex_constraint_ptr->state[state_dim] != next_state_val[state_dim]) {
+                                return true;
+                            }
+                        }
+                    return false;
                     }
                 }
-                if (!is_valid_wrt_constraint){
-                    return false;
-                }
-            }
+
             else {
                 throw std::runtime_error("Could not cast constraint to vertex constraint");
             }
@@ -880,9 +911,28 @@ bool MrampManipulationActionSpace::isSatisfyingConstraint(const StateType &state
         case ims::ConstraintType::EDGE: {
             // Convert to an edge constraint pointer to get access to its members.
             auto* edge_constraint_ptr = dynamic_cast<ims::EdgeConstraint*>(constraint_ptr.get());
+            bool is_valid_wo_mask = true;
+            bool is_valid_w_mask = false;
             if (edge_constraint_ptr != nullptr) {
                 // If the constraint is an edge constraint, check if the state is valid w.r.t the constraint.
-                if (edge_constraint_ptr->state_from == state_val && edge_constraint_ptr->state_to == next_state_val) {
+                // Carry out this direct test if there is no state constraint mask.
+                if (edge_constraint_ptr->state_constrained_mask.empty()) {
+                    if (edge_constraint_ptr->state_from == state_val &&
+                        edge_constraint_ptr->state_to == next_state_val) {
+                        return false;
+                    }
+                    else{
+                        return true;
+                    }
+                }
+                else {
+                    for (int state_dim{edge_constraint_ptr->state_constrained_mask.size() - 1}; state_dim >= 0; state_dim--) {
+                        if (edge_constraint_ptr->state_constrained_mask[state_dim] &&
+                                (edge_constraint_ptr->state_from[state_dim] != state_val[state_dim] ||
+                            edge_constraint_ptr->state_to[state_dim] != next_state_val[state_dim])) {
+                            return true;
+                        }
+                    }
                     return false;
                 }
             }
@@ -1306,7 +1356,13 @@ bool MrampManipulationActionSpace::isSatisfyingConstraint(const StateType &state
 }
 
 
-void MrampManipulationActionSpace::getPathsConflicts(std::shared_ptr<MultiAgentPaths> paths, std::vector<std::shared_ptr<Conflict>> &conflicts_ptrs, const std::vector<ConflictType> & conflict_types, int max_conflicts, const std::vector<std::string> &agent_names, TimeType time_start, TimeType time_end)  {
+void MrampManipulationActionSpace::getPathsConflicts(std::shared_ptr<MultiAgentPaths> paths,
+                                                     std::vector<std::shared_ptr<Conflict>> &conflicts_ptrs,
+                                                     const std::vector<ConflictType> & conflict_types,
+                                                     int max_conflicts,
+                                                     const std::vector<std::string> &agent_names,
+                                                     TimeType time_start,
+                                                     TimeType time_end)  {
 
     // Loop through the paths and check for conflicts.
     // If requested, get all the conflicts.
@@ -1344,8 +1400,6 @@ void MrampManipulationActionSpace::getPathsConflicts(std::shared_ptr<MultiAgentP
             states_wo_time_at_t_from.push_back(state_wo_time_at_t_from);
             states_wo_time_at_t_to.push_back(state_wo_time_at_t_to);
         }
-
-
 
         // Interpolate between the states at time t_from and time t_to. We use the timesteps [dt, 2dt, ... 1] to include the states at time t_to and not at time t_from in the check. This operates under the assumption that the initial state was already tested for validity.
         double resolution = 0.3; // The steps between [0,1].
@@ -1390,7 +1444,12 @@ void MrampManipulationActionSpace::getPathsConflicts(std::shared_ptr<MultiAgentP
                 // If either of the bodies involved is not a robot, then the proposed path intersects with the obstacle and is invalid so we raise an exception.
                 if (collision.body_type_0 == BodyType::WORLD_OBJECT || collision.body_type_1 == BodyType::WORLD_OBJECT) {
                     // throw std::runtime_error("Proposed path intersects with obstacle. Collision found an obstacle.");
-                    RCLCPP_INFO_STREAM(node_->get_logger(), RED << "Proposed path intersects with obstacle. Collision found an obstacle." RESET);
+                    RCLCPP_INFO_STREAM(node_->get_logger(), RED
+                    << "Proposed path intersects with obstacle. Collision found an obstacle. ["
+                    << collision.body_name_0
+                    << ", "
+                    << collision.body_name_1
+                    << "]" << RESET);
                     continue;
                 }
 
@@ -1400,8 +1459,10 @@ void MrampManipulationActionSpace::getPathsConflicts(std::shared_ptr<MultiAgentP
                 // Get the ids of the agents in the collision.
                 std::string body_name_0 = collision.body_name_0;
                 std::string body_name_1 = collision.body_name_1;
-                int id_agent_0 = bodyNameToAgentId(body_name_0, agent_names);
-                int id_agent_1 = bodyNameToAgentId(body_name_1, agent_names);
+                std::vector<bool> state_mask_0;
+                std::vector<bool> state_mask_1;
+                int id_agent_0 = bodyNameToAgentIdAndStateMask(body_name_0, agent_names, state_mask_0);
+                int id_agent_1 = bodyNameToAgentIdAndStateMask(body_name_1, agent_names, state_mask_1);
                 std::vector<int> agent_ids = {id_agent_0, id_agent_1};
 
                 // If either of the agents is not in the list of agents, then raise an exception.
@@ -1445,6 +1506,7 @@ void MrampManipulationActionSpace::getPathsConflicts(std::shared_ptr<MultiAgentP
                             }
 
                             VertexConflict conflict(to_states, agent_ids);
+                            conflict.state_conflict_masks = {state_mask_0, state_mask_1};
 
                             // Add the conflict to the vector of conflicts.
                             std::shared_ptr<Conflict> conflict_ptr = std::make_shared<VertexConflict>(conflict);
@@ -1457,6 +1519,7 @@ void MrampManipulationActionSpace::getPathsConflicts(std::shared_ptr<MultiAgentP
                             // If the time of the collision is not integral, aka it was found when interpolating between states, then create a private grids edge conflicts for each of the affected agents between their previous and next states.
                             if (weight_to != 1) {
                                 EdgeConflict conflict(from_states, to_states, agent_ids);
+                                conflict.state_conflict_masks = {state_mask_0, state_mask_1};
 
                                 // Add the conflict to the vector of conflicts.
                                 std::shared_ptr<Conflict> conflict_ptr = std::make_shared<EdgeConflict>(conflict);
