@@ -45,20 +45,20 @@ namespace ims {
 
     protected:
         /// @brief Manipulation type
-        std::shared_ptr<ManipulationType> mManipulationType;
+        std::shared_ptr<ManipulationType> manipulation_type_;
         /// @brief Moveit interface
-        std::shared_ptr<MoveitInterface> mMoveitInterface;
+        std::shared_ptr<MoveitInterface> moveit_interface_;
         /// @brief joint limits
-        std::vector<std::pair<double, double>> mJointLimits;
+        std::vector<std::pair<double, double>> joint_limits_;
         /// @brief Joint states seed
         //    std::vector<double> mJointStatesSeed {0, 0, 0, 0, 0, 0};
         /// @brief The BFS heuristic
         BFSHeuristicEgraph* bfs_heuristic_;
 
         // TODO: delete: temp
-        int m_vis_id = 0;
-        ros::NodeHandle m_nh;
-        ros::Publisher m_vis_pub;
+        int vis_id_ = 0;
+        ros::NodeHandle nh_;
+        ros::Publisher vis_pub_;
 
 
     public:
@@ -70,11 +70,11 @@ namespace ims {
                                       const ManipulationType &actions_ptr,
                                       BFSHeuristicEgraph* bfs_heuristic = nullptr) : EGraphActionSpace(),
                                                                                      bfs_heuristic_(bfs_heuristic) {
-            mMoveitInterface = std::make_shared<MoveitInterface>(env);
-            mManipulationType = std::make_shared<ManipulationType>(actions_ptr);
+            moveit_interface_ = std::make_shared<MoveitInterface>(env);
+            manipulation_type_ = std::make_shared<ManipulationType>(actions_ptr);
             // get the joint limits
-            mMoveitInterface->getJointLimits(mJointLimits);
-            m_vis_pub = m_nh.advertise<visualization_msgs::Marker>( "visualization_marker", 0 );
+            moveit_interface_->getJointLimits(joint_limits_);
+            vis_pub_ = nh_.advertise<visualization_msgs::Marker>( "visualization_marker", 0 );
 
         }
 
@@ -84,7 +84,7 @@ namespace ims {
             auto curr_state = this->getRobotState(state_id);
             auto curr_state_val = curr_state->state;
             if (bfs_heuristic_ == nullptr){
-                auto actions = mManipulationType->getPrimActions();
+                auto actions = manipulation_type_->getPrimActions();
                 for (int i {0} ; i < actions.size() ; i++){
                     auto action = actions[i];
                     ActionSequence action_seq {curr_state_val};
@@ -95,7 +95,7 @@ namespace ims {
                 }
             } else {
                 if (curr_state->state_mapped.empty()){
-                    mMoveitInterface->calculateFK(curr_state_val, curr_state->state_mapped);
+                    moveit_interface_->calculateFK(curr_state_val, curr_state->state_mapped);
                 }
 //                std::vector<double> ws_state_check(6);
 //                moveit_interface_->calculateFK(curr_state_val, ws_state_check);
@@ -107,7 +107,7 @@ namespace ims {
                 auto start_dist = bfs_heuristic_->getMetricStartDistance(curr_state->state_mapped.at(0),
                                                                          curr_state->state_mapped.at(1),
                                                                          curr_state->state_mapped.at(2));
-                auto actions = mManipulationType->getAdaptiveActions(start_dist, goal_dist);
+                auto actions = manipulation_type_->getAdaptiveActions(start_dist, goal_dist);
 
                 for (int i {0} ; i < actions.size() ; i++){
                     auto action = actions[i];
@@ -132,20 +132,20 @@ namespace ims {
         /// @param SpaceType The manipulation type
         void setManipActionType(ManipulationType::SpaceType SpaceType)
         {
-            mManipulationType->setSpaceType(SpaceType);
+            manipulation_type_->setSpaceType(SpaceType);
         }
 
         ManipulationType::SpaceType getManipActionType()
         {
-            return mManipulationType->getSpaceType();
+            return manipulation_type_->getSpaceType();
         }
 
         /// @brief Get current joint states
         /// @param joint_states The joint states
         void getCurrJointStates(StateType &joint_states)
         {
-            auto joints = mMoveitInterface->planning_scene_->getCurrentState();
-            joints.copyJointGroupPositions(mMoveitInterface->group_name_,
+            auto joints = moveit_interface_->planning_scene_->getCurrentState();
+            joints.copyJointGroupPositions(moveit_interface_->group_name_,
                                            joint_states);
         }
 
@@ -154,9 +154,9 @@ namespace ims {
         void getCurrWorkspaceState(StateType &ws_state)
         {
             // get the tip link name
-            auto tip_link = mMoveitInterface->planning_scene_->getRobotModel()->getJointModelGroup(mMoveitInterface->group_name_)->getLinkModelNames().back();
+            auto tip_link = moveit_interface_->planning_scene_->getRobotModel()->getJointModelGroup(moveit_interface_->group_name_)->getLinkModelNames().back();
             // get the end-effector pose
-            auto ee_pose = mMoveitInterface->planning_scene_->getCurrentState().getGlobalLinkTransform(tip_link);
+            auto ee_pose = moveit_interface_->planning_scene_->getCurrentState().getGlobalLinkTransform(tip_link);
             // get the euler angles
             ws_state.resize(6);
             ws_state[0] = ee_pose.translation().x();
@@ -167,16 +167,16 @@ namespace ims {
             ws_state[4] = euler_angles[1];
             ws_state[5] = euler_angles[0];
             normalize_euler_zyx(ws_state[5], ws_state[4], ws_state[3]);
-            roundStateToDiscretization(ws_state, mManipulationType->state_discretization_);
+            roundStateToDiscretization(ws_state, manipulation_type_->state_discretization_);
         }
 
         bool isStateValid(const StateType &state_val) override
         {
             // check if the state is valid
-            switch (mManipulationType->getSpaceType())
+            switch (manipulation_type_->getSpaceType())
             {
                 case ManipulationType::SpaceType::ConfigurationSpace:
-                    return mMoveitInterface->isStateValid(state_val);
+                    return moveit_interface_->isStateValid(state_val);
                 case ManipulationType::SpaceType::WorkSpace:
                     // check if state exists with IK solution already
                     geometry_msgs::Pose pose;
@@ -191,14 +191,14 @@ namespace ims {
                     pose.orientation.z = q.z();
                     pose.orientation.w = q.w();
                     StateType joint_state;
-                    bool succ = mMoveitInterface->calculateIK(pose, joint_state);
+                    bool succ = moveit_interface_->calculateIK(pose, joint_state);
                     if (!succ)
                     {
                         return false;
                     }
                     else
                     {
-                        return mMoveitInterface->isStateValid(joint_state);
+                        return moveit_interface_->isStateValid(joint_state);
                     }
             }
             return false;
@@ -211,10 +211,10 @@ namespace ims {
         bool isStateValid(const StateType &state_val,
                           StateType &joint_state)
         {
-            switch (mManipulationType->getSpaceType())
+            switch (manipulation_type_->getSpaceType())
             {
                 case ManipulationType::SpaceType::ConfigurationSpace:
-                    return mMoveitInterface->isStateValid(state_val);
+                    return moveit_interface_->isStateValid(state_val);
                 case ManipulationType::SpaceType::WorkSpace:
                     geometry_msgs::Pose pose;
                     pose.position.x = state_val[0];
@@ -227,7 +227,7 @@ namespace ims {
                     pose.orientation.y = q.y();
                     pose.orientation.z = q.z();
                     pose.orientation.w = q.w();
-                    bool succ = mMoveitInterface->calculateIK(pose, joint_state);
+                    bool succ = moveit_interface_->calculateIK(pose, joint_state);
                     if (!succ)
                     {
                         ROS_INFO("IK failed");
@@ -235,7 +235,7 @@ namespace ims {
                     }
                     else
                     {
-                        return mMoveitInterface->isStateValid(joint_state);
+                        return moveit_interface_->isStateValid(joint_state);
                     }
             }
             return false;
@@ -246,10 +246,10 @@ namespace ims {
                           StateType &joint_state)
         {
             // check if the state is valid
-            switch (mManipulationType->getSpaceType())
+            switch (manipulation_type_->getSpaceType())
             {
                 case ManipulationType::SpaceType::ConfigurationSpace:
-                    return mMoveitInterface->isStateValid(state_val);
+                    return moveit_interface_->isStateValid(state_val);
                 case ManipulationType::SpaceType::WorkSpace:
                     geometry_msgs::Pose pose;
                     pose.position.x = state_val[0];
@@ -262,8 +262,8 @@ namespace ims {
                     pose.orientation.y = q.y();
                     pose.orientation.z = q.z();
                     pose.orientation.w = q.w();
-                    joint_state.resize(mMoveitInterface->num_joints_);
-                    bool succ = mMoveitInterface->calculateIK(pose, seed, joint_state);
+                    joint_state.resize(moveit_interface_->num_joints_);
+                    bool succ = moveit_interface_->calculateIK(pose, seed, joint_state);
                     normalizeAngles(joint_state);
                     if (!succ)
                     {
@@ -271,7 +271,7 @@ namespace ims {
                     }
                     else
                     {
-                        return mMoveitInterface->isStateValid(joint_state);
+                        return moveit_interface_->isStateValid(joint_state);
                     }
             }
             return false;
@@ -321,10 +321,10 @@ namespace ims {
 
         bool isPathValid(const PathType &path) override
         {
-            switch (mManipulationType->getSpaceType())
+            switch (manipulation_type_->getSpaceType())
             {
                 case ManipulationType::SpaceType::ConfigurationSpace:
-                    return mMoveitInterface->isPathValid(path);
+                    return moveit_interface_->isPathValid(path);
                 case ManipulationType::SpaceType::WorkSpace:
                     PathType poses;
                     for (auto &state : path)
@@ -341,7 +341,7 @@ namespace ims {
                         pose.orientation.z = q.z();
                         pose.orientation.w = q.w();
                         StateType joint_state;
-                        bool succ = mMoveitInterface->calculateIK(pose, joint_state);
+                        bool succ = moveit_interface_->calculateIK(pose, joint_state);
                         if (!succ)
                         {
                             return false;
@@ -351,7 +351,7 @@ namespace ims {
                             poses.push_back(joint_state);
                         }
                     }
-                    return mMoveitInterface->isPathValid(poses);
+                    return moveit_interface_->isPathValid(poses);
             }
             return false;
         }
@@ -364,7 +364,7 @@ namespace ims {
             auto curr_state = this->getRobotState(curr_state_ind);
             auto curr_state_val = curr_state->state;
             // get the actions
-            auto actions = mManipulationType->getPrimActions();
+            auto actions = manipulation_type_->getPrimActions();
             // convert to quaternion
             Eigen::Quaterniond q_curr;
             from_euler_zyx(curr_state_val[5], curr_state_val[4], curr_state_val[3], q_curr);
@@ -388,7 +388,7 @@ namespace ims {
                 get_euler_zyx(q_new, new_state_val[5], new_state_val[4], new_state_val[3]);
                 normalize_euler_zyx(new_state_val[5], new_state_val[4], new_state_val[3]);
                 // discretize
-                roundStateToDiscretization(new_state_val, mManipulationType->state_discretization_);
+                roundStateToDiscretization(new_state_val, manipulation_type_->state_discretization_);
 
                 //            if (isStateToStateValid(curr_state_val, new_state_val)) {
                 bool succ;
@@ -440,15 +440,15 @@ namespace ims {
                 auto curr_state_val = action.front();
                 auto new_state_val = action.back();
                 // normalize the angles
-                normalizeAngles(new_state_val, mJointLimits);
+                normalizeAngles(new_state_val, joint_limits_);
                 // discretize the state
-                roundStateToDiscretization(new_state_val, mManipulationType->state_discretization_);
+                roundStateToDiscretization(new_state_val, manipulation_type_->state_discretization_);
                 // check if the state went through discontinuity
                 bool discontinuity{false};
                 // check for maximum absolute action
                 for (int i{0}; i < curr_state_val.size(); i++)
                 {
-                    if (new_state_val[i] < mJointLimits[i].first || new_state_val[i] > mJointLimits[i].second)
+                    if (new_state_val[i] < joint_limits_[i].first || new_state_val[i] > joint_limits_[i].second)
                     {
                         discontinuity = true;
                         break;
@@ -461,7 +461,7 @@ namespace ims {
                     int next_state_ind = getOrCreateRobotState(new_state_val);
                     // add the FK of the state
                     auto new_state = getRobotState(next_state_ind);
-                    mMoveitInterface->calculateFK(new_state->state, new_state->state_mapped);
+                    moveit_interface_->calculateFK(new_state->state, new_state->state_mapped);
                     // add the state to the successors
                     successors.push_back(next_state_ind);
                     // add the cost
@@ -475,7 +475,7 @@ namespace ims {
                            std::vector<int> &successors,
                            std::vector<double> &costs) override
         {
-            if (mManipulationType->getSpaceType() == ManipulationType::SpaceType::ConfigurationSpace)
+            if (manipulation_type_->getSpaceType() == ManipulationType::SpaceType::ConfigurationSpace)
             {
                 return getSuccessorsCs(curr_state_ind, successors, costs);
             }
@@ -490,10 +490,10 @@ namespace ims {
         /// @param type The type of state (greedy, attractor, etc)
         void VisualizePoint(double x, double y, double z) {
             visualization_msgs::Marker marker;
-            marker.header.frame_id = mMoveitInterface->planning_scene_->getPlanningFrame();
+            marker.header.frame_id = moveit_interface_->planning_scene_->getPlanningFrame();
             marker.header.stamp = ros::Time();
             marker.ns = "graph";
-            marker.id = m_vis_id;
+            marker.id = vis_id_;
             marker.type = visualization_msgs::Marker::SPHERE;
             marker.action = visualization_msgs::Marker::ADD;
             marker.pose.position.x = x; marker.pose.position.y = y; marker.pose.position.z = z;
@@ -505,8 +505,8 @@ namespace ims {
             marker.color.r = 0.0; marker.color.g = 1.0; marker.color.b = 0.0;
             marker.color.a = 0.5;
             // visualize
-            m_vis_pub.publish(marker);
-            m_vis_id++;
+            vis_pub_.publish(marker);
+            vis_id_++;
         }
 
 
@@ -532,7 +532,7 @@ namespace ims {
                         continue;
                     }
                     auto& prev_state = egraph_states.front();
-                    roundStateToDiscretization(prev_state, mManipulationType->state_discretization_);
+                    roundStateToDiscretization(prev_state, manipulation_type_->state_discretization_);
                     auto pid = egraph_.insert_node(prev_state);
                     state_to_egraph_nodes_[prev_state].push_back(pid);
 
@@ -571,7 +571,7 @@ namespace ims {
             // make sure all states have FK
             for (auto &state : states_) {
                 if (state->state_mapped.empty()) {
-                    mMoveitInterface->calculateFK(state->state, state->state_mapped);
+                    moveit_interface_->calculateFK(state->state, state->state_mapped);
                 }
             }
             return true;

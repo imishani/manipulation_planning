@@ -245,17 +245,53 @@ public:
         vis_id_++;
     }
 
+
+    /// @brief Visualize a state via its end effector pose in rviz for debugging
+    /// @param pose
+    void visualizePose(const geometry_msgs::Pose &pose) {
+        visualization_msgs::Marker marker;
+        marker.header.frame_id = moveit_interface_->planning_scene_->getPlanningFrame();
+        marker.header.stamp = ros::Time();
+        marker.ns = "graph";
+        marker.id = vis_id_;
+        marker.type = visualization_msgs::Marker::ARROW; // Other options are CUBE, SPHERE, CYLINDER, AXIS, etc.
+        marker.action = visualization_msgs::Marker::ADD;
+        marker.pose = pose;
+
+        marker.scale.x = 0.1; marker.scale.y = 0.01; marker.scale.z = 0.01;
+        // green
+        marker.color.r = 0.0; marker.color.g = 1.0; marker.color.b = 0.0;
+        marker.color.a = 0.5;
+
+        // Lifetime.
+        marker.lifetime = ros::Duration(5.0);
+
+        // visualize
+        vis_pub_.publish(marker);
+        vis_id_++;
+    }
+
+    /// @brief Get the end effector pose in the robot frame.
+    /// @param ee_pose The end effector pose
+    void calculateFK(const StateType &state, StateType &ee_pose)
+    {
+        moveit_interface_->calculateFK(state, ee_pose);
+    }
+
     /// @brief Ask for conflicts between paths.
     /// @param paths The paths to be looked at.
     /// @param conflicts_ptrs The conflicts that were found. This is populated by the function.
     /// @param conflict_types The types of conflicts that are requested.
     /// @param max_conflicts The maximum number of conflicts to return.
     /// @param names The names of the agents.
-    void getPathsConflicts(std::shared_ptr<MultiAgentPaths> paths, 
+    /// @param time_start The start time from which to check for conflicts. Inclusive. -1 defaults to zero.
+    /// @param time_end The end time until which to check for conflicts. Inclusive. -1 defaults to the end.
+    void getPathsConflicts(std::shared_ptr<MultiAgentPaths> paths,
                            std::vector<std::shared_ptr<Conflict>> &conflicts_ptrs, 
                            const std::vector<ConflictType> &conflict_types,
                            int max_conflicts, 
-                           const std::vector<std::string> &names) override {
+                           const std::vector<std::string> &names,
+                           TimeType time_start = 0, TimeType time_end = -1) override {
         throw std::runtime_error("Not implemented");
     }
 };

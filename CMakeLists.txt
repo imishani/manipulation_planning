@@ -250,9 +250,6 @@ target_link_libraries(${PROJECT_NAME}_egraph_test
    PATTERN ".svn" EXCLUDE
  )
 
-
-
-
 ## Mark other files for installation (e.g. launch and bag files, etc.)
 # install(FILES
 #   # myfile1
