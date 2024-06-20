@@ -65,7 +65,7 @@ namespace ims {
 /// \brief A function that converts a state from radians to degrees
 /// \param state The state
 template <typename T>
-void rad2deg(std::vector<T>& state, const std::vector<bool>& valid_mask = std::vector<bool>()) {
+inline void rad2deg(std::vector<T>& state, const std::vector<bool>& valid_mask = std::vector<bool>()) {
     bool is_valid_mask_passed = !valid_mask.empty();
 
     for (size_t i = 0; i < state.size(); ++i) {
@@ -85,7 +85,7 @@ void rad2deg(std::vector<T>& state, const std::vector<bool>& valid_mask = std::v
 /// \param state The state
 /// \param valid_mask The valid mask of the state. Dimensions that are true, get converted. Others are not.
 template <typename T>
-void deg2rad(std::vector<T>& state, const std::vector<bool>& valid_mask = std::vector<bool>()) {
+inline void deg2rad(std::vector<T>& state, const std::vector<bool>& valid_mask = std::vector<bool>()) {
     // If the mask is not passed, then all the dimensions are assumed to be valid.
     bool is_valid_mask_passed = !valid_mask.empty();
 
@@ -176,40 +176,40 @@ inline void normalizeAngles(std::vector<T>& state, const std::vector<bool>& vali
 }
 
 template <typename T>
-void checkFixGimbalLock(T y, T p, T r) {
+inline void checkFixGimbalLock(T y, T p, T r) {
     // check if current state in gimbal lock
     /// TODO: Implement
 }
 
 template <typename T>
-void get_euler_zyx(const Eigen::Matrix<T, 3, 3>& rot, T& y, T& p, T& r) {
+inline void get_euler_zyx(const Eigen::Matrix<T, 3, 3>& rot, T& y, T& p, T& r) {
     y = std::atan2(rot(1, 0), rot(0, 0));
     p = std::atan2(-rot(2, 0), std::sqrt(rot(2, 1) * rot(2, 1) + rot(2, 2) * rot(2, 2)));
     r = std::atan2(rot(2, 1), rot(2, 2));
 }
 
 template <typename T>
-void get_euler_zyx(const Eigen::Quaternion<T>& rot, T& y, T& p, T& r) {
+inline void get_euler_zyx(const Eigen::Quaternion<T>& rot, T& y, T& p, T& r) {
     Eigen::Matrix<T, 3, 3> R(rot);
     get_euler_zyx(R, y, p, r);
 }
 
 template <typename T>
-void from_euler_zyx(T y, T p, T r, Eigen::Matrix<T, 3, 3>& rot) {
+inline void from_euler_zyx(T y, T p, T r, Eigen::Matrix<T, 3, 3>& rot) {
     rot = Eigen::AngleAxis<T>(y, Eigen::Matrix<T, 3, 1>::UnitZ()) *
           Eigen::AngleAxis<T>(p, Eigen::Matrix<T, 3, 1>::UnitY()) *
           Eigen::AngleAxis<T>(r, Eigen::Matrix<T, 3, 1>::UnitX());
 }
 
 template <typename T>
-void from_euler_zyx(T y, T p, T r, Eigen::Quaternion<T>& q) {
+inline void from_euler_zyx(T y, T p, T r, Eigen::Quaternion<T>& q) {
     Eigen::Matrix<T, 3, 3> R;
     from_euler_zyx(y, p, r, R);
     q = Eigen::Quaternion<T>(R);
 }
 
 template <typename T>
-void from_euler_zyx(T y, T p, T r, geometry_msgs::msg::Pose& q) {
+inline void from_euler_zyx(T y, T p, T r, geometry_msgs::msg::Pose& q) {
     Eigen::Matrix<T, 3, 3> R;
     from_euler_zyx(y, p, r, R);
     Eigen::Quaternion<T> quat(R);
@@ -220,14 +220,14 @@ void from_euler_zyx(T y, T p, T r, geometry_msgs::msg::Pose& q) {
 }
 
 template <typename T>
-void normalize_euler_zyx(T& y, T& p, T& r) {
+inline void normalize_euler_zyx(T& y, T& p, T& r) {
     Eigen::Matrix<T, 3, 3> rot;
     from_euler_zyx(y, p, r, rot);
     get_euler_zyx(rot, y, p, r);
 }
 
 template <typename T>
-void normalize_euler_zyx(T* angles)  // in order r, p, y
+inline void normalize_euler_zyx(T* angles)  // in order r, p, y
 {
     Eigen::Matrix<T, 3, 3> rot;
     from_euler_zyx(angles[2], angles[1], angles[0], rot);
@@ -682,7 +682,7 @@ inline void getShapeOccupancy(const std::shared_ptr<distance_field::PropagationD
 /// \param move_group The move group object
 /// \param occupied_cells The vector of occupied cells
 /// \return A vector of occupied cells
-void getRobotOccupancy(
+inline void getRobotOccupancy(
     const std::shared_ptr<distance_field::PropagationDistanceField>& df,
     moveit::core::RobotState& robot_state,
     const std::shared_ptr<moveit::planning_interface::MoveGroupInterface>& move_group,
@@ -724,7 +724,7 @@ void getRobotOccupancy(
 /// \param move_group The move group object.
 /// \return Nothing.
 // TODO(yoraish): have this also add the end-effector and any attached objects.
-void addRobotToDistanceField(
+inline void addRobotToDistanceField(
     std::shared_ptr<distance_field::PropagationDistanceField>& df,
     moveit::core::RobotState& robot_state,
     const std::vector<std::string>& move_group_names) {
@@ -761,7 +761,7 @@ void addRobotToDistanceField(
 /// \param publisher The publisher object
 /// \param frame_id The frame id
 /// \param id The marker id
-void visualizeOccupancy(const std::shared_ptr<distance_field::PropagationDistanceField>& df,
+inline void visualizeOccupancy(const std::shared_ptr<distance_field::PropagationDistanceField>& df,
                                const rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr& publisher,
                                const std::string& frame_id,
                                int id = 1) {
@@ -1089,14 +1089,14 @@ inline void moveitCollisionResultToCollisionsCollective(const collision_detectio
 }
 
 /// @brief Convert a mapping between robot names to states to a composite state given an ordering of the robots.
-void namedMultiAgentStateToStackedState(std::unordered_map<std::string, StateType> multi_state, std::vector<std::string> robot_names, StateType& stacked_state) {
+inline void namedMultiAgentStateToStackedState(std::unordered_map<std::string, StateType> multi_state, std::vector<std::string> robot_names, StateType& stacked_state) {
     stacked_state.clear();
     for (const auto& robot_name : robot_names) {
         stacked_state.insert(stacked_state.end(), multi_state[robot_name].begin(), multi_state[robot_name].end());
     }
 }
 
-void densifyPath(PathType& path, int num_intermediate_states = 3) {
+inline void densifyPath(PathType& path, int num_intermediate_states = 3) {
     // Add intermediate states to the path. These are interpolated between the states of the individual paths to verify transitions are okay.
     PathType path_dense{path[0]};
 
@@ -1119,7 +1119,7 @@ void densifyPath(PathType& path, int num_intermediate_states = 3) {
     path = path_dense;
 }
 
-void densifyMultiAgentPaths(MultiAgentPaths& paths, int num_intermediate_states = 3) {
+inline void densifyMultiAgentPaths(MultiAgentPaths& paths, int num_intermediate_states = 3) {
     // Iterate over the paths and densify them.
     for (auto& agent_id_and_path : paths) {
         int agent_id = agent_id_and_path.first;
@@ -1128,7 +1128,7 @@ void densifyMultiAgentPaths(MultiAgentPaths& paths, int num_intermediate_states 
     }
 }
 
-std::unordered_map<int, bool> isMultiAgentPathValid(MultiAgentPaths paths,
+inline std::unordered_map<int, bool> isMultiAgentPathValid(MultiAgentPaths paths,
                                                     const moveit::planning_interface::MoveGroupInterface& move_group_multi,
                                                     std::unordered_map<int, std::string> agent_names,
                                                     const planning_scene::PlanningScenePtr& planning_scene,
@@ -1216,7 +1216,7 @@ std::unordered_map<int, bool> isMultiAgentPathValid(MultiAgentPaths paths,
 }
 
 
-bool isPathValid(PathType path,
+inline bool isPathValid(PathType path,
                  const moveit::planning_interface::MoveGroupInterface& move_group,
                  const planning_scene::PlanningScenePtr& planning_scene,
                  int num_intermediate_states = 3) {
@@ -1264,7 +1264,7 @@ bool isPathValid(PathType path,
 
 
 /// @brief Smooth a set of paths, one for each agent.
-bool smoothMultiAgentPaths(MultiAgentPaths paths,
+inline bool smoothMultiAgentPaths(MultiAgentPaths paths,
                            const moveit::planning_interface::MoveGroupInterface& move_group_multi,
                            const planning_scene::PlanningScenePtr& planning_scene,
                            std::unordered_map<int, std::string> agent_names,
@@ -1440,7 +1440,7 @@ bool smoothMultiAgentPaths(MultiAgentPaths paths,
 }
 
 /// @brief Shortcut a path with a context of other agents: not changing the path of other agents or colliding with it.
-bool shortcutPath(std::string agent_name,
+inline bool shortcutPath(std::string agent_name,
                   MultiAgentPaths paths,
                   const moveit::planning_interface::MoveGroupInterface& move_group_multi,
                   const planning_scene::PlanningScenePtr& planning_scene,
@@ -1601,7 +1601,7 @@ bool shortcutPath(std::string agent_name,
 /// @param planning_scene The planning scene.
 /// @param smoothed_path The smoothed path.
 /// @param timeout The timeout for the planning.
-bool shortcutPath(const PathType & path,
+inline bool shortcutPath(const PathType & path,
                   const moveit::planning_interface::MoveGroupInterface& move_group,
                   const planning_scene::PlanningScenePtr& planning_scene,
                   PathType& smoothed_path,
@@ -1711,7 +1711,7 @@ bool shortcutPath(const PathType & path,
     return true;
 }
 
-void shortcutTimedPath(const PathType & path,
+inline void shortcutTimedPath(const PathType & path,
                        const moveit::planning_interface::MoveGroupInterface& move_group,
                        const planning_scene::PlanningScenePtr& planning_scene,
                        PathType& smoothed_path,
@@ -1740,7 +1740,7 @@ void shortcutTimedPath(const PathType & path,
 
 
 /// @brief Shortcut paths for multiple agents. Going one at a time around.
-bool shortcutMultiAgentPathsIterative(
+inline bool shortcutMultiAgentPathsIterative(
     MultiAgentPaths paths,
     const moveit::planning_interface::MoveGroupInterface& move_group_multi,
     const planning_scene::PlanningScenePtr& planning_scene,
@@ -1774,7 +1774,7 @@ bool shortcutMultiAgentPathsIterative(
     return true;
 }
 
-void padPathsToMaxLength(MultiAgentPaths& paths) {
+inline void padPathsToMaxLength(MultiAgentPaths& paths) {
     // Pad all paths to the same length. Do this by adding the last state of the path to the end of the path (the state is identical, so time may be repeated).
     int max_path_length = (int)std::max_element(paths.begin(), paths.end(), [](const std::pair<int, std::vector<StateType>>& a, const std::pair<int, std::vector<StateType>>& b) { return a.second.size() < b.second.size(); })->second.size();
 

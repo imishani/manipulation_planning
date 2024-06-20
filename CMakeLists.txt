@@ -42,6 +42,9 @@ include_directories(
   ${EIGEN3_INCLUDE_DIR}
 )
 
+# Export the include directory
+ament_export_include_directories(include)
+
 ###################
 # Test executables
 ###################
