@@ -293,6 +293,34 @@ public:
         vis_id_++;
     }
 
+    /// @brief Visualize a sphere in rviz for debugging.
+    void visualizeSphere(int x, int y, int z, double r) {
+        visualization_msgs::Marker marker;
+        marker.header.frame_id = moveit_interface_->planning_scene_->getPlanningFrame();
+        marker.header.stamp = ros::Time();
+        marker.ns = "graph";
+        marker.id = vis_id_;
+        marker.type = visualization_msgs::Marker::SPHERE;
+        marker.action = visualization_msgs::Marker::ADD;
+        marker.pose.position.x = x;
+        marker.pose.position.y = y;
+        marker.pose.position.z = z;
+        marker.pose.orientation.x = 0.0;
+        marker.pose.orientation.y = 0.0;
+        marker.pose.orientation.z = 0.0;
+        marker.pose.orientation.w = 1.0;
+
+        marker.scale.x = r;
+        marker.scale.y = r;
+        marker.scale.z = r;
+
+        // Lifetime.
+        marker.lifetime = ros::Duration(5.0);
+        // visualize
+        vis_pub_.publish(marker);
+        vis_id_++;
+    }
+
     /// @brief Get the end effector pose in the robot frame.
     /// @param ee_pose The end effector pose
     void calculateFK(const StateType &state, StateType &ee_pose)

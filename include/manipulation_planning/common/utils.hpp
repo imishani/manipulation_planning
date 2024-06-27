@@ -172,26 +172,26 @@ inline void normalizeAngles(std::vector<T>& state, const std::vector<bool>& vali
 }
 
 template <typename T>
-void checkFixGimbalLock(T y, T p, T r) {
+inline void checkFixGimbalLock(T y, T p, T r) {
     // check if current state in gimbal lock
     /// TODO: Implement
 }
 
 template <typename T>
-void get_euler_zyx(const Eigen::Matrix<T, 3, 3>& rot, T& y, T& p, T& r) {
+inline void get_euler_zyx(const Eigen::Matrix<T, 3, 3>& rot, T& y, T& p, T& r) {
     y = std::atan2(rot(1, 0), rot(0, 0));
     p = std::atan2(-rot(2, 0), std::sqrt(rot(2, 1) * rot(2, 1) + rot(2, 2) * rot(2, 2)));
     r = std::atan2(rot(2, 1), rot(2, 2));
 }
 
 template <typename T>
-void get_euler_zyx(const Eigen::Quaternion<T>& rot, T& y, T& p, T& r) {
+inline void get_euler_zyx(const Eigen::Quaternion<T>& rot, T& y, T& p, T& r) {
     Eigen::Matrix<T, 3, 3> R(rot);
     get_euler_zyx(R, y, p, r);
 }
 
 template <typename T>
-void from_euler_zyx(T y, T p, T r, Eigen::Matrix<T, 3, 3>& rot) {
+inline void from_euler_zyx(T y, T p, T r, Eigen::Matrix<T, 3, 3>& rot) {
     rot = Eigen::AngleAxis<T>(y, Eigen::Matrix<T, 3, 1>::UnitZ()) *
           Eigen::AngleAxis<T>(p, Eigen::Matrix<T, 3, 1>::UnitY()) *
           Eigen::AngleAxis<T>(r, Eigen::Matrix<T, 3, 1>::UnitX());
@@ -697,6 +697,44 @@ inline void getRobotOccupancy(
             // add the occupied cells to the vector
             occupied_cells.insert(occupied_cells.end(), link_occupied_cells.begin(),
                                   link_occupied_cells.end());
+        }
+    }
+}
+
+/// \brief Add the robot shape, as specified by its links model and state, to the distance field.
+/// \param df The distance field.
+/// \param robot_state The robot state.
+/// \param move_group The move group object.
+/// \return Nothing.
+// TODO(yoraish): have this also add the end-effector and any attached objects.
+inline void addRobotToDistanceField(
+    std::shared_ptr<distance_field::PropagationDistanceField>& df,
+    moveit::core::RobotState& robot_state,
+    const std::vector<std::string>& move_group_names) {
+    // Get the collision models of the robot
+    std::vector<const moveit::core::LinkModel*> link_models;
+
+    for (std::string move_group_name : move_group_names){
+        std::vector<const moveit::core::LinkModel*> link_models_group = robot_state.getJointModelGroup(move_group_name)->getLinkModels();
+        link_models.insert(link_models.end(), link_models_group.begin(), link_models_group.end());
+    }
+
+    // TODO(yoraish): Get the collision models of the links in the attached objects.
+
+    // get all the occupied cells
+    for (auto& link : link_models) {
+        if (link->getName() == "world") {
+            continue;
+        }
+        if (link->getShapes().empty())
+            continue;
+        // for each shape in the link model get the occupied cells
+        for (auto& shape : link->getShapes()) {
+            // get the link pose in the world frame
+            //                // get the occupied cells
+            robot_state.updateLinkTransforms();
+            Eigen::Isometry3d transform = robot_state.getGlobalLinkTransform(link);
+            df->addShapeToField(shape.get(), transform);
         }
     }
 }
