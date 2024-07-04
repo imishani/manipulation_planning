@@ -118,7 +118,7 @@ int main(int argc, char** argv) {
     std::shared_ptr<ims::ManipulationActionSpace> action_space = std::make_shared<ims::ManipulationActionSpace>(scene_interface, action_type,
                                                                                                                 heuristic);
 
-    StateType start_state {0, 0, 0, 0, 0, 0};
+    StateType start_state {0, 0, 0, 0, 0, 0, 0};
     const std::vector<std::string>& joint_names = move_group.getVariableNames();
     for (int i = 0; i < 6; i++) {
         start_state[i] = current_state->getVariablePosition(joint_names[i]);
@@ -129,12 +129,12 @@ int main(int argc, char** argv) {
     StateType goal_state = start_state;
 
     // change the goal state
-    goal_state[0] = 1.5708*180/M_PI;// 78; //0;
-    goal_state[1] = 0.0698132*180/M_PI; //25; //30;
-    goal_state[2] = -0.9948*180/M_PI; //-18; //-30;
-    goal_state[3] = -1.5708*180/M_PI; //-147; //0;
-    goal_state[4] = 0; //73; //0;
-    goal_state[5] = 0;//-66; //0;
+//    goal_state[0] = 1.5708*180/M_PI;// 78; //0;
+//    goal_state[1] = 0.0698132*180/M_PI; //25; //30;
+//    goal_state[2] = -0.9948*180/M_PI; //-18; //-30;
+//    goal_state[3] = -1.5708*180/M_PI; //-147; //0;
+//    goal_state[4] = 0; //73; //0;
+    goal_state[5] += 10;//-66; //0;
 
 
     ims::deg2rad(start_state); ims::deg2rad(goal_state);
