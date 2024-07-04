@@ -31,14 +31,13 @@
  * \author Itamar Mishani (imishani@cmu.edu)
  * \date   4/3/23
  */
-
-#ifndef MANIPULATION_PLANNING_MANIPULATIONACTIONSPACE_HPP
-#define MANIPULATION_PLANNING_MANIPULATIONACTIONSPACE_HPP
+#pragma once
 
 // include standard libraries
 #include <iostream>
 #include <utility>
 #include <vector>
+#include <yaml-cpp/yaml.h>
 
 // include ROS libraries
 #include <moveit/move_group_interface/move_group_interface.h>
@@ -62,7 +61,6 @@ struct ManipulationType : ActionType {
                                   space_type_(SpaceType::ConfigurationSpace),
                                   mprim_file_name_("../config/manip_6dof.mprim"),
                                   max_action_(0.0){
-                                      //            readMPfile();
                                   };
 
     /// @brief Constructor with motion primitives file given
@@ -72,7 +70,6 @@ struct ManipulationType : ActionType {
                                                         space_type_(SpaceType::ConfigurationSpace),
                                                         mprim_file_name_(std::move(mprim_file)),
                                                         max_action_(0.0){
-                                                            //            readMPfile();
                                                         };
 
     /// @brief Constructor with adaptive motion primitives given
@@ -120,117 +117,172 @@ struct ManipulationType : ActionType {
         state_discretization_ = state_des;
     }
 
-    void readMPfile() {
-        std::ifstream file(mprim_file_name_);
-        std::string line;
-        std::vector<std::vector<double>> mprim;
-        switch (space_type_) {
-            case SpaceType::ConfigurationSpace: {
-                int tot_prim{0}, dof{0}, num_short_prim{0};
-                int i{0};
-                while (std::getline(file, line)) {
-                    if (i == 0) {
-                        // First line being with: "Motion_Primitives(degrees): " and then three numbers. Make sure the line begins with the string and then get the numbers
-                        std::string first_line = "Motion_Primitives(degrees): ";
-                        // Check if the line begins with the string
-                        if (line.find(first_line) != 0) {
-                            ROS_ERROR_STREAM("The first line of the motion primitives file should begin with: " << first_line);
-                        }
-                        // Get the numbers
-                        std::istringstream iss(line.substr(first_line.size()));
-                        if (!(iss >> tot_prim >> dof >> num_short_prim)) {
-                            ROS_ERROR_STREAM("The first line of the motion primitives file should begin with: " << first_line);
-                        }
-                        i++;
-                        continue;
+    void loadMprimFamily(const YAML::Node& root_node,
+                         const std::string& family_name,
+                         std::vector<ActionSequence>& action_seqs,
+                         std::vector<std::vector<double>>& action_transition_times) {
+    if (root_node[family_name]) {
+        for (const auto& action : root_node[family_name]) {
+            std::string action_name = action.first.as<std::string>();
+            // Check if "delta_degrees" exists in the key list.
+            // The structure would be like this:
+            //          action_name:
+            //            delta_degrees:
+            //              - [ 0, 0, 0, 0, 0, 0, 0 ]
+            //              - [ 7, 0, 0, 0, 0, 0, 0 ]
+            //            delta_time_steps: [ 1, 0 ]
+            //            generate_negative: true
+            if (!action.second["delta_degrees"]) {
+                std::cerr << "Action \"" << action_name << "\" does not have \"delta_degrees\".\n";
+                throw std::runtime_error("Action \"" + action_name + "\" does not have \"delta_degrees\".");
+            }
+            // Check if required to also generate negated actions.
+            bool is_generate_negated_action = false;
+            if (action.second["generate_negative"]) {
+                is_generate_negated_action = action.second["generate_negative"].as<bool>();
+            }
+            ActionSequence action_seq;
+            ActionSequence neg_action_seq;
+            std::vector<std::vector<double>> action_transition_cost;
+            for (const auto& action_seq_state_it : action.second["delta_degrees"]) {
+                StateType state;
+                StateType neg_state;
+                for (const auto& num : action_seq_state_it) {
+                    double num_rads = num.as<double>() / 180.0 * M_PI;
+                    // Populate max_action_.
+                    if (abs(num_rads) > max_action_) {
+                        max_action_ = abs(num_rads);
                     }
-                    std::istringstream iss(line);
-                    std::vector<double> line_;
-                    double num;
-                    while (iss >> num) {
-                        line_.push_back(num);
-                        if (abs(num * M_PI / 180.0) > max_action_) {
-                            max_action_ = abs(num * M_PI / 180.0);
-                        }
-                    }
-                    // Check if short or long primitive (the last num_short_prim lines are short)
-                    if (i > tot_prim - num_short_prim) {
-                        short_mprim_.push_back(line_);
-                    }
-                    else {
-                        long_mprim_.push_back(line_);
-                    }
-                    i++;
+                    state.push_back(num_rads);
+                    neg_state.push_back(-num_rads);
                 }
-            } break;
-            case SpaceType::WorkSpace: {
-                int tot_ptim{0}, positions_prims{0}, orientations_prims{0};
-                int i{0};
-                while (std::getline(file, line)) {
-                    if (i == 0) {
-                        // First line being with: "Motion_Primitives(degrees): " and then three numbers. Make sure the line begins with the string and then get the numbers
-                        std::string first_line = "Motion_Primitives(meters/degrees): ";
-                        // Check if the line begins with the string
-                        if (line.find(first_line) != 0) {
-                            ROS_ERROR_STREAM("The first line of the motion primitives file should begin with: " << first_line);
-                        }
-                        // Get the numbers
-                        std::istringstream iss(line.substr(first_line.size()));
-                        if (!(iss >> tot_ptim >> positions_prims >> orientations_prims)) {
-                            ROS_ERROR_STREAM("The first line of the motion primitives file should begin with: " << first_line);
-                        }
-                        i++;
-                        continue;
-                    }
-                    std::istringstream iss(line);
-                    std::vector<double> line_;
-                    double num;
-                    while (iss >> num) {
-                        line_.push_back(num);
-                        if (abs(num) > max_action_) {
-                            max_action_ = abs(num);
-                        }
-                    }
-                    // TODO: Currently I am using short_mprim_ to store the work space motion primitives. This is not correct.
-                    short_mprim_.push_back(line_);
-                    i++;
+                action_seq.push_back(state);
+                if (is_generate_negated_action) {
+                    neg_action_seq.push_back(neg_state);
                 }
             }
+            // Note that we do not add the action_seq and the neg_action_seq to the action_seqs. We only do it at the end as those may need to be modified.
+            // Get the transition times, if those are available.
+            // This does two things. First, it stores the transition times for each action sequence:
+            if (action.second["delta_time_steps"]) {
+                std::vector<double> transition_time; // This is the same for both the normal and negated action.
+                for (size_t i{0}; i < action.second["delta_time_steps"].size(); i++) {
+                    double num = action.second["delta_time_steps"][i].as<TimeType>();
+                    // Store the time interval of the step in the transition time.
+                    transition_time.push_back(num);
+                }
+                assert(transition_time.size() == action_seq.size());
+
+                // Second, it adds a time dimension to the action sequence. Time 0 for the first, 1 for the second, etc.
+                // If we have time information, then modify the action sequence to include the time in the last element.
+                // Add the time 0 to the first state in the sequence.
+                action_seq[0].push_back(0.0);
+                if (is_generate_negated_action) {
+                    neg_action_seq[0].push_back(0.0);
+                }
+
+                for (size_t i{0}; i < action_seq.size() - 1; i++) {
+                    action_seq[i + 1].push_back(action_seq[i].back() + transition_time[i]);
+                    if (is_generate_negated_action) {
+                        neg_action_seq[i + 1].push_back(neg_action_seq[i].back() + transition_time[i]);
+                    }
+                }
+
+                // Save the transition times for the action sequence.
+                action_transition_times.push_back(transition_time);
+                if (is_generate_negated_action) {
+                    action_transition_times.push_back(transition_time);
+                }
+            }
+
+            // Add the action sequence to the list of action sequences.
+            action_seqs.push_back(action_seq);
+            if (is_generate_negated_action) {
+                action_seqs.push_back(neg_action_seq);
+            }
         }
+
+        /*// PRINT PRINT PRINT.
+        std::cout << GREEN << "Created actions from YAML file and family name: " << family_name << RESET << std::endl;
+        for (int i = 0; i < action_seqs.size(); i++) {
+            std::cout << "Action Sequence " << i << ": " << std::endl;
+            for (int j = 0; j < action_seqs[i].size(); j++) {
+                std::cout << " * State: " << action_seqs[i][j] << " ";
+                std::cout << " * Time to next: " << action_transition_times[i][j] << std::endl;
+            }
+            std::cout << std::endl;
+        }
+        // END PRINT PRINT PRINT. */
+
+    } else {
+        std::cerr << "Family \"" << family_name << "\" not found in the YAML file.\n";
+    }
+    // Check that the length of the transition times is the same as the length of the action sequence.
+    if (action_seqs.size() != action_transition_times.size()) {
+        std::cerr << "The number of action sequences and the number of transition times do not match.\n";
+        throw std::runtime_error("The number of action sequences and the number of transition times do not match.");
+    }
+}
+
+    void readMPfile(){
+        // Read the motion primitive YAML file.
+        YAML::Node mprim_config = YAML::LoadFile(mprim_file_name_);
+        // The motion primitive file defines families of actions. In this action space we care about the
+        // 1. short distance motion primitives (short_mprim_) and
+        // 2. long distance motion primitives (long_mprim_).
+        if (space_type_ == SpaceType::ConfigurationSpace) {
+            std::vector <ActionSequence> short_mprim_seqs; // This will become a member variable.
+            std::vector <std::vector<double>> short_mprim_transition_costs; // This will become a member variable.
+            loadMprimFamily(mprim_config, "short_primitives", short_mprim_seqs, short_mprim_transition_costs);
+            std::vector <ActionSequence> long_mprim_seqs; // This will become a member variable.
+            std::vector <std::vector<double>> long_mprim_transition_costs; // This will become a member variable.
+            loadMprimFamily(mprim_config, "long_primitives", long_mprim_seqs, long_mprim_transition_costs);
+
+            // TEST TEST TEST.
+            // Populate short_mprim_ and long_mprim_ from the YAML file.
+            for (size_t i{0}; i < short_mprim_seqs.size(); i++) {
+                Action action_tip = short_mprim_seqs[i].back();
+                short_mprim_.push_back(action_tip);
+            }
+            for (size_t i{0}; i < long_mprim_seqs.size(); i++) {
+                Action action_tip = long_mprim_seqs[i].back();
+                long_mprim_.push_back(action_tip);
+            }
+            // END TEST TEST TEST.
+        }
+        else if (space_type_ == SpaceType::WorkSpace) {
+            std::cerr << "Work space motion primitives are not implemented yet.\n";
+            throw std::runtime_error("Work space motion primitives are not implemented yet.");
+        }
+    }
+
+    std::vector<ActionSequence> getPrimActionEdges() override {
+        // TODO.
+        return {};
     }
 
     /// @brief Get the possible actions
     /// @return A vector of all possible actions
     std::vector<Action> getPrimActions() override {
+        // Read the motion primitive file if needed.
         if (short_mprim_.empty() && long_mprim_.empty()) {
             readMPfile();
         }
+        // Populate the actions_ vector if not done so already.
         if (actions_.empty()) {
             switch (action_type_) {
                 case ActionType::MOVE:
                     switch (space_type_) {
                         case SpaceType::ConfigurationSpace: {
                             // TODO: Add snap option
-                            std::vector<std::vector<double>> mprim;
-                            mprim.insert(mprim.end(), long_mprim_.begin(), long_mprim_.end());
-                            mprim.insert(mprim.end(), short_mprim_.begin(), short_mprim_.end());
-                            for (auto &action_ : mprim) {
-                                // convert from degrees to radians
-                                for (auto &num : action_) {
-                                    num = num * M_PI / 180.0;
-                                }
-                                actions_.push_back(action_);
-                                // get the opposite action
-                                for (auto &num : action_) {
-                                    num = -num;
-                                }
-                                actions_.push_back(action_);
-                            }
+                            actions_.insert(actions_.end(), long_mprim_.begin(), long_mprim_.end());
+                            actions_.insert(actions_.end(), short_mprim_.begin(), short_mprim_.end());
                         } break;
                         case SpaceType::WorkSpace: {
                             std::vector<std::vector<double>> mprim;
                             mprim.insert(mprim.end(), short_mprim_.begin(), short_mprim_.end());
                             for (auto &action_ : mprim) {
+                                throw std::runtime_error ("Work space motion primitives are not implemented yet. Handle reverse actions in the readmpfile function.");
                                 // make an inverted action
                                 Action inverted_action(action_.size());
                                 inverted_action[0] = -action_[0];
@@ -295,35 +347,31 @@ struct ManipulationType : ActionType {
             readMPfile();
         }
         actions_.clear();
-        if (mprim_active_type_.long_dist.first)  // insert long distance primitive and convert to radians
-            for (auto &action_ : long_mprim_) {
-                std::vector<double> action, action_rev;
-                for (auto &num : action_) {
-                    action.push_back(num * M_PI / 180.0);
-                    action_rev.push_back(-num * M_PI / 180.0);
-                }
-                actions_.push_back(action);
-                actions_.push_back(action_rev);
-            }
-        if (mprim_active_type_.short_dist.first && (start_dist < mprim_active_type_.short_dist.second || goal_dist < mprim_active_type_.short_dist.second))
-            for (auto &action_ : short_mprim_) {
-                std::vector<double> action, action_rev;
-                for (auto &num : action_) {
-                    action.push_back(num * M_PI / 180.0);
-                    action_rev.push_back(-num * M_PI / 180.0);
-                }
-                actions_.push_back(action);
-                actions_.push_back(action_rev);
-            }
-        if (mprim_active_type_.snap_xyz.first && goal_dist < mprim_active_type_.snap_xyz.second)
+        // Decide whether we want to use short or long primitives.
+        bool use_short = false;
+        if (mprim_active_type_.short_dist.first && (goal_dist < mprim_active_type_.short_dist.second)) {
+            use_short = true;
+        }
+        // Add the short or long primitives.
+        auto &action_prim = use_short ? short_mprim_ : long_mprim_;
+        // Add the actions to the list of actions.
+        actions_.insert(actions_.end(), action_prim.begin(), action_prim.end());
+
+        // If allowed, and the cartesian goal distance is less than a threshold, insert snap primitive.
+        // Snap I: only xyz.
+        if (mprim_active_type_.snap_xyz.first && goal_dist < mprim_active_type_.snap_xyz.second) {
             actions_.push_back({INF_DOUBLE, INF_DOUBLE, INF_DOUBLE,
-                                INF_DOUBLE, INF_DOUBLE, INF_DOUBLE});  // TODO: Fix this to make it better designed
-        if (mprim_active_type_.snap_rpy.first && goal_dist < mprim_active_type_.snap_rpy.second)
+                                INF_DOUBLE, INF_DOUBLE, INF_DOUBLE});
+        }
+        // Snap II: only rpy.
+        if (mprim_active_type_.snap_rpy.first && goal_dist < mprim_active_type_.snap_rpy.second) {
             actions_.push_back({INF_DOUBLE, INF_DOUBLE, INF_DOUBLE,
-                                INF_DOUBLE, INF_DOUBLE, INF_DOUBLE});  // TODO: Fix this to make it better designed
+                                INF_DOUBLE, INF_DOUBLE, INF_DOUBLE});
+        }
+        // Snap III: xyz and rpy. (Most common).
         if (mprim_active_type_.snap_xyzrpy.first && goal_dist < mprim_active_type_.snap_xyzrpy.second) {
             actions_.push_back({INF_DOUBLE, INF_DOUBLE, INF_DOUBLE,
-                                INF_DOUBLE, INF_DOUBLE, INF_DOUBLE});  // TODO: Fix this to make it better designed
+                                INF_DOUBLE, INF_DOUBLE, INF_DOUBLE});
             ROS_DEBUG_NAMED("adaptive_mprim", "snap xyzrpy");
             ROS_DEBUG_STREAM("goal_dist: " << goal_dist);
         }
@@ -363,8 +411,11 @@ struct ManipulationType : ActionType {
     std::string mprim_file_name_;
     MotionPrimitiveActiveType mprim_active_type_;
 
-    std::vector<Action> actions_;
+    /// @brief The motion primitives. In radians.
+    std::vector<Action> actions_; // This could be bug prone if getPrimActions is called after getAdaptiveActions since it will append to the actions_ vector.
+    /// @brief The short distance motion primitives. In degrees.
     std::vector<Action> short_mprim_;
+    /// @brief The long distance motion primitives. In degrees.
     std::vector<Action> long_mprim_;
 
     std::vector<bool> mprim_enabled_;
@@ -660,9 +711,16 @@ public:
         return false;
     }
 
-    virtual bool getSuccessorsWs(int curr_state_ind,
-                                 std::vector<int> &successors,
-                                 std::vector<double> &costs) {
+    virtual bool getSuccessorEdgesWs(int curr_state_ind,
+                                    std::vector<std::vector<int>>& edges_state_ids,
+                                    std::vector<std::vector<double>> & edges_transition_costs) {
+        edges_state_ids.clear();
+        edges_transition_costs.clear();
+        // REMOVE.
+        std::vector<int> successors;
+        std::vector<double> costs;
+        // END REMOVE.
+
         // get the current state
         auto curr_state = this->getRobotState(curr_state_ind);
         auto curr_state_val = curr_state->state;
@@ -722,12 +780,27 @@ public:
                 costs.push_back(cost);
             }
         }
+
+        // REMOVE.
+        for (int i{0}; i < successors.size(); i++) {
+            edges_state_ids.push_back({curr_state_ind, successors[i]});
+            edges_transition_costs.push_back({costs[i], 0});
+        }
+        // END REMOVE.
+
         return true;
     }
 
-    virtual bool getSuccessorsCs(int curr_state_ind,
-                                 std::vector<int> &successors,
-                                 std::vector<double> &costs) {
+    virtual bool getSuccessorEdgesCs(int curr_state_ind,
+                                   std::vector<std::vector<int>>& edges_state_ids,
+                                   std::vector<std::vector<double>> & edges_transition_costs) {
+        edges_state_ids.clear();
+        edges_transition_costs.clear();
+        // REMOVE.
+        std::vector<int> successors;
+        std::vector<double> costs;
+        // END REMOVE.
+
         std::vector<ActionSequence> actions;
         getActions(curr_state_ind, actions, false);
         // get the successors
@@ -758,17 +831,25 @@ public:
                 costs.push_back(1000);
             }
         }
+
+        // REMOVE.
+        for (int i{0}; i < successors.size(); i++) {
+            edges_state_ids.push_back({curr_state_ind, successors[i]});
+            edges_transition_costs.push_back({costs[i], 0});
+        }
+        // END REMOVE.
+
         return true;
     }
 
-    bool getSuccessors(int curr_state_ind,
-                       std::vector<int> &successors,
-                       std::vector<double> &costs) override {
+    bool getSuccessorEdges(int curr_state_ind,
+                           std::vector<std::vector<int>>& edges_state_ids,
+                           std::vector<std::vector<double>> & edges_transition_costs) override {
         if (manipulation_type_->getSpaceType() == ManipulationType::SpaceType::ConfigurationSpace) {
-            return getSuccessorsCs(curr_state_ind, successors, costs);
+            return getSuccessorEdgesCs(curr_state_ind, edges_state_ids, edges_transition_costs);
         }
         else {
-            return getSuccessorsWs(curr_state_ind, successors, costs);
+            return getSuccessorEdgesWs(curr_state_ind, edges_state_ids, edges_transition_costs);
         }
     }
 
@@ -816,4 +897,3 @@ public:
 };
 }  // namespace ims
 
-#endif  // MANIPULATION_PLANNING_MANIPULATIONACTIONSPACE_HPP
