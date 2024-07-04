@@ -201,19 +201,6 @@ struct ManipulationType : ActionType {
                 action_seqs.push_back(neg_action_seq);
             }
         }
-
-        /*// PRINT PRINT PRINT.
-        std::cout << GREEN << "Created actions from YAML file and family name: " << family_name << RESET << std::endl;
-        for (int i = 0; i < action_seqs.size(); i++) {
-            std::cout << "Action Sequence " << i << ": " << std::endl;
-            for (int j = 0; j < action_seqs[i].size(); j++) {
-                std::cout << " * State: " << action_seqs[i][j] << " ";
-                std::cout << " * Time to next: " << action_transition_times[i][j] << std::endl;
-            }
-            std::cout << std::endl;
-        }
-        // END PRINT PRINT PRINT. */
-
     } else {
         std::cerr << "Family \"" << family_name << "\" not found in the YAML file.\n";
     }
@@ -231,24 +218,8 @@ struct ManipulationType : ActionType {
         // 1. short distance motion primitives (short_mprim_) and
         // 2. long distance motion primitives (long_mprim_).
         if (space_type_ == SpaceType::ConfigurationSpace) {
-            std::vector <ActionSequence> short_mprim_seqs; // This will become a member variable.
-            std::vector <std::vector<double>> short_mprim_transition_costs; // This will become a member variable.
-            loadMprimFamily(mprim_config, "short_primitives", short_mprim_seqs, short_mprim_transition_costs);
-            std::vector <ActionSequence> long_mprim_seqs; // This will become a member variable.
-            std::vector <std::vector<double>> long_mprim_transition_costs; // This will become a member variable.
-            loadMprimFamily(mprim_config, "long_primitives", long_mprim_seqs, long_mprim_transition_costs);
-
-            // TEST TEST TEST.
-            // Populate short_mprim_ and long_mprim_ from the YAML file.
-            for (size_t i{0}; i < short_mprim_seqs.size(); i++) {
-                Action action_tip = short_mprim_seqs[i].back();
-                short_mprim_.push_back(action_tip);
-            }
-            for (size_t i{0}; i < long_mprim_seqs.size(); i++) {
-                Action action_tip = long_mprim_seqs[i].back();
-                long_mprim_.push_back(action_tip);
-            }
-            // END TEST TEST TEST.
+            loadMprimFamily(mprim_config, "short_primitives", short_mprim_seqs_, short_mprim_transition_times_);
+            loadMprimFamily(mprim_config, "long_primitives", long_mprim_seqs_, long_mprim_transition_times_);
         }
         else if (space_type_ == SpaceType::WorkSpace) {
             std::cerr << "Work space motion primitives are not implemented yet.\n";
@@ -256,30 +227,65 @@ struct ManipulationType : ActionType {
         }
     }
 
-    std::vector<ActionSequence> getPrimActionEdges() override {
-        // TODO.
-        return {};
+    void getPrimActionEdges(std::vector<ActionSequence>& action_seqs,
+                            std::vector<std::vector<double>> & action_transition_costs ) override {
+
+        // Read the motion primitive file if needed.
+        if (short_mprim_seqs_.empty() && long_mprim_seqs_.empty()) {
+            readMPfile();
+        }
+        // Populate the actions_ vector if not done so already.
+        if (action_seqs_.empty() || action_transition_times_.empty()) {
+            switch (action_type_) {
+                case ActionType::MOVE:
+                    switch (space_type_) {
+                        case SpaceType::ConfigurationSpace: {
+                            // TODO: Add snap option
+                            action_seqs_.insert(action_seqs_.end(), long_mprim_seqs_.begin(), long_mprim_seqs_.end());
+                            action_seqs_.insert(action_seqs_.end(), short_mprim_seqs_.begin(), short_mprim_seqs_.end());
+                            action_transition_times_.insert(action_transition_times_.end(), long_mprim_transition_times_.begin(), long_mprim_transition_times_.end());
+                            action_transition_times_.insert(action_transition_times_.end(), short_mprim_transition_times_.begin(), short_mprim_transition_times_.end());
+
+                        } break;
+                        case SpaceType::WorkSpace: {
+                            throw std::runtime_error ("Work space motion primitives are not implemented yet.");
+                        } break;
+                    }
+                    break;
+                case ActionType::GRASP:
+                    break;
+                case ActionType::RELEASE:
+                    break;
+            }
+        }
+        action_seqs = action_seqs_;
+        action_transition_costs = action_transition_times_;
     }
 
     /// @brief Get the possible actions
     /// @return A vector of all possible actions
     std::vector<Action> getPrimActions() override {
         // Read the motion primitive file if needed.
-        if (short_mprim_.empty() && long_mprim_.empty()) {
+        if (short_mprim_seqs_.empty() && long_mprim_seqs_.empty()) {
             readMPfile();
         }
         // Populate the actions_ vector if not done so already.
-        if (actions_.empty()) {
+        if (action_seqs_.empty()) {
             switch (action_type_) {
                 case ActionType::MOVE:
                     switch (space_type_) {
                         case SpaceType::ConfigurationSpace: {
                             // TODO: Add snap option
-                            actions_.insert(actions_.end(), long_mprim_.begin(), long_mprim_.end());
-                            actions_.insert(actions_.end(), short_mprim_.begin(), short_mprim_.end());
+                            action_seqs_.insert(action_seqs_.end(), long_mprim_seqs_.begin(), long_mprim_seqs_.end());
+                            action_seqs_.insert(action_seqs_.end(), short_mprim_seqs_.begin(), short_mprim_seqs_.end());
+                            action_transition_times_.insert(action_transition_times_.end(), long_mprim_transition_times_.begin(), long_mprim_transition_times_.end());
+                            action_transition_times_.insert(action_transition_times_.end(), short_mprim_transition_times_.begin(), short_mprim_transition_times_.end());
+
                         } break;
                         case SpaceType::WorkSpace: {
+                            throw std::runtime_error ("Work space motion primitives are not implemented yet.");
                             std::vector<std::vector<double>> mprim;
+                            /*
                             mprim.insert(mprim.end(), short_mprim_.begin(), short_mprim_.end());
                             for (auto &action_ : mprim) {
                                 throw std::runtime_error ("Work space motion primitives are not implemented yet. Handle reverse actions in the readmpfile function.");
@@ -323,6 +329,7 @@ struct ManipulationType : ActionType {
                                 inverted_action[6] = sign * q.w();
                                 actions_.push_back(inverted_action);
                             }
+                        */
                         } break;
                     }
                     break;
@@ -331,51 +338,68 @@ struct ManipulationType : ActionType {
                 case ActionType::RELEASE:
                     break;
             }
-            return actions_;
         }
-        else {
-            return actions_;
+
+        // Backwards compatability hack. This will return the actions_ vector where actions are only single-step actions.
+        std::vector<Action> actions;
+        for (auto action_seq : action_seqs_) {
+            actions.push_back({action_seq.back()});
+            // Only allow this if the action is a single step action (aka with exactly two elements in the sequence).
+            if (action_seq.size() != 2) {
+                throw std::runtime_error("The action sequence is not a single step action, GetPrimActions will lose information. Aborting.");
+            }
         }
+        return actions;
     }
 
     /// @brief Get adaptive motion primitives
     /// @param start_dist The distance from the start
     /// @param goal_dist The distance from the goal
     /// @return A vector of actions
+    [[deprecated ("Use getAdaptiveActionEdges() instead.") ]]
     std::vector<Action> getAdaptiveActions(double &start_dist, double &goal_dist) {
-        if (short_mprim_.empty() && long_mprim_.empty()) {
+        if (short_mprim_seqs_.empty() && long_mprim_seqs_.empty()) {
             readMPfile();
         }
-        actions_.clear();
+        action_seqs_.clear();
         // Decide whether we want to use short or long primitives.
         bool use_short = false;
         if (mprim_active_type_.short_dist.first && (goal_dist < mprim_active_type_.short_dist.second)) {
             use_short = true;
         }
         // Add the short or long primitives.
-        auto &action_prim = use_short ? short_mprim_ : long_mprim_;
-        // Add the actions to the list of actions.
-        actions_.insert(actions_.end(), action_prim.begin(), action_prim.end());
+        std::vector<ActionSequence> & prim_action_seqs = use_short ? short_mprim_seqs_ : long_mprim_seqs_;
+        // Add the actions to the list of actions. This only uses the last state of action sequences.
+        std::vector<Action> actions;
+        for (int i{0}; i < prim_action_seqs.size(); i++) {
+            // Abort of this action sequence is not of a single step (two states).
+            if (prim_action_seqs[i].size() != 2) {
+                throw std::runtime_error("The action sequence is not a single step action, GetAdaptiveActions will lose information. Aborting.");
+            }
+            actions.push_back(prim_action_seqs[i].back());
+            action_seqs_.push_back(prim_action_seqs[i]);
+            action_transition_times_.push_back(use_short ? short_mprim_transition_times_[i] : long_mprim_transition_times_[i]);
+        }
 
         // If allowed, and the cartesian goal distance is less than a threshold, insert snap primitive.
         // Snap I: only xyz.
         if (mprim_active_type_.snap_xyz.first && goal_dist < mprim_active_type_.snap_xyz.second) {
-            actions_.push_back({INF_DOUBLE, INF_DOUBLE, INF_DOUBLE,
+            actions.push_back({INF_DOUBLE, INF_DOUBLE, INF_DOUBLE,
                                 INF_DOUBLE, INF_DOUBLE, INF_DOUBLE});
         }
         // Snap II: only rpy.
         if (mprim_active_type_.snap_rpy.first && goal_dist < mprim_active_type_.snap_rpy.second) {
-            actions_.push_back({INF_DOUBLE, INF_DOUBLE, INF_DOUBLE,
+            actions.push_back({INF_DOUBLE, INF_DOUBLE, INF_DOUBLE,
                                 INF_DOUBLE, INF_DOUBLE, INF_DOUBLE});
         }
         // Snap III: xyz and rpy. (Most common).
         if (mprim_active_type_.snap_xyzrpy.first && goal_dist < mprim_active_type_.snap_xyzrpy.second) {
-            actions_.push_back({INF_DOUBLE, INF_DOUBLE, INF_DOUBLE,
+            actions.push_back({INF_DOUBLE, INF_DOUBLE, INF_DOUBLE,
                                 INF_DOUBLE, INF_DOUBLE, INF_DOUBLE});
             ROS_DEBUG_NAMED("adaptive_mprim", "snap xyzrpy");
             ROS_DEBUG_STREAM("goal_dist: " << goal_dist);
         }
-        return actions_;
+        return actions;
     }
 
     /// @brief Set values in the motion primitive active type.
@@ -411,12 +435,18 @@ struct ManipulationType : ActionType {
     std::string mprim_file_name_;
     MotionPrimitiveActiveType mprim_active_type_;
 
+    /// @brief The short distance motion primitives. In radians.
+    /// @details The sequence is a list of states (potentially with a time dimension in the back). This list usually starts from the zero state and ends at the final state.
+    ///          Each entry is not a delta from the previous, but a delta from the zero state.
+    std::vector <ActionSequence> short_mprim_seqs_;
+    /// @brief The transitions costs at i are the time it takes to move from state i to state i+1 in the action sequence.
+    std::vector <std::vector<double>> short_mprim_transition_times_;
+    /// @brief The long distance motion primitives. In radians. Similar explanations as for short_mprim_seqs_ and short_mprim_transition_times_.
+    std::vector <ActionSequence> long_mprim_seqs_;
+    std::vector <std::vector<double>> long_mprim_transition_times_;
     /// @brief The motion primitives. In radians.
-    std::vector<Action> actions_; // This could be bug prone if getPrimActions is called after getAdaptiveActions since it will append to the actions_ vector.
-    /// @brief The short distance motion primitives. In degrees.
-    std::vector<Action> short_mprim_;
-    /// @brief The long distance motion primitives. In degrees.
-    std::vector<Action> long_mprim_;
+    std::vector<ActionSequence> action_seqs_; // This could be bug prone if getPrimActions is called after getAdaptiveActions since it will append to the actions_ vector.
+    std::vector<std::vector<double>> action_transition_times_;
 
     std::vector<bool> mprim_enabled_;
     std::vector<double> mprim_thresh_;
