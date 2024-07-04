@@ -125,7 +125,6 @@ catkin_package(
         moveit_ros_planning_interface
         roscpp rospy
         std_msgs
-        yaml-cpp
 #  DEPENDS system_lib
 )
 
@@ -157,7 +156,6 @@ target_link_libraries(${PROJECT_NAME}
         ${catkin_LIBRARIES}
         ${eigen_LIBRARIES}
         /usr/local/lib/${search_LIBRARIES}
-        yaml-cpp
         )
 ## Add cmake target dependencies of the library
 ## as an example, code may need to be generated before libraries
@@ -174,7 +172,6 @@ target_link_libraries(${PROJECT_NAME}_cspace_test
         ${catkin_LIBRARIES}
         ${eigen_LIBRARIES}
         /usr/local/lib/${search_LIBRARIES}
-        yaml-cpp
         )
 
 add_executable(${PROJECT_NAME}_wspace_test src/workspace_test.cpp)
@@ -183,7 +180,6 @@ target_link_libraries(${PROJECT_NAME}_wspace_test
         ${catkin_LIBRARIES}
         ${eigen_LIBRARIES}
         /usr/local/lib/${search_LIBRARIES}
-        yaml-cpp
         )
 
 add_executable(${PROJECT_NAME}_ocmap_test src/occupancy_map_test.cpp)
@@ -193,7 +189,6 @@ target_link_libraries(${PROJECT_NAME}_ocmap_test
         ${catkin_LIBRARIES}
         ${eigen_LIBRARIES}
         /usr/local/lib/${search_LIBRARIES}
-        yaml-cpp
         )
 
 add_executable(${PROJECT_NAME}_egraph_test src/confspace_egraph_test.cpp)
@@ -203,7 +198,6 @@ target_link_libraries(${PROJECT_NAME}_egraph_test
         ${catkin_LIBRARIES}
         ${eigen_LIBRARIES}
         /usr/local/lib/${search_LIBRARIES}
-        yaml-cpp
         )
 
 

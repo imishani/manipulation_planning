@@ -186,42 +186,42 @@ public:
         return manip_action_space_->isPathValid(path);
     }
 
-    virtual bool getSuccessorEdgesWs(int curr_state_ind,
-                                   std::vector<std::vector<int>>& edges_state_ids,
-                                   std::vector<std::vector<double>> & edges_transition_costs) {
-        return manip_action_space_->getSuccessorEdges(curr_state_ind, edges_state_ids, edges_transition_costs);
+    virtual bool getSuccessorsWs(int curr_state_ind,
+                                 std::vector<int> &successors,
+                                 std::vector<double> &costs) {
+        return manip_action_space_->getSuccessors(curr_state_ind, successors, costs);
     }
 
-    virtual bool getSuccessorEdgesCs(int curr_state_ind,
-                                   std::vector<std::vector<int>>& edges_state_ids,
-                                   std::vector<std::vector<double>> & edges_transition_costs) {
-        return manip_action_space_->getSuccessorEdges(curr_state_ind, edges_state_ids, edges_transition_costs);
+    virtual bool getSuccessorsCs(int curr_state_ind,
+                                 std::vector<int> &successors,
+                                 std::vector<double> &costs) {
+        return manip_action_space_->getSuccessors(curr_state_ind, successors, costs);
     }
 
-    virtual bool getSuccessorEdgesWs(int curr_state_ind,
-                            std::vector<std::vector<int>>& edges_state_ids,
-                            std::vector<std::vector<double>> & edges_transition_costs,
-                            std::vector<std::vector<double>> & edge_transition_subcosts) {
+    virtual bool getSuccessorsWs(int curr_state_ind,
+                                 std::vector<int> &successors,
+                                 std::vector<double>& costs,
+                                 std::vector<double>& subcosts) {
         throw std::runtime_error("Not implemented.");
     }
 
-    virtual bool getSuccessorEdgesCs(int curr_state_ind,
-                            std::vector<std::vector<int>>& edges_state_ids,
-                            std::vector<std::vector<double>> & edges_transition_costs,
-                            std::vector<std::vector<double>> & edge_transition_subcosts) {
+    virtual bool getSuccessorsCs(int curr_state_ind,
+                                 std::vector<int> &successors,
+                                 std::vector<double>& costs,
+                                 std::vector<double>& subcosts) {
         throw std::runtime_error("Not implemented.");
     }
 
-    virtual bool getSuccessorEdges(int curr_state_ind,
-                            std::vector<std::vector<int>>& edges_state_ids,
-                            std::vector<std::vector<double>> & edges_transition_costs) override {
-        return manip_action_space_->getSuccessorEdges(curr_state_ind, edges_state_ids, edges_transition_costs);
+    virtual bool getSuccessors(int curr_state_ind,
+                       std::vector<int> &successors,
+                       std::vector<double> &costs) override {
+        return manip_action_space_->getSuccessors(curr_state_ind, successors, costs);
     }
 
-    virtual bool getSuccessorEdges(int curr_state_ind,
-                            std::vector<std::vector<int>>& edges_state_ids,
-                            std::vector<std::vector<double>> & edges_transition_costs,
-                            std::vector<std::vector<double>> & edge_transition_subcosts) override {
+    virtual bool getSuccessors(int curr_state_ind,
+                       std::vector<int>& successors,
+                       std::vector<double>& costs,
+                       std::vector<double>& subcosts) override {
         throw std::runtime_error("Not implemented.");
     }
 

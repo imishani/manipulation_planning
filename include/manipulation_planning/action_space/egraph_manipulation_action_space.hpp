@@ -356,16 +356,10 @@ namespace ims {
             return false;
         }
 
-        virtual bool getSuccessorEdgesWs(int curr_state_ind,
-                                    std::vector<std::vector<int>>& edges_state_ids,
-                                    std::vector<std::vector<double>> & edges_transition_costs) {
-            edges_state_ids.clear();
-            edges_transition_costs.clear();
-            // REMOVE.
-            std::vector<int> successors;
-            std::vector<double> costs;
-            // END REMOVE.
-
+        virtual bool getSuccessorsWs(int curr_state_ind,
+                                     std::vector<int>& successors,
+                                     std::vector<double> &costs)
+        {
             // get the current state
             auto curr_state = this->getRobotState(curr_state_ind);
             auto curr_state_val = curr_state->state;
@@ -430,27 +424,13 @@ namespace ims {
                     costs.push_back(cost);
                 }
             }
-
-            // REMOVE.
-            for (int i{0}; i < successors.size(); i++) {
-                edges_state_ids.push_back({curr_state_ind, successors[i]});
-                edges_transition_costs.push_back({costs[i], 0});
-            }
-            // END REMOVE.
-
             return true;
         }
 
-            virtual bool getSuccessorEdgesCs(int curr_state_ind,
-                                   std::vector<std::vector<int>>& edges_state_ids,
-                                   std::vector<std::vector<double>> & edges_transition_costs) {
-            edges_state_ids.clear();
-            edges_transition_costs.clear();
-            // REMOVE.
-            std::vector<int> successors;
-            std::vector<double> costs;
-            // END REMOVE.
-
+        virtual bool getSuccessorsCs(int curr_state_ind,
+                                     std::vector<int>& successors,
+                                     std::vector<double> &costs)
+        {
             std::vector<ActionSequence> actions;
             getActions(curr_state_ind, actions, false);
             // get the successors
@@ -488,28 +468,20 @@ namespace ims {
                     costs.push_back(1000);
                 }
             }
-
-            // REMOVE.
-            for (int i{0}; i < successors.size(); i++) {
-                edges_state_ids.push_back({curr_state_ind, successors[i]});
-                edges_transition_costs.push_back({costs[i], 0});
-            }
-            // END REMOVE.
-
             return true;
         }
 
-        bool getSuccessorEdges(int curr_state_ind,
-                                   std::vector<std::vector<int>>& edges_state_ids,
-                                   std::vector<std::vector<double>> & edges_transition_costs) override
+        bool getSuccessors(int curr_state_ind,
+                           std::vector<int> &successors,
+                           std::vector<double> &costs) override
         {
             if (manipulation_type_->getSpaceType() == ManipulationType::SpaceType::ConfigurationSpace)
             {
-                return getSuccessorEdgesCs(curr_state_ind, edges_state_ids, edges_transition_costs);
+                return getSuccessorsCs(curr_state_ind, successors, costs);
             }
             else
             {
-                return getSuccessorEdgesWs(curr_state_ind, edges_state_ids, edges_transition_costs);
+                return getSuccessorsWs(curr_state_ind, successors, costs);
             }
         }
 
