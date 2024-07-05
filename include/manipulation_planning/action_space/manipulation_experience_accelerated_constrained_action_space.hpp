@@ -186,42 +186,42 @@ public:
         return manip_action_space_->isPathValid(path);
     }
 
-    virtual bool getSuccessorsWs(int curr_state_ind,
-                                 std::vector<int> &successors,
-                                 std::vector<double> &costs) {
-        return manip_action_space_->getSuccessors(curr_state_ind, successors, costs);
+    virtual bool getSuccessorSequencesWs(int curr_state_ind,
+                                   std::vector<std::vector<int>>& seqs_state_ids,
+                                   std::vector<std::vector<double>> & seqs_transition_costs) {
+        return manip_action_space_->getSuccessorSequences(curr_state_ind, seqs_state_ids, seqs_transition_costs);
     }
 
-    virtual bool getSuccessorsCs(int curr_state_ind,
-                                 std::vector<int> &successors,
-                                 std::vector<double> &costs) {
-        return manip_action_space_->getSuccessors(curr_state_ind, successors, costs);
+    virtual bool getSuccessorSequencesCs(int curr_state_ind,
+                                   std::vector<std::vector<int>>& seqs_state_ids,
+                                   std::vector<std::vector<double>> & seqs_transition_costs) {
+        return manip_action_space_->getSuccessorSequences(curr_state_ind, seqs_state_ids, seqs_transition_costs);
     }
 
-    virtual bool getSuccessorsWs(int curr_state_ind,
-                                 std::vector<int> &successors,
-                                 std::vector<double>& costs,
-                                 std::vector<double>& subcosts) {
+    virtual bool getSuccessorSequencesWs(int curr_state_ind,
+                            std::vector<std::vector<int>>& seqs_state_ids,
+                            std::vector<std::vector<double>> & seqs_transition_costs,
+                            std::vector<std::vector<double>> & seqs_transition_subcosts) {
         throw std::runtime_error("Not implemented.");
     }
 
-    virtual bool getSuccessorsCs(int curr_state_ind,
-                                 std::vector<int> &successors,
-                                 std::vector<double>& costs,
-                                 std::vector<double>& subcosts) {
+    virtual bool getSuccessorSequencesCs(int curr_state_ind,
+                            std::vector<std::vector<int>>& seqs_state_ids,
+                            std::vector<std::vector<double>> & seqs_transition_costs,
+                            std::vector<std::vector<double>> & seqs_transition_subcosts) {
         throw std::runtime_error("Not implemented.");
     }
 
-    virtual bool getSuccessors(int curr_state_ind,
-                       std::vector<int> &successors,
-                       std::vector<double> &costs) override {
-        return manip_action_space_->getSuccessors(curr_state_ind, successors, costs);
+    virtual bool getSuccessorSequences(int curr_state_ind,
+                            std::vector<std::vector<int>>& seqs_state_ids,
+                            std::vector<std::vector<double>> & seqs_transition_costs) override {
+        return manip_action_space_->getSuccessorSequences(curr_state_ind, seqs_state_ids, seqs_transition_costs);
     }
 
-    virtual bool getSuccessors(int curr_state_ind,
-                       std::vector<int>& successors,
-                       std::vector<double>& costs,
-                       std::vector<double>& subcosts) override {
+    virtual bool getSuccessorSequences(int curr_state_ind,
+                            std::vector<std::vector<int>>& seqs_state_ids,
+                            std::vector<std::vector<double>> & seqs_transition_costs,
+                            std::vector<std::vector<double>> & seqs_transition_subcosts) override {
         throw std::runtime_error("Not implemented.");
     }
 

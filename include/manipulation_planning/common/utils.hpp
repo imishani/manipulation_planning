@@ -198,14 +198,14 @@ inline void from_euler_zyx(T y, T p, T r, Eigen::Matrix<T, 3, 3>& rot) {
 }
 
 template <typename T>
-void from_euler_zyx(T y, T p, T r, Eigen::Quaternion<T>& q) {
+inline void from_euler_zyx(T y, T p, T r, Eigen::Quaternion<T>& q) {
     Eigen::Matrix<T, 3, 3> R;
     from_euler_zyx(y, p, r, R);
     q = Eigen::Quaternion<T>(R);
 }
 
 template <typename T>
-void from_euler_zyx(T y, T p, T r, geometry_msgs::Pose& q) {
+inline void from_euler_zyx(T y, T p, T r, geometry_msgs::Pose& q) {
     Eigen::Matrix<T, 3, 3> R;
     from_euler_zyx(y, p, r, R);
     Eigen::Quaternion<T> quat(R);
@@ -213,14 +213,14 @@ void from_euler_zyx(T y, T p, T r, geometry_msgs::Pose& q) {
 }
 
 template <typename T>
-void normalize_euler_zyx(T& y, T& p, T& r) {
+inline void normalize_euler_zyx(T& y, T& p, T& r) {
     Eigen::Matrix<T, 3, 3> rot;
     from_euler_zyx(y, p, r, rot);
     get_euler_zyx(rot, y, p, r);
 }
 
 template <typename T>
-void normalize_euler_zyx(T* angles)  // in order r, p, y
+inline void normalize_euler_zyx(T* angles)  // in order r, p, y
 {
     Eigen::Matrix<T, 3, 3> rot;
     from_euler_zyx(angles[2], angles[1], angles[0], rot);
@@ -1032,14 +1032,14 @@ inline void moveitCollisionResultToCollisionsCollective(const collision_detectio
 }
 
 /// @brief Convert a mapping between robot names to states to a composite state given an ordering of the robots.
-void namedMultiAgentStateToStackedState(std::unordered_map<std::string, StateType> multi_state, std::vector<std::string> robot_names, StateType& stacked_state) {
+inline void namedMultiAgentStateToStackedState(std::unordered_map<std::string, StateType> multi_state, std::vector<std::string> robot_names, StateType& stacked_state) {
     stacked_state.clear();
     for (const auto& robot_name : robot_names) {
         stacked_state.insert(stacked_state.end(), multi_state[robot_name].begin(), multi_state[robot_name].end());
     }
 }
 
-void densifyPath(PathType& path, int num_intermediate_states = 3) {
+inline void densifyPath(PathType& path, int num_intermediate_states = 3) {
     // Add intermediate states to the path. These are interpolated between the states of the individual paths to verify transitions are okay.
     PathType path_dense{path[0]};
 
@@ -1062,7 +1062,7 @@ void densifyPath(PathType& path, int num_intermediate_states = 3) {
     path = path_dense;
 }
 
-void densifyMultiAgentPaths(MultiAgentPaths& paths, int num_intermediate_states = 3) {
+inline void densifyMultiAgentPaths(MultiAgentPaths& paths, int num_intermediate_states = 3) {
     // Iterate over the paths and densify them.
     for (auto& agent_id_and_path : paths) {
         int agent_id = agent_id_and_path.first;
@@ -1159,7 +1159,7 @@ std::unordered_map<int, bool> isMultiAgentPathValid(MultiAgentPaths paths,
 }
 
 /// @brief Smooth a set of paths, one for each agent.
-bool smoothMultiAgentPaths(MultiAgentPaths paths,
+inline bool smoothMultiAgentPaths(MultiAgentPaths paths,
                            const moveit::planning_interface::MoveGroupInterface& move_group_multi,
                            const planning_scene::PlanningScenePtr& planning_scene,
                            std::unordered_map<int, std::string> agent_names,
@@ -1335,7 +1335,7 @@ bool smoothMultiAgentPaths(MultiAgentPaths paths,
 }
 
 /// @brief Shortcut a path with a context of other agents: not changing the path of other agents or colliding with it.
-bool shortcutPath(std::string agent_name,
+inline bool shortcutPath(std::string agent_name,
                   MultiAgentPaths paths,
                   const moveit::planning_interface::MoveGroupInterface& move_group_multi,
                   const planning_scene::PlanningScenePtr& planning_scene,
@@ -1490,7 +1490,7 @@ bool shortcutPath(std::string agent_name,
 }
 
 /// @brief Shortcut paths for multiple agents. Going one at a time around.
-bool shortcutMultiAgentPathsIterative(
+inline bool shortcutMultiAgentPathsIterative(
     MultiAgentPaths paths,
     const moveit::planning_interface::MoveGroupInterface& move_group_multi,
     const planning_scene::PlanningScenePtr& planning_scene,
@@ -1522,6 +1522,37 @@ bool shortcutMultiAgentPathsIterative(
     smoothed_paths = paths_copy;
 
     return true;
+}
+
+/// @brief Interpolate path between two states
+/// @param start The start state
+/// @param end The end state
+/// @param resolution The resolution of the path (default: 0.005 rad)
+/// @return The interpolated path
+inline PathType interpolatePath(const StateType &start, const StateType &end,
+                                const double resolution = 0.05) {
+    // TODO: Currently only works for configuration space
+    assert(start.size() == end.size());
+    PathType path;
+    // get the maximum distance between the two states
+    double max_distance{0.0};
+    for (int i{0}; i < start.size(); i++) {
+        double distance = std::abs(start[i] - end[i]);
+        if (distance > max_distance) {
+            max_distance = distance;
+        }
+    }
+    // calculate the number of steps
+    int steps = std::ceil(max_distance / resolution);
+    // interpolate the path
+    for (int i{0}; i < steps; i++) {
+        StateType state;
+        for (int j{0}; j < start.size(); j++) {
+            state.push_back(start[j] + (end[j] - start[j]) * i / steps);
+        }
+        path.push_back(state);
+    }
+    return path;
 }
 
 }  // namespace ims

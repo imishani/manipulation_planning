@@ -356,10 +356,16 @@ namespace ims {
             return false;
         }
 
-        virtual bool getSuccessorsWs(int curr_state_ind,
-                                     std::vector<int>& successors,
-                                     std::vector<double> &costs)
-        {
+        virtual bool getSuccessorSequencesWs(int curr_state_ind,
+                                    std::vector<std::vector<int>>& seqs_state_ids,
+                                    std::vector<std::vector<double>> & seqs_transition_costs) {
+            seqs_state_ids.clear();
+            seqs_transition_costs.clear();
+            // REMOVE.
+            std::vector<int> successors;
+            std::vector<double> costs;
+            // END REMOVE.
+
             // get the current state
             auto curr_state = this->getRobotState(curr_state_ind);
             auto curr_state_val = curr_state->state;
@@ -424,13 +430,27 @@ namespace ims {
                     costs.push_back(cost);
                 }
             }
+
+            // REMOVE.
+            for (int i{0}; i < successors.size(); i++) {
+                seqs_state_ids.push_back({curr_state_ind, successors[i]});
+                seqs_transition_costs.push_back({costs[i], 0});
+            }
+            // END REMOVE.
+
             return true;
         }
 
-        virtual bool getSuccessorsCs(int curr_state_ind,
-                                     std::vector<int>& successors,
-                                     std::vector<double> &costs)
-        {
+            virtual bool getSuccessorSequencesCs(int curr_state_ind,
+                                   std::vector<std::vector<int>>& seqs_state_ids,
+                                   std::vector<std::vector<double>> & seqs_transition_costs) {
+            seqs_state_ids.clear();
+            seqs_transition_costs.clear();
+            // REMOVE.
+            std::vector<int> successors;
+            std::vector<double> costs;
+            // END REMOVE.
+
             std::vector<ActionSequence> actions;
             getActions(curr_state_ind, actions, false);
             // get the successors
@@ -468,20 +488,28 @@ namespace ims {
                     costs.push_back(1000);
                 }
             }
+
+            // REMOVE.
+            for (int i{0}; i < successors.size(); i++) {
+                seqs_state_ids.push_back({curr_state_ind, successors[i]});
+                seqs_transition_costs.push_back({costs[i], 0});
+            }
+            // END REMOVE.
+
             return true;
         }
 
-        bool getSuccessors(int curr_state_ind,
-                           std::vector<int> &successors,
-                           std::vector<double> &costs) override
+        bool getSuccessorSequences(int curr_state_ind,
+                                   std::vector<std::vector<int>>& seqs_state_ids,
+                                   std::vector<std::vector<double>> & seqs_transition_costs) override
         {
             if (manipulation_type_->getSpaceType() == ManipulationType::SpaceType::ConfigurationSpace)
             {
-                return getSuccessorsCs(curr_state_ind, successors, costs);
+                return getSuccessorSequencesCs(curr_state_ind, seqs_state_ids, seqs_transition_costs);
             }
             else
             {
-                return getSuccessorsWs(curr_state_ind, successors, costs);
+                return getSuccessorSequencesWs(curr_state_ind, seqs_state_ids, seqs_transition_costs);
             }
         }
 
