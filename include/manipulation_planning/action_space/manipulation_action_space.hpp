@@ -227,7 +227,7 @@ struct ManipulationType : ActionType {
         }
     }
 
-    void getPrimActionEdges(std::vector<ActionSequence>& action_seqs,
+    void getPrimActionSequences(std::vector<ActionSequence>& action_seqs,
                             std::vector<std::vector<double>> & action_transition_costs ) override {
 
         // Read the motion primitive file if needed.
@@ -236,41 +236,6 @@ struct ManipulationType : ActionType {
         }
         // Populate the actions_ vector if not done so already.
         if (action_seqs_.empty() || action_transition_times_.empty()) {
-            switch (action_type_) {
-                case ActionType::MOVE:
-                    switch (space_type_) {
-                        case SpaceType::ConfigurationSpace: {
-                            // TODO: Add snap option
-                            action_seqs_.insert(action_seqs_.end(), long_mprim_seqs_.begin(), long_mprim_seqs_.end());
-                            action_seqs_.insert(action_seqs_.end(), short_mprim_seqs_.begin(), short_mprim_seqs_.end());
-                            action_transition_times_.insert(action_transition_times_.end(), long_mprim_transition_times_.begin(), long_mprim_transition_times_.end());
-                            action_transition_times_.insert(action_transition_times_.end(), short_mprim_transition_times_.begin(), short_mprim_transition_times_.end());
-
-                        } break;
-                        case SpaceType::WorkSpace: {
-                            throw std::runtime_error ("Work space motion primitives are not implemented yet.");
-                        } break;
-                    }
-                    break;
-                case ActionType::GRASP:
-                    break;
-                case ActionType::RELEASE:
-                    break;
-            }
-        }
-        action_seqs = action_seqs_;
-        action_transition_costs = action_transition_times_;
-    }
-
-    /// @brief Get the possible actions
-    /// @return A vector of all possible actions
-    std::vector<Action> getPrimActions() override {
-        // Read the motion primitive file if needed.
-        if (short_mprim_seqs_.empty() && long_mprim_seqs_.empty()) {
-            readMPfile();
-        }
-        // Populate the actions_ vector if not done so already.
-        if (action_seqs_.empty()) {
             switch (action_type_) {
                 case ActionType::MOVE:
                     switch (space_type_) {
@@ -339,10 +304,22 @@ struct ManipulationType : ActionType {
                     break;
             }
         }
+        action_seqs = action_seqs_;
+        action_transition_costs = action_transition_times_;
+    }
+
+    /// @brief Get the possible actions
+    /// @return A vector of all possible actions
+    [[deprecated("Use getPrimActionSequences() instead.") ]]
+    std::vector<Action> getPrimActions() override {
+        // Call the getPrimActionSequences function.
+        std::vector<ActionSequence> action_seqs;
+        std::vector<std::vector<double>> action_transition_times;
+        getPrimActionSequences(action_seqs, action_transition_times);
 
         // Backwards compatability hack. This will return the actions_ vector where actions are only single-step actions.
         std::vector<Action> actions;
-        for (auto action_seq : action_seqs_) {
+        for (auto action_seq : action_seqs) {
             actions.push_back({action_seq.back()});
             // Only allow this if the action is a single step action (aka with exactly two elements in the sequence).
             if (action_seq.size() != 2) {
@@ -352,52 +329,86 @@ struct ManipulationType : ActionType {
         return actions;
     }
 
+    /// @brief Get the possible action sequences in an adaptive manner.
+    /// \param start_dist
+    /// \param goal_dist
+    /// \param action_seqs
+    /// \param action_transition_costs
+    /// \param is_add_long_with_short If true, then the long primitives are added to the action set with the short primitives.
+    void getAdaptivePrimActionSequences(double &start_dist,
+                                    double &goal_dist,
+                                    std::vector<ActionSequence>& action_seqs,
+                                    std::vector<std::vector<double>> & action_transition_costs,
+                                    bool is_add_long_with_short = false) {
+        if (short_mprim_seqs_.empty() && long_mprim_seqs_.empty()) {
+            readMPfile();
+        }
+        action_seqs.clear();
+        action_transition_costs.clear();
+        // Decide whether we are in the short- or long-primitive region.
+        bool is_short = mprim_active_type_.short_dist.first &&
+                (start_dist < mprim_active_type_.short_dist.second || goal_dist < mprim_active_type_.short_dist.second);
+
+        // Add long primitives under two conditions.
+        // 1. If need to add short and adding the long primitives to the set of primitives is required, do that first.
+        // 2. If the goal distance is larger than the long distance threshold, add the long primitives.
+        if ((is_short && is_add_long_with_short) ||
+            (   !is_short &&
+                mprim_active_type_.long_dist.first ) ){
+            action_seqs.insert(action_seqs.end(), long_mprim_seqs_.begin(), long_mprim_seqs_.end());
+            action_transition_costs.insert(action_transition_costs.end(), long_mprim_transition_times_.begin(), long_mprim_transition_times_.end());
+        }
+        // Add the short motion primitives as well if required.
+        if (is_short) {
+            action_seqs.insert(action_seqs.end(), short_mprim_seqs_.begin(), short_mprim_seqs_.end());
+            action_transition_costs.insert(action_transition_costs.end(), short_mprim_transition_times_.begin(), short_mprim_transition_times_.end());
+        }
+
+        // If allowed, and the cartesian goal distance is less than a threshold, insert snap primitive. The time for this is 1.
+        ActionSequence snap_action_seq = {{0,0,0,0,0,0}, {INF_DOUBLE, INF_DOUBLE, INF_DOUBLE, INF_DOUBLE, INF_DOUBLE, INF_DOUBLE}};
+        std::vector<double> snap_transition_time = {1.0, 0.0};
+        // TODO(yoraish): the xyz and rpy snaps are not handled correctly yet.
+        // Snap I: only xyz.
+        if (mprim_active_type_.snap_xyz.first && goal_dist < mprim_active_type_.snap_xyz.second) {
+            action_seqs.push_back(snap_action_seq);
+            action_transition_costs.push_back(snap_transition_time);
+        }
+        // Snap II: only rpy.
+        if (mprim_active_type_.snap_rpy.first && goal_dist < mprim_active_type_.snap_rpy.second) {
+            action_seqs.push_back(snap_action_seq);
+            action_transition_costs.push_back(snap_transition_time);
+        }
+        // Snap III: xyz and rpy. (Most common).
+        if (mprim_active_type_.snap_xyzrpy.first && goal_dist < mprim_active_type_.snap_xyzrpy.second) {
+            action_seqs.push_back(snap_action_seq);
+            action_transition_costs.push_back(snap_transition_time);
+            ROS_DEBUG_NAMED("adaptive_mprim", "snap xyzrpy");
+            ROS_DEBUG_STREAM("goal_dist: " << goal_dist);
+        }
+    }
+
     /// @brief Get adaptive motion primitives
     /// @param start_dist The distance from the start
     /// @param goal_dist The distance from the goal
     /// @return A vector of actions
-    [[deprecated ("Use getAdaptiveActionEdges() instead.") ]]
-    std::vector<Action> getAdaptiveActions(double &start_dist, double &goal_dist) {
-        if (short_mprim_seqs_.empty() && long_mprim_seqs_.empty()) {
-            readMPfile();
-        }
-        action_seqs_.clear();
-        // Decide whether we want to use short or long primitives.
-        bool use_short = false;
-        if (mprim_active_type_.short_dist.first && (goal_dist < mprim_active_type_.short_dist.second)) {
-            use_short = true;
-        }
-        // Add the short or long primitives.
-        std::vector<ActionSequence> & prim_action_seqs = use_short ? short_mprim_seqs_ : long_mprim_seqs_;
-        // Add the actions to the list of actions. This only uses the last state of action sequences.
+    /// @note This should be named getAdaptivePrimActions since it returns non-transformed actions (delta from origin).
+    [[ deprecated("Use getAdaptivePrimActionSequences() instead.") ]]
+    std::vector<Action> getAdaptiveActions(double &start_dist,
+                                           double &goal_dist,
+                                           bool is_add_long_with_short = false
+                                           ) {
+        // Call the getAdaptivePrimActionSequences function.
+        std::vector<ActionSequence> action_seqs;
+        std::vector<std::vector<double>> action_transition_times;
+        getAdaptivePrimActionSequences(start_dist, goal_dist, action_seqs, action_transition_times, is_add_long_with_short);
         std::vector<Action> actions;
-        for (int i{0}; i < prim_action_seqs.size(); i++) {
-            // Abort of this action sequence is not of a single step (two states).
-            if (prim_action_seqs[i].size() != 2) {
+        // Backwards compatability hack. This will return the only single-step actions and abort if the action sequences
+        // are not of a single step (two states).
+        for (auto action_seq : action_seqs) {
+            actions.push_back({action_seq.back()});
+            if (action_seq.size() != 2) {
                 throw std::runtime_error("The action sequence is not a single step action, GetAdaptiveActions will lose information. Aborting.");
             }
-            actions.push_back(prim_action_seqs[i].back());
-            action_seqs_.push_back(prim_action_seqs[i]);
-            action_transition_times_.push_back(use_short ? short_mprim_transition_times_[i] : long_mprim_transition_times_[i]);
-        }
-
-        // If allowed, and the cartesian goal distance is less than a threshold, insert snap primitive.
-        // Snap I: only xyz.
-        if (mprim_active_type_.snap_xyz.first && goal_dist < mprim_active_type_.snap_xyz.second) {
-            actions.push_back({INF_DOUBLE, INF_DOUBLE, INF_DOUBLE,
-                                INF_DOUBLE, INF_DOUBLE, INF_DOUBLE});
-        }
-        // Snap II: only rpy.
-        if (mprim_active_type_.snap_rpy.first && goal_dist < mprim_active_type_.snap_rpy.second) {
-            actions.push_back({INF_DOUBLE, INF_DOUBLE, INF_DOUBLE,
-                                INF_DOUBLE, INF_DOUBLE, INF_DOUBLE});
-        }
-        // Snap III: xyz and rpy. (Most common).
-        if (mprim_active_type_.snap_xyzrpy.first && goal_dist < mprim_active_type_.snap_xyzrpy.second) {
-            actions.push_back({INF_DOUBLE, INF_DOUBLE, INF_DOUBLE,
-                                INF_DOUBLE, INF_DOUBLE, INF_DOUBLE});
-            ROS_DEBUG_NAMED("adaptive_mprim", "snap xyzrpy");
-            ROS_DEBUG_STREAM("goal_dist: " << goal_dist);
         }
         return actions;
     }
@@ -485,21 +496,30 @@ public:
         vis_pub_ = nh_.advertise<visualization_msgs::Marker>("visualization_marker", 0);
     }
 
-    void getActions(int state_id,
-                    std::vector<ActionSequence> &actions_seq,
-                    bool check_validity) override {
+    void getActionSequences(int state_id,
+                            std::vector<ActionSequence> & action_seqs,
+                            std::vector<std::vector<double>> & action_transition_costs,
+                            bool check_validity) {
         auto curr_state = this->getRobotState(state_id);
         auto curr_state_val = curr_state->state;
         if (bfs_heuristic_ == nullptr) {
-            auto actions = manipulation_type_->getPrimActions();
-            for (int i{0}; i < actions.size(); i++) {
-                auto action = actions[i];
-                ActionSequence action_seq{curr_state_val};
-                // push back the new state after the action
-                StateType next_state_val(curr_state_val.size());
-                std::transform(curr_state_val.begin(), curr_state_val.end(), action.begin(), next_state_val.begin(), std::plus<>());
-                action_seq.push_back(next_state_val);
-                actions_seq.push_back(action_seq);
+            std::vector<ActionSequence> prim_actions_seqs;
+            std::vector<std::vector<double>> prim_action_transition_costs;
+            manipulation_type_->getPrimActionSequences(prim_actions_seqs, prim_action_transition_costs);
+            for (int i{0}; i < prim_actions_seqs.size(); i++) {
+                auto prim_action_seq = prim_actions_seqs[i];
+                // Create the transformed action sequence. The action costs do not change.
+                ActionSequence transformed_action_seq;
+                std::vector<double> transformed_action_transition_costs = prim_action_transition_costs[i];
+                for (int i = 0; i < prim_action_seq.size(); i++) {
+                    const Action & prim_action = prim_action_seq[i];
+                    StateType next_state_val(curr_state_val.size());
+                    std::transform(curr_state_val.begin(), curr_state_val.end(), prim_action.begin(), next_state_val.begin(),
+                                   std::plus<>());
+                    transformed_action_seq.push_back(next_state_val);
+                }
+                action_seqs.push_back(transformed_action_seq);
+                action_transition_costs.push_back(transformed_action_transition_costs);
             }
         }
         else {
@@ -513,25 +533,44 @@ public:
             auto start_dist = bfs_heuristic_->getMetricStartDistance(curr_state->state_mapped.at(0),
                                                                      curr_state->state_mapped.at(1),
                                                                      curr_state->state_mapped.at(2));
-            auto actions = manipulation_type_->getAdaptiveActions(start_dist, goal_dist);
+            std::vector<ActionSequence> prim_action_seqs;
+            std::vector<std::vector<double>> prim_action_transition_costs;
+            manipulation_type_->getAdaptivePrimActionSequences(start_dist,
+                                                                  goal_dist,
+                                                                  prim_action_seqs,
+                                                                  prim_action_transition_costs,
+                                                                  true);
 
-            for (int i{0}; i < actions.size(); i++) {
-                auto action = actions[i];
-                ActionSequence action_seq{curr_state_val};
+            for (int i{0}; i < prim_action_seqs.size(); i++) {
+                auto prim_action_seq = prim_action_seqs[i];
+                ActionSequence transformed_action_seq;
+                std::vector<double> transformed_action_transition_costs = prim_action_transition_costs[i];
                 // if the action is snap, then the next state is the goal state
                 // TODO: Add the option to have a goal state defined in ws even if planning in conf space
-                if (action[0] == INF_DOUBLE) {
-                    action_seq.push_back(bfs_heuristic_->goal_);  // TODO: It is wierd that I am using the heuristic here
+                if (prim_action_seq.back()[0] == INF_DOUBLE) {
+                    transformed_action_seq = {curr_state_val, bfs_heuristic_->goal_};  // TODO: It is wierd that I am using the heuristic here
+                    transformed_action_transition_costs = {1.0, 0.0};
                 }
                 else {
-                    // push back the new state after the action
-                    StateType next_state_val(curr_state_val.size());
-                    std::transform(curr_state_val.begin(), curr_state_val.end(), action.begin(), next_state_val.begin(), std::plus<>());
-                    action_seq.push_back(next_state_val);
+                    for (int i = 0; i < prim_action_seq.size(); i++) {
+                        const Action & prim_action = prim_action_seq[i];
+                        StateType next_state_val(curr_state_val.size());
+                        std::transform(curr_state_val.begin(), curr_state_val.end(), prim_action.begin(), next_state_val.begin(),
+                                       std::plus<>());
+                        transformed_action_seq.push_back(next_state_val);
+                    }
                 }
-                actions_seq.push_back(action_seq);
+                action_seqs.push_back(transformed_action_seq);
+                action_transition_costs.push_back(transformed_action_transition_costs);
             }
         }
+    }
+
+    void getActions(int state_id,
+                    std::vector<ActionSequence> & action_seqs,
+                    bool check_validity) override {
+        std::vector<std::vector<double>> action_transition_costs;
+        getActionSequences(state_id, action_seqs, action_transition_costs, check_validity);
     }
 
     /// @brief Set the manipulation space type
@@ -673,37 +712,6 @@ public:
         return false;
     }
 
-    /// @brief Interpolate path between two states
-    /// @param start The start state
-    /// @param end The end state
-    /// @param resolution The resolution of the path (default: 0.005 rad)
-    /// @return The interpolated path
-    static PathType interpolatePath(const StateType &start, const StateType &end,
-                                    const double resolution = 0.05) {
-        // TODO: Currently only works for configuration space
-        assert(start.size() == end.size());
-        PathType path;
-        // get the maximum distance between the two states
-        double max_distance{0.0};
-        for (int i{0}; i < start.size(); i++) {
-            double distance = std::abs(start[i] - end[i]);
-            if (distance > max_distance) {
-                max_distance = distance;
-            }
-        }
-        // calculate the number of steps
-        int steps = std::ceil(max_distance / resolution);
-        // interpolate the path
-        for (int i{0}; i < steps; i++) {
-            StateType state;
-            for (int j{0}; j < start.size(); j++) {
-                state.push_back(start[j] + (end[j] - start[j]) * i / steps);
-            }
-            path.push_back(state);
-        }
-        return path;
-    }
-
     bool isStateToStateValid(const StateType &start, const StateType &end) {
         PathType path = interpolatePath(start, end);
         return isPathValid(path);
@@ -741,11 +749,12 @@ public:
         return false;
     }
 
-    virtual bool getSuccessorEdgesWs(int curr_state_ind,
-                                    std::vector<std::vector<int>>& edges_state_ids,
-                                    std::vector<std::vector<double>> & edges_transition_costs) {
-        edges_state_ids.clear();
-        edges_transition_costs.clear();
+    virtual bool getSuccessorSequencesWs(int curr_state_ind,
+                                    std::vector<std::vector<int>>& seqs_state_ids,
+                                    std::vector<std::vector<double>> & seqs_transition_costs) {
+        throw std::runtime_error("TODO: Not implemented yet.");
+        seqs_state_ids.clear();
+        seqs_transition_costs.clear();
         // REMOVE.
         std::vector<int> successors;
         std::vector<double> costs;
@@ -813,73 +822,74 @@ public:
 
         // REMOVE.
         for (int i{0}; i < successors.size(); i++) {
-            edges_state_ids.push_back({curr_state_ind, successors[i]});
-            edges_transition_costs.push_back({costs[i], 0});
+            seqs_state_ids.push_back({curr_state_ind, successors[i]});
+            seqs_transition_costs.push_back({costs[i], 0});
         }
         // END REMOVE.
 
         return true;
     }
 
-    virtual bool getSuccessorEdgesCs(int curr_state_ind,
-                                   std::vector<std::vector<int>>& edges_state_ids,
-                                   std::vector<std::vector<double>> & edges_transition_costs) {
-        edges_state_ids.clear();
-        edges_transition_costs.clear();
-        // REMOVE.
-        std::vector<int> successors;
-        std::vector<double> costs;
-        // END REMOVE.
+    virtual bool getSuccessorSequencesCs(int curr_state_ind,
+                                   std::vector<std::vector<int>>& seqs_state_ids,
+                                   std::vector<std::vector<double>> & seqs_transition_costs) {
+        seqs_state_ids.clear();
+        seqs_transition_costs.clear();
 
-        std::vector<ActionSequence> actions;
-        getActions(curr_state_ind, actions, false);
-        // get the successors
-        for (auto &action : actions) {
-            // the first state is the current state and the last state is the successor
-            auto curr_state_val = action.front();
-            auto new_state_val = action.back();
-            // normalize the angles
-            normalizeAngles(new_state_val, joint_limits_);
-            // discretize the state
-            roundStateToDiscretization(new_state_val, manipulation_type_->state_discretization_);
-            // check if the state went through discontinuity
-            bool discontinuity{false};
-            // check for maximum absolute action
-            for (int i{0}; i < curr_state_val.size(); i++) {
-                if (new_state_val[i] < joint_limits_[i].first || new_state_val[i] > joint_limits_[i].second) {
-                    discontinuity = true;
-                    break;
+        std::vector<ActionSequence> action_seqs;
+        std::vector<std::vector<double>> action_transition_costs;
+        getActionSequences(curr_state_ind, action_seqs, action_transition_costs, false);
+        // Get the successors. Each successor is a sequence of state_ids and a sequence of transition costs.
+        for (size_t i{0}; i < action_seqs.size(); i++) {
+            ActionSequence & action_seq = action_seqs[i];
+            // Objects for the successor resulting from this action.
+            std::vector<int> successor_seq_state_ids{curr_state_ind};
+            std::vector<double> successor_seq_transition_costs = action_transition_costs[i];
+            // The first state is the current state and the last state is the successor.
+            // Go through all the states in the sequence, normalize angles, discretize, and check for validity.
+            // Normalize and discretize the first state and then go through all pairs [i, i+1].
+            // The first state is assumed to be valid.
+            normalizeAngles(action_seq.front(), joint_limits_);
+            roundStateToDiscretization(action_seq.front(), manipulation_type_->state_discretization_);
+            for (size_t j{0}; j < action_seq.size() - 1; j++) {
+                auto curr_state_val = action_seq[j];
+                auto new_state_val = action_seq[j + 1];
+                // Normalize the angles.
+                normalizeAngles(new_state_val, joint_limits_);
+                // Discretize the state.
+                roundStateToDiscretization(new_state_val, manipulation_type_->state_discretization_);
+                // Check if the state transition went through discontinuity.
+                bool discontinuity{false};
+                // check for maximum absolute action
+                for (int dim{0}; dim < curr_state_val.size(); dim++) {
+                    if (new_state_val[dim] < joint_limits_[dim].first || new_state_val[dim] > joint_limits_[dim].second) {
+                        discontinuity = true;
+                        break;
+                    }
+                }
+
+                if (!discontinuity && isStateToStateValid(curr_state_val, new_state_val)) {
+                    // create a new state
+                    int next_state_ind = getOrCreateRobotState(new_state_val);
+                    // add the state to the successors
+                    successor_seq_state_ids.push_back(next_state_ind);
+                    // Transition costs were already added before.
                 }
             }
-
-            if (!discontinuity && isStateToStateValid(curr_state_val, new_state_val)) {
-                // create a new state
-                int next_state_ind = getOrCreateRobotState(new_state_val);
-                // add the state to the successors
-                successors.push_back(next_state_ind);
-                // add the cost
-                costs.push_back(1000);
-            }
+            seqs_state_ids.push_back(successor_seq_state_ids);
+            seqs_transition_costs.push_back(successor_seq_transition_costs);
         }
-
-        // REMOVE.
-        for (int i{0}; i < successors.size(); i++) {
-            edges_state_ids.push_back({curr_state_ind, successors[i]});
-            edges_transition_costs.push_back({costs[i], 0});
-        }
-        // END REMOVE.
-
         return true;
     }
 
-    bool getSuccessorEdges(int curr_state_ind,
-                           std::vector<std::vector<int>>& edges_state_ids,
-                           std::vector<std::vector<double>> & edges_transition_costs) override {
+    bool getSuccessorSequences(int curr_state_ind,
+                           std::vector<std::vector<int>>& seqs_state_ids,
+                           std::vector<std::vector<double>> & seqs_transition_costs) override {
         if (manipulation_type_->getSpaceType() == ManipulationType::SpaceType::ConfigurationSpace) {
-            return getSuccessorEdgesCs(curr_state_ind, edges_state_ids, edges_transition_costs);
+            return getSuccessorSequencesCs(curr_state_ind, seqs_state_ids, seqs_transition_costs);
         }
         else {
-            return getSuccessorEdgesWs(curr_state_ind, edges_state_ids, edges_transition_costs);
+            return getSuccessorSequencesWs(curr_state_ind, seqs_state_ids, seqs_transition_costs);
         }
     }
 

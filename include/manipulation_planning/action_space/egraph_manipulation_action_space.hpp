@@ -356,11 +356,11 @@ namespace ims {
             return false;
         }
 
-        virtual bool getSuccessorEdgesWs(int curr_state_ind,
-                                    std::vector<std::vector<int>>& edges_state_ids,
-                                    std::vector<std::vector<double>> & edges_transition_costs) {
-            edges_state_ids.clear();
-            edges_transition_costs.clear();
+        virtual bool getSuccessorSequencesWs(int curr_state_ind,
+                                    std::vector<std::vector<int>>& seqs_state_ids,
+                                    std::vector<std::vector<double>> & seqs_transition_costs) {
+            seqs_state_ids.clear();
+            seqs_transition_costs.clear();
             // REMOVE.
             std::vector<int> successors;
             std::vector<double> costs;
@@ -433,19 +433,19 @@ namespace ims {
 
             // REMOVE.
             for (int i{0}; i < successors.size(); i++) {
-                edges_state_ids.push_back({curr_state_ind, successors[i]});
-                edges_transition_costs.push_back({costs[i], 0});
+                seqs_state_ids.push_back({curr_state_ind, successors[i]});
+                seqs_transition_costs.push_back({costs[i], 0});
             }
             // END REMOVE.
 
             return true;
         }
 
-            virtual bool getSuccessorEdgesCs(int curr_state_ind,
-                                   std::vector<std::vector<int>>& edges_state_ids,
-                                   std::vector<std::vector<double>> & edges_transition_costs) {
-            edges_state_ids.clear();
-            edges_transition_costs.clear();
+            virtual bool getSuccessorSequencesCs(int curr_state_ind,
+                                   std::vector<std::vector<int>>& seqs_state_ids,
+                                   std::vector<std::vector<double>> & seqs_transition_costs) {
+            seqs_state_ids.clear();
+            seqs_transition_costs.clear();
             // REMOVE.
             std::vector<int> successors;
             std::vector<double> costs;
@@ -491,25 +491,25 @@ namespace ims {
 
             // REMOVE.
             for (int i{0}; i < successors.size(); i++) {
-                edges_state_ids.push_back({curr_state_ind, successors[i]});
-                edges_transition_costs.push_back({costs[i], 0});
+                seqs_state_ids.push_back({curr_state_ind, successors[i]});
+                seqs_transition_costs.push_back({costs[i], 0});
             }
             // END REMOVE.
 
             return true;
         }
 
-        bool getSuccessorEdges(int curr_state_ind,
-                                   std::vector<std::vector<int>>& edges_state_ids,
-                                   std::vector<std::vector<double>> & edges_transition_costs) override
+        bool getSuccessorSequences(int curr_state_ind,
+                                   std::vector<std::vector<int>>& seqs_state_ids,
+                                   std::vector<std::vector<double>> & seqs_transition_costs) override
         {
             if (manipulation_type_->getSpaceType() == ManipulationType::SpaceType::ConfigurationSpace)
             {
-                return getSuccessorEdgesCs(curr_state_ind, edges_state_ids, edges_transition_costs);
+                return getSuccessorSequencesCs(curr_state_ind, seqs_state_ids, seqs_transition_costs);
             }
             else
             {
-                return getSuccessorEdgesWs(curr_state_ind, edges_state_ids, edges_transition_costs);
+                return getSuccessorSequencesWs(curr_state_ind, seqs_state_ids, seqs_transition_costs);
             }
         }
 
