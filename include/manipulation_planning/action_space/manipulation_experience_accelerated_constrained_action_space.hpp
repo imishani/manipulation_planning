@@ -351,6 +351,13 @@ public:
     std::shared_ptr<MoveitInterface> getSceneInterface() {
         return moveit_interface_;
     }
+
+    void getActionSequences(int state_id,
+                            std::vector<ActionSequence> & action_seqs,
+                            std::vector<std::vector<double>> & action_transition_costs,
+                            bool check_validity) {
+        manip_action_space_->getActionSequences(state_id, action_seqs, action_transition_costs, check_validity);
+    }
     };
 }  // namespace ims
 
