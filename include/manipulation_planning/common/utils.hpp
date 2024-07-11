@@ -98,6 +98,18 @@ void deg2rad(std::vector<T>& state, const std::vector<bool>& valid_mask = std::v
     }
 }
 
+template<typename T>
+T radianDifference(T a, T b) {
+    T diff = a - b;
+    if (diff > M_PI) {
+        diff -= 2 * M_PI;
+    }
+    else if (diff < -M_PI) {
+        diff += 2 * M_PI;
+    }
+    return diff;
+}
+
 inline void negateState(StateType& state, const std::vector<bool>& valid_mask = std::vector<bool>()) {
     // If the mask is not passed, then all the dimensions are assumed to be valid.
     bool is_valid_mask_passed = !valid_mask.empty();
@@ -340,8 +352,8 @@ inline bool profileTrajectory(const StateType& start,
                               const std::vector<StateType>& trajectory,
                               const moveit::planning_interface::MoveGroupInterface& move_group_,
                               moveit_msgs::RobotTrajectory& trajectory_msg,
-                              double velocity_scaling_factor = 0.2,
-                              double acceleration_scaling_factor = 0.2) {
+                              double velocity_scaling_factor = 0.1,
+                              double acceleration_scaling_factor = 0.1) {
     trajectory_msg.joint_trajectory.header.frame_id = move_group_.getPlanningFrame();
     trajectory_msg.joint_trajectory.joint_names = move_group_.getActiveJoints();
     trajectory_msg.joint_trajectory.points.resize(trajectory.size());
