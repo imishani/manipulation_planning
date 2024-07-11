@@ -293,6 +293,18 @@ public:
         vis_id_++;
     }
 
+    /// @brief Visualize a state via its end effector pose in rviz for debugging.
+    /// @param state The state to visualize, of format {x, y, z, roll, pitch, yaw} [m, rad].
+    void visualizePose(const StateType &state) {
+        assert(state.size() == 6);
+        geometry_msgs::Pose pose;
+        pose.position.x = state[0];
+        pose.position.y = state[1];
+        pose.position.z = state[2];
+        pose.orientation = tf::createQuaternionMsgFromRollPitchYaw(state[3], state[4], state[5]);
+        visualizePose(pose);
+    }
+
     /// @brief Visualize a sphere in rviz for debugging.
     void visualizeSphere(int x, int y, int z, double r) {
         visualization_msgs::Marker marker;
