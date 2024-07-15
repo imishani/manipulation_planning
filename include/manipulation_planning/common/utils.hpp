@@ -147,10 +147,10 @@ inline void normalizeAngles(std::vector<T>& state, std::vector<std::pair<T, T>>&
         }
 
         // Normalize the dimension to the range [joint_limits[i].first, joint_limits[i].second] and request angles to be in the range of [-pi, pi], if it is not in the range of the joint limits and it is valid according to the mask.
-        if (state[i] > joint_limits[i].second) {
+        while (state[i] > joint_limits[i].second) {
             state[i] = state[i] - 2 * M_PI;
         }
-        else if (state[i] < joint_limits[i].first) {
+        while (state[i] < joint_limits[i].first) {
             state[i] = state[i] + 2 * M_PI;
         }
     }
@@ -174,10 +174,10 @@ inline void normalizeAngles(std::vector<T>& state, const std::vector<bool>& vali
         }
 
         // Normalize the dimension, if it is not in the range of the joint limits and it is valid according to the mask.
-        if (state[i] > M_PI) {
+        while (state[i] > M_PI) {
             state[i] = state[i] - 2 * M_PI;
         }
-        else if (state[i] < -M_PI) {
+        while (state[i] < -M_PI) {
             state[i] = state[i] + 2 * M_PI;
         }
     }

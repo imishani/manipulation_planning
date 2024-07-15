@@ -227,7 +227,7 @@ struct ManipulationType : ActionType {
         }
     }
 
-    void getPrimActionSequences(std::vector<ActionSequence>& action_seqs,
+    void getPrimActions(std::vector<ActionSequence>& action_seqs,
                             std::vector<std::vector<double>> & action_transition_costs ) override {
 
         // Read the motion primitive file if needed.
@@ -310,12 +310,12 @@ struct ManipulationType : ActionType {
 
     /// @brief Get the possible actions
     /// @return A vector of all possible actions
-    [[deprecated("Use getPrimActionSequences() instead.") ]]
+    [[deprecated("Use getPrimActions() instead.") ]]
     std::vector<Action> getPrimActions() override {
-        // Call the getPrimActionSequences function.
+        // Call the getPrimActions function.
         std::vector<ActionSequence> action_seqs;
         std::vector<std::vector<double>> action_transition_times;
-        getPrimActionSequences(action_seqs, action_transition_times);
+        getPrimActions(action_seqs, action_transition_times);
 
         // Backwards compatability hack. This will return the actions_ vector where actions are only single-step actions.
         std::vector<Action> actions;
@@ -505,7 +505,7 @@ public:
         if (bfs_heuristic_ == nullptr) {
             std::vector<ActionSequence> prim_actions_seqs;
             std::vector<std::vector<double>> prim_action_transition_costs;
-            manipulation_type_->getPrimActionSequences(prim_actions_seqs, prim_action_transition_costs);
+            manipulation_type_->getPrimActions(prim_actions_seqs, prim_action_transition_costs);
             for (int i{0}; i < prim_actions_seqs.size(); i++) {
                 auto prim_action_seq = prim_actions_seqs[i];
                 // Create the transformed action sequence. The action costs do not change.
@@ -749,7 +749,7 @@ public:
         return false;
     }
 
-    virtual bool getSuccessorSequencesWs(int curr_state_ind,
+    virtual bool getSuccessorsWs(int curr_state_ind,
                                     std::vector<std::vector<int>>& seqs_state_ids,
                                     std::vector<std::vector<double>> & seqs_transition_costs) {
         throw std::runtime_error("TODO: Not implemented yet.");
@@ -830,7 +830,7 @@ public:
         return true;
     }
 
-    virtual bool getSuccessorSequencesCs(int curr_state_ind,
+    virtual bool getSuccessorsCs(int curr_state_ind,
                                    std::vector<std::vector<int>>& seqs_state_ids,
                                    std::vector<std::vector<double>> & seqs_transition_costs) {
         seqs_state_ids.clear();
@@ -882,14 +882,14 @@ public:
         return true;
     }
 
-    bool getSuccessorSequences(int curr_state_ind,
+    bool getSuccessors(int curr_state_ind,
                            std::vector<std::vector<int>>& seqs_state_ids,
                            std::vector<std::vector<double>> & seqs_transition_costs) override {
         if (manipulation_type_->getSpaceType() == ManipulationType::SpaceType::ConfigurationSpace) {
-            return getSuccessorSequencesCs(curr_state_ind, seqs_state_ids, seqs_transition_costs);
+            return getSuccessorsCs(curr_state_ind, seqs_state_ids, seqs_transition_costs);
         }
         else {
-            return getSuccessorSequencesWs(curr_state_ind, seqs_state_ids, seqs_transition_costs);
+            return getSuccessorsWs(curr_state_ind, seqs_state_ids, seqs_transition_costs);
         }
     }
 
