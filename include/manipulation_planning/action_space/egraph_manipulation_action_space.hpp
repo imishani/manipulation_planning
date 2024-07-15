@@ -356,7 +356,7 @@ namespace ims {
             return false;
         }
 
-        virtual bool getSuccessorSequencesWs(int curr_state_ind,
+        virtual bool getSuccessorsWs(int curr_state_ind,
                                     std::vector<std::vector<int>>& seqs_state_ids,
                                     std::vector<std::vector<double>> & seqs_transition_costs) {
             seqs_state_ids.clear();
@@ -441,7 +441,7 @@ namespace ims {
             return true;
         }
 
-            virtual bool getSuccessorSequencesCs(int curr_state_ind,
+            virtual bool getSuccessorsCs(int curr_state_ind,
                                    std::vector<std::vector<int>>& seqs_state_ids,
                                    std::vector<std::vector<double>> & seqs_transition_costs) {
             seqs_state_ids.clear();
@@ -499,17 +499,17 @@ namespace ims {
             return true;
         }
 
-        bool getSuccessorSequences(int curr_state_ind,
+        bool getSuccessors(int curr_state_ind,
                                    std::vector<std::vector<int>>& seqs_state_ids,
                                    std::vector<std::vector<double>> & seqs_transition_costs) override
         {
             if (manipulation_type_->getSpaceType() == ManipulationType::SpaceType::ConfigurationSpace)
             {
-                return getSuccessorSequencesCs(curr_state_ind, seqs_state_ids, seqs_transition_costs);
+                return getSuccessorsCs(curr_state_ind, seqs_state_ids, seqs_transition_costs);
             }
             else
             {
-                return getSuccessorSequencesWs(curr_state_ind, seqs_state_ids, seqs_transition_costs);
+                return getSuccessorsWs(curr_state_ind, seqs_state_ids, seqs_transition_costs);
             }
         }
 
