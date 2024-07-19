@@ -309,7 +309,7 @@ public:
     }
 
     /// @brief Visualize a sphere in rviz for debugging.
-    void visualizeSphere(int x, int y, int z, double r) {
+    void visualizeSphere(double x, double y, double z, double r) {
         visualization_msgs::Marker marker;
         marker.header.frame_id = moveit_interface_->planning_scene_->getPlanningFrame();
         marker.header.stamp = ros::Time();
@@ -324,6 +324,11 @@ public:
         marker.pose.orientation.y = 0.0;
         marker.pose.orientation.z = 0.0;
         marker.pose.orientation.w = 1.0;
+        // Color.
+        marker.color.a = 1.0;
+        marker.color.r = 0.0;
+        marker.color.g = 0.0;
+        marker.color.b = 1.0;
 
         marker.scale.x = r;
         marker.scale.y = r;
@@ -333,6 +338,7 @@ public:
         marker.lifetime = ros::Duration(5.0);
         // visualize
         vis_pub_.publish(marker);
+        // Print the message.
         vis_id_++;
     }
 
