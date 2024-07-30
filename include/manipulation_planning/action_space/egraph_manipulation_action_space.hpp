@@ -356,52 +356,50 @@ namespace ims {
             return false;
         }
 
-        virtual bool getSuccessorsWs(int curr_state_ind,
+    virtual bool getSuccessorsWs(int curr_state_ind,
                                     std::vector<std::vector<int>>& seqs_state_ids,
                                     std::vector<std::vector<double>> & seqs_transition_costs) {
-            seqs_state_ids.clear();
-            seqs_transition_costs.clear();
-            // REMOVE.
-            std::vector<int> successors;
-            std::vector<double> costs;
-            // END REMOVE.
+        seqs_state_ids.clear();
+        seqs_transition_costs.clear();
+        // Get the primitive actions. Those will be "added" to the current state.
+        std::vector<ActionSequence> prim_action_seqs;
+        std::vector<std::vector<double>> prim_action_transition_costs;
+        manipulation_type_->getPrimActions(prim_action_seqs, prim_action_transition_costs);
+        // Get the current state.
+        auto curr_state = this->getRobotState(curr_state_ind);
+        StateType curr_state_val = curr_state->state;
+        Eigen::Quaterniond q_curr;
+        from_euler_zyx(curr_state_val[5], curr_state_val[4], curr_state_val[3], q_curr);
 
-            // get the current state
-            auto curr_state = this->getRobotState(curr_state_ind);
-            auto curr_state_val = curr_state->state;
-            // get the actions
-            auto actions = manipulation_type_->getPrimActions();
-            // convert to quaternion
-            Eigen::Quaterniond q_curr;
-            from_euler_zyx(curr_state_val[5], curr_state_val[4], curr_state_val[3], q_curr);
-            // get the successors
-            StateType new_state_val;
-            for (auto action : actions)
-            {
-                new_state_val.clear();
-                // create a new state in the length of the current state
-                new_state_val.resize(curr_state_val.size());
-                // increment the xyz coordinates
-                for (int i{0}; i < 3; i++)
-                {
-                    new_state_val[i] = curr_state_val[i] + action[i];
-                }
-
-                Eigen::Quaterniond q_action{action[6], action[3], action[4], action[5]};
-                auto q_new = q_curr * q_action;
-
+        // Get the successors. Each successor is a sequence of state_ids and a sequence of transition costs.
+        for (size_t i{0}; i < prim_action_seqs.size(); i++) {
+            ActionSequence & prim_action_seq = prim_action_seqs[i];
+            // Objects for the successor resulting from this action.
+            std::vector<int> successor_seq_state_ids{curr_state_ind};
+            std::vector<double> successor_seq_transition_costs = prim_action_transition_costs[i];
+            // The first state is the current state and the last state is the successor.
+            // The primitive action sequences are of for xyz-xyzw. Those start from the origin.
+            // The first state is assumed to be valid.
+            // Go through all the states in the sequence, compute new quaternion, normalize, discretize, and check for validity.
+            for (size_t j{1}; j < prim_action_seq.size(); j++) {
+                Eigen::Quaterniond q_action{prim_action_seq[j][6], prim_action_seq[j][3], prim_action_seq[j][4], prim_action_seq[j][5]};
+                Eigen::Quaterniond q_new = q_curr * q_action;
                 // convert the quaternion to euler angles
-                get_euler_zyx(q_new, new_state_val[5], new_state_val[4], new_state_val[3]);
+                double r, p, y;
+                get_euler_zyx(q_new, y, p, r);
+                // Create a new state. Now it is in xyzrpy.
+                StateType new_state_val = {curr_state_val[0] + prim_action_seq[j][0], // Add the action on x.
+                                           curr_state_val[1] + prim_action_seq[j][1], // Add the action on y.
+                                           curr_state_val[2] + prim_action_seq[j][2], // Add the action on z.
+                                           r, p, y};
+                // Normalize the angles.
                 normalize_euler_zyx(new_state_val[5], new_state_val[4], new_state_val[3]);
-                // discretize
+                // Discretize the state.
                 roundStateToDiscretization(new_state_val, manipulation_type_->state_discretization_);
-
-                //            if (isStateToStateValid(curr_state_val, new_state_val)) {
+                // Check if the next state is valid.
                 bool succ;
                 StateType mapped_state;
-                if (curr_state->state_mapped.empty())
-                {
-                    //                    ROS_INFO("No mapped state, using IK without seed");
+                if (curr_state->state_mapped.empty()) {
                     succ = isStateValid(new_state_val,
                                         mapped_state);
                 }
@@ -409,37 +407,35 @@ namespace ims {
                     succ = isStateValid(new_state_val,
                                         curr_state->state_mapped,
                                         mapped_state);
-                if (succ)
-                {
+                if (succ) {
                     // create a new state
                     int next_state_ind = getOrCreateRobotState(new_state_val);
                     auto new_state = this->getRobotState(next_state_ind);
                     new_state->state_mapped = mapped_state;
-                    // add the state to the successors
-                    successors.push_back(next_state_ind);
-                    // add the cost
+                    // Add the state to the successor sequence.
+                    successor_seq_state_ids.push_back(next_state_ind);
+                    // Add the cost. This overrides the value given from the primitive.
                     double cost{0};
-                    for (int i{0}; i < 3; i++)
-                    {
-                        cost += action[i] * action[i];
+                    for (int dim{0}; dim < 3; dim++) {
+                        cost += prim_action_seq[j][dim] * prim_action_seq[j][dim];
                     }
-                    // add the cost of the rotation which is quaternion
+                    // Add the cost of the rotation which is quaternion
                     double r, p, y;
                     get_euler_zyx(q_action, y, p, r);
                     cost += r * r + p * p + y * y;
-                    costs.push_back(cost);
+                    successor_seq_transition_costs[j-1] = cost; // TODO(yoraish): probably a cleaner way to do this.
+                }
+                else {
+                    // If the state is not valid, break the loop.
+                    break;
                 }
             }
-
-            // REMOVE.
-            for (int i{0}; i < successors.size(); i++) {
-                seqs_state_ids.push_back({curr_state_ind, successors[i]});
-                seqs_transition_costs.push_back({costs[i], 0});
-            }
-            // END REMOVE.
-
-            return true;
+            // Add the successor to the list of successors.
+            seqs_state_ids.push_back(successor_seq_state_ids);
+            seqs_transition_costs.push_back(successor_seq_transition_costs);
         }
+        return true;
+    }
 
             virtual bool getSuccessorsCs(int curr_state_ind,
                                    std::vector<std::vector<int>>& seqs_state_ids,
