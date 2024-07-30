@@ -32,6 +32,7 @@
 
 namespace ims {
 
+// Currently not compliant with void getPrimActions(std::vector<ActionSequence>& action_seqs, std::vector<std::vector<double>> & action_transition_costs ) = 0; Commented out for now.
 //class scene3Dpoint : public SceneInterface {
 //public:
 //    explicit scene3Dpoint(std::shared_ptr<distance_field::PropagationDistanceField> &map_) : SceneInterface() {
