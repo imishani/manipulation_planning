@@ -25,7 +25,7 @@ int main(int argc, char** argv) {
     spinner.start();
 
     auto full_path = boost::filesystem::path(__FILE__).parent_path().parent_path();
-    std::string path_mprim = full_path.string() + "/config/ws.mprim";
+    std::string path_mprim = full_path.string() + "/config/ws_mprim.yaml";
 
     // Define Robot inteface to give commands and get info from moveit:
     moveit::planning_interface::MoveGroupInterface move_group("manipulator_1");
