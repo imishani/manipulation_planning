@@ -85,7 +85,7 @@ int main(int argc, char** argv) {
     // get the number of joints
     int num_joints = (int)move_group.getVariableCount();
 
-    std::string path_mprim = full_path.string() + "/config/manip_" + std::to_string(num_joints) + "dof.mprim";
+    std::string path_mprim = full_path.string() + "/config/manip_" + std::to_string(num_joints) + "dof_mprim.yaml";
 
     moveit::core::RobotStatePtr current_state = move_group.getCurrentState();
 

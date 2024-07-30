@@ -2,7 +2,7 @@
 # Details.
 # <motion_primitive_family_name>:
 #   <motion_primitive1_name>:
-#     delta_degrees: # List of delta degrees for each joint
+#     mprim_sequence: # List of delta degrees for each joint
 #       - [ 0, 0, 0, 0, 0, 0, 0 ] # For now, always start with 0. This is the reference point.
 #       - [ 7, 0, 0, 0, 0, 0, 0 ] # The delta degrees for each dimension. This is from the reference point.
 #       - [ 14, 0, 0, 0, 0, 0, 0 ] # More delta degrees can be added. This is from the reference point as well.
@@ -13,37 +13,37 @@
 
 long_primitives:
   joint0:
-    delta_degrees:
+    mprim_sequence:
       - [ 0, 0, 0, 0, 0, 0, 0 ]
       - [ 7, 0, 0, 0, 0, 0, 0 ]
     delta_time_steps: [ 1, 0 ]
     generate_negative: true
   joint1:
-    delta_degrees:
+    mprim_sequence:
       - [ 0, 0, 0, 0, 0, 0, 0 ]
       - [ 0, 7, 0, 0, 0, 0, 0 ]
     delta_time_steps: [ 1, 0 ]
     generate_negative: true
   joint2:
-    delta_degrees:
+    mprim_sequence:
       - [ 0, 0, 0, 0, 0, 0, 0 ]
       - [ 0, 0, 7, 0, 0, 0, 0 ]
     delta_time_steps: [ 1, 0 ]
     generate_negative: true
   joint3:
-    delta_degrees:
+    mprim_sequence:
       - [ 0, 0, 0, 0, 0, 0, 0 ]
       - [ 0, 0, 0, 7, 0, 0, 0 ]
     delta_time_steps: [ 1, 0 ]
     generate_negative: true
   joint4:
-    delta_degrees:
+    mprim_sequence:
       - [ 0, 0, 0, 0, 0, 0, 0 ]
       - [ 0, 0, 0, 0, 7, 0, 0 ]
     delta_time_steps: [ 1, 0 ]
     generate_negative: true
   wait:
-    delta_degrees:
+    mprim_sequence:
       - [ 0, 0, 0, 0, 0, 0, 0 ]
       - [ 0, 0, 0, 0, 0, 0, 0 ]
     delta_time_steps: [ 1, 0 ]
@@ -51,49 +51,49 @@ long_primitives:
 
 short_primitives:
   joint0:
-    delta_degrees:
+    mprim_sequence:
       - [ 0, 0, 0, 0, 0, 0, 0 ]
       - [ 7, 0, 0, 0, 0, 0, 0 ]
     delta_time_steps: [ 1, 0 ]
     generate_negative: true
   joint1:
-    delta_degrees:
+    mprim_sequence:
       - [ 0, 0, 0, 0, 0, 0, 0 ]
       - [ 0, 7, 0, 0, 0, 0, 0 ]
     delta_time_steps: [ 1, 0 ]
     generate_negative: true
   joint2:
-    delta_degrees:
+    mprim_sequence:
       - [ 0, 0, 0, 0, 0, 0, 0 ]
       - [ 0, 0, 7, 0, 0, 0, 0 ]
     delta_time_steps: [ 1, 0 ]
     generate_negative: true
   joint3:
-    delta_degrees:
+    mprim_sequence:
       - [ 0, 0, 0, 0, 0, 0, 0 ]
       - [ 0, 0, 0, 7, 0, 0, 0 ]
     delta_time_steps: [ 1, 0 ]
     generate_negative: true
   joint4:
-    delta_degrees:
+    mprim_sequence:
       - [ 0, 0, 0, 0, 0, 0, 0 ]
       - [ 0, 0, 0, 0, 7, 0, 0 ]
     delta_time_steps: [ 1, 0 ]
     generate_negative: true
   joint5:
-    delta_degrees:
+    mprim_sequence:
       - [ 0, 0, 0, 0, 0, 0, 0 ]
       - [ 0, 0, 0, 0, 0, 7, 0 ]
     delta_time_steps: [ 1, 0 ]
     generate_negative: true
   joint6:
-    delta_degrees:
+    mprim_sequence:
       - [ 0, 0, 0, 0, 0, 0, 0 ]
       - [ 0, 0, 0, 0, 0, 0, 7 ]
     delta_time_steps: [ 1, 0 ]
     generate_negative: true
   wait:
-    delta_degrees:
+    mprim_sequence:
       - [ 0, 0, 0, 0, 0, 0, 0 ]
       - [ 0, 0, 0, 0, 0, 0, 0 ]
     delta_time_steps: [ 1, 0 ]

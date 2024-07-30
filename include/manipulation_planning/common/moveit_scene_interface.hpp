@@ -649,6 +649,9 @@ public:
     void setEndEffectorMoveGroupName(const std::string& group_name_ee) {
         group_name_ee_ = group_name_ee;
     }
+    std::string getEndEffectorLinkName() const {
+        return joint_model_group_->getLinkModelNames().back();
+    }
 
     std::shared_ptr<planning_scene::PlanningScene> getPlanningSceneMoveit() {
         return planning_scene_;
