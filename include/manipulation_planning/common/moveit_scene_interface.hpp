@@ -75,7 +75,7 @@ public:
         planning_scene_monitor_->startStateMonitor();
         planning_scene_monitor_->startWorldGeometryMonitor();
         planning_scene_monitor_->requestPlanningSceneState();
-        ros::Duration(1).sleep();
+        ros::Duration(0.3).sleep();
         planning_scene_ = planning_scene_monitor_->getPlanningScene();
         group_name_ = group_name;
 
@@ -117,7 +117,7 @@ public:
         planning_scene_monitor_->startStateMonitor();
         planning_scene_monitor_->startWorldGeometryMonitor();
         planning_scene_monitor_->requestPlanningSceneState();
-        ros::Duration(1.0).sleep();
+        ros::Duration(0.3).sleep();
         planning_scene_ = planning_scene;
         group_name_ = group_name;
         frame_id_ = planning_scene_->getPlanningFrame();
@@ -700,11 +700,12 @@ public:
 
         moveit_msgs::AttachedCollisionObject attached_object;
         attached_object.link_name = getEndEffectorLinkName();
+//        attached_object.touch_links = { joint_model_group_->getLinkModelNames().back() };
         attached_object.object = collision_object;
         attached_object.object.operation = moveit_msgs::CollisionObject::ADD;
         planning_scene_interface_->applyAttachedCollisionObject(attached_object);
         planning_scene_->processAttachedCollisionObjectMsg(attached_object);
-        ros::Duration(0.5).sleep();
+        ros::Duration(0.1).sleep();
     }
 
     void removeObjectsAttachedToEndEffector(){

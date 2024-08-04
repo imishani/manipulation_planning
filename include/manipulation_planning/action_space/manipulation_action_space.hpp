@@ -921,6 +921,12 @@ public:
     std::shared_ptr<MoveitInterface> getSceneInterface() {
         return moveit_interface_;
     }
+
+    /// @brief Set the BFS heuristic.
+    /// @param bfs_heuristic The BFS heuristic
+    void setBFSHeuristic(BFSHeuristic *bfs_heuristic) {
+        bfs_heuristic_ = bfs_heuristic;
+    }
 };
 }  // namespace ims
 
