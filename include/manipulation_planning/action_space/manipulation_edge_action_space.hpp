@@ -34,10 +34,11 @@
 #pragma once
 
 // include standard libraries
+#include <yaml-cpp/yaml.h>
+
 #include <iostream>
 #include <utility>
 #include <vector>
-#include <yaml-cpp/yaml.h>
 
 // include ROS libraries
 #include <moveit/move_group_interface/move_group_interface.h>
@@ -48,10 +49,10 @@
 // project includes
 #include <search/action_space/edge_action_space.hpp>
 
+#include "manipulation_planning/action_space/manipulation_action_space.hpp"
 #include "manipulation_planning/common/moveit_scene_interface.hpp"
 #include "manipulation_planning/common/utils.hpp"
 #include "manipulation_planning/heuristics/manip_heuristics.hpp"
-#include "manipulation_planning/action_space/manipulation_action_space.hpp"
 
 namespace ims {
 
@@ -88,8 +89,8 @@ public:
     }
 
     void getActionSequences(int state_id,
-                            std::vector<ActionSequence> & action_seqs,
-                            std::vector<std::vector<double>> & action_transition_costs,
+                            std::vector<ActionSequence> &action_seqs,
+                            std::vector<std::vector<double>> &action_transition_costs,
                             bool check_validity) {
         auto curr_state = this->getRobotState(state_id);
         auto curr_state_val = curr_state->state;
@@ -103,7 +104,7 @@ public:
                 ActionSequence transformed_action_seq;
                 std::vector<double> transformed_action_transition_costs = prim_action_transition_costs[i];
                 for (int i = 0; i < prim_action_seq.size(); i++) {
-                    const Action & prim_action = prim_action_seq[i];
+                    const Action &prim_action = prim_action_seq[i];
                     StateType next_state_val(curr_state_val.size());
                     std::transform(curr_state_val.begin(), curr_state_val.end(), prim_action.begin(), next_state_val.begin(),
                                    std::plus<>());
@@ -112,8 +113,7 @@ public:
                 action_seqs.push_back(transformed_action_seq);
                 action_transition_costs.push_back(transformed_action_transition_costs);
             }
-        }
-        else {
+        } else {
             if (curr_state->state_mapped.empty()) {
                 moveit_interface_->calculateFK(curr_state_val, curr_state->state_mapped);
                 this->VisualizePoint(curr_state->state_mapped.at(0), curr_state->state_mapped.at(1), curr_state->state_mapped.at(2));
@@ -127,10 +127,10 @@ public:
             std::vector<ActionSequence> prim_action_seqs;
             std::vector<std::vector<double>> prim_action_transition_costs;
             manipulation_type_->getAdaptivePrimActionSequences(start_dist,
-                                                                  goal_dist,
-                                                                  prim_action_seqs,
-                                                                  prim_action_transition_costs,
-                                                                  true);
+                                                               goal_dist,
+                                                               prim_action_seqs,
+                                                               prim_action_transition_costs,
+                                                               true);
 
             for (int i{0}; i < prim_action_seqs.size(); i++) {
                 auto prim_action_seq = prim_action_seqs[i];
@@ -141,10 +141,9 @@ public:
                 if (prim_action_seq.back()[0] == INF_DOUBLE) {
                     transformed_action_seq = {curr_state_val, bfs_heuristic_->goal_};  // TODO: It is wierd that I am using the heuristic here
                     transformed_action_transition_costs = {1.0, 0.0};
-                }
-                else {
+                } else {
                     for (int i = 0; i < prim_action_seq.size(); i++) {
-                        const Action & prim_action = prim_action_seq[i];
+                        const Action &prim_action = prim_action_seq[i];
                         StateType next_state_val(curr_state_val.size());
                         std::transform(curr_state_val.begin(), curr_state_val.end(), prim_action.begin(), next_state_val.begin(),
                                        std::plus<>());
@@ -158,7 +157,7 @@ public:
     }
 
     void getActions(int state_id,
-                    std::vector<ActionSequence> & action_seqs,
+                    std::vector<ActionSequence> &action_seqs,
                     bool check_validity) override {
         std::vector<std::vector<double>> action_transition_costs;
         getActionSequences(state_id, action_seqs, action_transition_costs, check_validity);
@@ -230,8 +229,7 @@ public:
                 bool succ = moveit_interface_->calculateIK(pose, joint_state);
                 if (!succ) {
                     return false;
-                }
-                else {
+                } else {
                     return moveit_interface_->isStateValid(joint_state);
                 }
         }
@@ -263,8 +261,7 @@ public:
                 if (!succ) {
                     ROS_INFO("IK failed");
                     return false;
-                }
-                else {
+                } else {
                     return moveit_interface_->isStateValid(joint_state);
                 }
         }
@@ -295,8 +292,7 @@ public:
                 normalizeAngles(joint_state);
                 if (!succ) {
                     return false;
-                }
-                else {
+                } else {
                     return moveit_interface_->isStateValid(joint_state);
                 }
         }
@@ -330,8 +326,7 @@ public:
                     bool succ = moveit_interface_->calculateIK(pose, joint_state);
                     if (!succ) {
                         return false;
-                    }
-                    else {
+                    } else {
                         poses.push_back(joint_state);
                     }
                 }
@@ -341,8 +336,8 @@ public:
     }
 
     virtual bool getSuccessorsWs(int curr_state_ind,
-                                    std::vector<std::vector<int>>& seqs_state_ids,
-                                    std::vector<std::vector<double>> & seqs_transition_costs) {
+                                 std::vector<std::vector<int>> &seqs_state_ids,
+                                 std::vector<std::vector<double>> &seqs_transition_costs) {
         seqs_state_ids.clear();
         seqs_transition_costs.clear();
         // Get the primitive actions. Those will be "added" to the current state.
@@ -357,7 +352,7 @@ public:
 
         // Get the successors. Each successor is a sequence of state_ids and a sequence of transition costs.
         for (size_t i{0}; i < prim_action_seqs.size(); i++) {
-            ActionSequence & prim_action_seq = prim_action_seqs[i];
+            ActionSequence &prim_action_seq = prim_action_seqs[i];
             // Objects for the successor resulting from this action.
             std::vector<int> successor_seq_state_ids{curr_state_ind};
             std::vector<double> successor_seq_transition_costs = prim_action_transition_costs[i];
@@ -372,9 +367,9 @@ public:
                 double r, p, y;
                 get_euler_zyx(q_new, y, p, r);
                 // Create a new state. Now it is in xyzrpy.
-                StateType new_state_val = {curr_state_val[0] + prim_action_seq[j][0], // Add the action on x.
-                                           curr_state_val[1] + prim_action_seq[j][1], // Add the action on y.
-                                           curr_state_val[2] + prim_action_seq[j][2], // Add the action on z.
+                StateType new_state_val = {curr_state_val[0] + prim_action_seq[j][0],  // Add the action on x.
+                                           curr_state_val[1] + prim_action_seq[j][1],  // Add the action on y.
+                                           curr_state_val[2] + prim_action_seq[j][2],  // Add the action on z.
                                            r, p, y};
                 // Normalize the angles.
                 normalize_euler_zyx(new_state_val[5], new_state_val[4], new_state_val[3]);
@@ -386,8 +381,7 @@ public:
                 if (curr_state->state_mapped.empty()) {
                     succ = isStateValid(new_state_val,
                                         mapped_state);
-                }
-                else
+                } else
                     succ = isStateValid(new_state_val,
                                         curr_state->state_mapped,
                                         mapped_state);
@@ -407,9 +401,8 @@ public:
                     double r, p, y;
                     get_euler_zyx(q_action, y, p, r);
                     cost += r * r + p * p + y * y;
-                    successor_seq_transition_costs[j-1] = cost; // TODO(yoraish): probably a cleaner way to do this.
-                }
-                else {
+                    successor_seq_transition_costs[j - 1] = cost;  // TODO(yoraish): probably a cleaner way to do this.
+                } else {
                     // If the state is not valid, break the loop.
                     break;
                 }
@@ -422,8 +415,8 @@ public:
     }
 
     virtual bool getSuccessorsCs(int curr_state_ind,
-                                   std::vector<std::vector<int>>& seqs_state_ids,
-                                   std::vector<std::vector<double>> & seqs_transition_costs) {
+                                 std::vector<std::vector<int>> &seqs_state_ids,
+                                 std::vector<std::vector<double>> &seqs_transition_costs) {
         seqs_state_ids.clear();
         seqs_transition_costs.clear();
 
@@ -432,7 +425,7 @@ public:
         getActionSequences(curr_state_ind, action_seqs, action_transition_costs, false);
         // Get the successors. Each successor is a sequence of state_ids and a sequence of transition costs.
         for (size_t i{0}; i < action_seqs.size(); i++) {
-            ActionSequence & action_seq = action_seqs[i];
+            ActionSequence &action_seq = action_seqs[i];
             // Objects for the successor resulting from this action.
             std::vector<int> successor_seq_state_ids{curr_state_ind};
             std::vector<double> successor_seq_transition_costs = action_transition_costs[i];
@@ -474,15 +467,13 @@ public:
     }
 
     bool getSuccessors(int curr_state_ind,
-                           std::vector<std::vector<int>>& seqs_state_ids,
-                           std::vector<std::vector<double>> & seqs_transition_costs) override {
+                       std::vector<std::vector<int>> &seqs_state_ids,
+                       std::vector<std::vector<double>> &seqs_transition_costs) override {
         if (manipulation_type_->getSpaceType() == ManipulationType::SpaceType::ConfigurationSpace) {
             return getSuccessorsCs(curr_state_ind, seqs_state_ids, seqs_transition_costs);
-        }
-        else if (manipulation_type_->getSpaceType() == ManipulationType::SpaceType::WorkSpace) {
+        } else if (manipulation_type_->getSpaceType() == ManipulationType::SpaceType::WorkSpace) {
             return getSuccessorsWs(curr_state_ind, seqs_state_ids, seqs_transition_costs);
-        }
-        else{
+        } else {
             throw std::runtime_error("Space type not supported.");
         }
     }
@@ -530,4 +521,3 @@ public:
     }
 };
 }  // namespace ims
-

@@ -30,7 +30,7 @@
  * \file   confspace_edge_test.cpp
  * \author Hanlan Yang (yanghanlan666@gmail.com)
  * \date   8/10/24
-*/
+ */
 
 // C++ includes
 #include <memory>
@@ -38,18 +38,16 @@
 // project includes
 #include <manipulation_planning/action_space/manipulation_action_space.hpp>
 #include <manipulation_planning/common/moveit_scene_interface.hpp>
-#include <search/planners/wastar.hpp>
-#include <manipulation_planning/heuristics/manip_heuristics.hpp>
 #include <manipulation_planning/common/utils.hpp>
+#include <manipulation_planning/heuristics/manip_heuristics.hpp>
+#include <search/planners/wastar.hpp>
 
 // ROS includes
-#include <ros/ros.h>
 #include <moveit/collision_distance_field/collision_env_distance_field.h>
 #include <moveit/occupancy_map_monitor/occupancy_map_monitor.h>
-
+#include <ros/ros.h>
 
 int main(int argc, char** argv) {
-
     ros::init(argc, argv, "configuration_test");
     ros::NodeHandle nh;
     ros::AsyncSpinner spinner(8);
@@ -74,7 +72,7 @@ int main(int argc, char** argv) {
         save_experience = std::stoi(argv[3]);
     } else {
         ROS_INFO_STREAM(BOLDMAGENTA << "No arguments given: using default values");
-        ROS_INFO_STREAM("<group_name(string)> <discretization(int)> <save_experience(bool int)>" );
+        ROS_INFO_STREAM("<group_name(string)> <discretization(int)> <save_experience(bool int)>");
         ROS_INFO_STREAM("Using default values: manipulator_1 1 0" << RESET);
     }
 
@@ -102,7 +100,7 @@ int main(int argc, char** argv) {
     // get the planning frame
     ims::visualizeBoundingBox(df, bb_pub, move_group.getPlanningFrame());
     auto* heuristic = new ims::BFSHeuristic(df, group_name);
-//    auto* heuristic = new ims::JointAnglesHeuristic;
+    //    auto* heuristic = new ims::JointAnglesHeuristic;
     double weight = 100.0;
 
     ims::wAStarParams params(heuristic, weight);
@@ -110,16 +108,16 @@ int main(int argc, char** argv) {
 
     ims::MoveitInterface scene_interface(group_name);
 
-    ims::ManipulationType action_type (path_mprim);
+    ims::ManipulationType action_type(path_mprim);
     StateType discretization(num_joints, discret);
     ims::deg2rad(discretization);
     action_type.Discretization(discretization);
 
-//    std::shared_ptr<ims::ManipulationActionSpace> action_space = std::make_shared<ims::ManipulationActionSpace>(scene_interface, action_type);
+    //    std::shared_ptr<ims::ManipulationActionSpace> action_space = std::make_shared<ims::ManipulationActionSpace>(scene_interface, action_type);
     std::shared_ptr<ims::ManipulationActionSpace> action_space = std::make_shared<ims::ManipulationActionSpace>(scene_interface, action_type,
                                                                                                                 heuristic);
 
-    StateType start_state {0, 0, 0, 0, 0, 0, 0};
+    StateType start_state{0, 0, 0, 0, 0, 0, 0};
     const std::vector<std::string>& joint_names = move_group.getVariableNames();
     for (int i = 0; i < 7; i++) {
         start_state[i] = current_state->getVariablePosition(joint_names[i]);
@@ -130,23 +128,23 @@ int main(int argc, char** argv) {
     StateType goal_state = start_state;
 
     // change the goal state
-   // goal_state[0] = 1.5708*180/M_PI;// 78; //0;
-   // goal_state[1] = 0.0698132*180/M_PI; //25; //30;
-   // goal_state[2] = -0.9948*180/M_PI; //-18; //-30;
-   // goal_state[3] = -1.5708*180/M_PI; //-147; //0;
-   // goal_state[4] = 0; //73; //0;
-   //  goal_state[5] += 10;//-66; //0;
+    // goal_state[0] = 1.5708*180/M_PI;// 78; //0;
+    // goal_state[1] = 0.0698132*180/M_PI; //25; //30;
+    // goal_state[2] = -0.9948*180/M_PI; //-18; //-30;
+    // goal_state[3] = -1.5708*180/M_PI; //-147; //0;
+    // goal_state[4] = 0; //73; //0;
+    //  goal_state[5] += 10;//-66; //0;
 
     goal_state[0] = 44;
     goal_state[1] = 7;
     goal_state[2] = 9;
     goal_state[3] = -30;
-    goal_state[4] = 4; //73; //0;
+    goal_state[4] = 4;  // 73; //0;
     goal_state[5] = 34;
     goal_state[6] = 57;
 
-
-    ims::deg2rad(start_state); ims::deg2rad(goal_state);
+    ims::deg2rad(start_state);
+    ims::deg2rad(goal_state);
     // normalize the start and goal states
     // get the joint limits
     std::vector<std::pair<double, double>> joint_limits;
@@ -159,8 +157,7 @@ int main(int argc, char** argv) {
     ims::wAStar planner(params);
     try {
         planner.initializePlanner(action_space, start_state, goal_state);
-    }
-    catch (std::exception& e) {
+    } catch (std::exception& e) {
         ROS_INFO_STREAM(e.what() << std::endl);
     }
 
@@ -168,8 +165,7 @@ int main(int argc, char** argv) {
     if (!planner.plan(path_)) {
         ROS_INFO_STREAM(RED << "No path found" << RESET);
         return 0;
-    }
-    else {
+    } else {
         ROS_INFO_STREAM(GREEN << "Path found" << RESET);
         if (save_experience) {
             ROS_INFO("Saving path as experience");
@@ -189,14 +185,14 @@ int main(int argc, char** argv) {
             }
             // Save the path to a file as csv
             std::string path_file = dir.string() + "/path_" +
-                std::to_string(num_experiences + 1) + ".csv";
+                                    std::to_string(num_experiences + 1) + ".csv";
 
             std::ofstream file(path_file);
             // header line
             file << "Experience," << path_.size() << "," << num_joints << std::endl;
             // write the path
-            for (int j {0}; j < path_.size(); j++){
-                for (int i {0}; i < num_joints; i++) {
+            for (int j{0}; j < path_.size(); j++) {
+                for (int i{0}; i < num_joints; i++) {
                     file << path_[j][i] << ",";
                 }
                 file << std::endl;
@@ -217,7 +213,8 @@ int main(int argc, char** argv) {
 
     // report stats
     PlannerStats stats = planner.reportStats();
-    ROS_INFO_STREAM("\n" << GREEN << "\t Planning time: " << stats.time << " sec" << std::endl
+    ROS_INFO_STREAM("\n"
+                    << GREEN << "\t Planning time: " << stats.time << " sec" << std::endl
                     << "\t cost: " << stats.cost << std::endl
                     << "\t Path length: " << path_.size() << std::endl
                     << "\t Number of nodes expanded: " << stats.num_expanded << std::endl
@@ -231,10 +228,10 @@ int main(int argc, char** argv) {
     }
     moveit_msgs::RobotTrajectory trajectory;
     ims::profileTrajectory(start_state,
-                      goal_state,
-                      traj,
-                      move_group,
-                      trajectory);
+                           goal_state,
+                           traj,
+                           move_group,
+                           trajectory);
 
     ROS_INFO("Executing trajectory");
     move_group.execute(trajectory);
