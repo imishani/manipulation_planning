@@ -34,6 +34,7 @@
 
 // C++ includes
 #include <memory>
+#include <chrono>
 
 // project includes
 #include <manipulation_planning/action_space/manipulation_action_space.hpp>
@@ -118,9 +119,10 @@ int main(int argc, char** argv) {
     std::shared_ptr<ims::ManipulationActionSpace> action_space = std::make_shared<ims::ManipulationActionSpace>(scene_interface, action_type,
                                                                                                                 heuristic);
 
-    StateType start_state {0, 0, 0, 0, 0, 0, 0};
     const std::vector<std::string>& joint_names = move_group.getVariableNames();
-    for (int i = 0; i < 6; i++) {
+    StateType start_state(num_joints, 0);
+
+    for (int i = 0; i < joint_names.size(); i++) {
         start_state[i] = current_state->getVariablePosition(joint_names[i]);
         ROS_INFO_STREAM("Joint " << joint_names[i] << " is " << start_state[i]);
     }
@@ -129,10 +131,10 @@ int main(int argc, char** argv) {
     StateType goal_state = start_state;
 
     // change the goal state
-//    goal_state[0] = 1.5708*180/M_PI;// 78; //0;
+    goal_state[0] = 1.9708*180/M_PI;// 78; //0;
 //    goal_state[1] = 0.0698132*180/M_PI; //25; //30;
 //    goal_state[2] = -0.9948*180/M_PI; //-18; //-30;
-//    goal_state[3] = -1.5708*180/M_PI; //-147; //0;
+    goal_state[3] -= 40; // = -1.5708*180/M_PI; //-147; //0;
 //    goal_state[4] = 0; //73; //0;
     goal_state[5] += 10;//-66; //0;
 
@@ -155,8 +157,8 @@ int main(int argc, char** argv) {
         ROS_INFO_STREAM(e.what() << std::endl);
     }
 
-    std::vector<StateType> path_;
-    if (!planner.plan(path_)) {
+    std::vector<StateType> path;
+    if (!planner.plan(path)) {
         ROS_INFO_STREAM(RED << "No path found" << RESET);
         return 0;
     }
@@ -184,11 +186,11 @@ int main(int argc, char** argv) {
 
             std::ofstream file(path_file);
             // header line
-            file << "Experience," << path_.size() << "," << num_joints << std::endl;
+            file << "Experience," << path.size() << "," << num_joints << std::endl;
             // write the path
-            for (int j {0}; j < path_.size(); j++){
+            for (int j {0}; j < path.size(); j++){
                 for (int i {0}; i < num_joints; i++) {
-                    file << path_[j][i] << ",";
+                    file << path[j][i] << ",";
                 }
                 file << std::endl;
             }
@@ -196,9 +198,19 @@ int main(int argc, char** argv) {
         }
     }
 
+    // Shortcut the path.
+    // Timing.
+    auto shortcutting_startt = std::chrono::high_resolution_clock::now();
+    PathType smoothed_path;
+    ims::shortcutPath(path, move_group, scene_interface.getPlanningSceneMoveit(), smoothed_path);
+    path = smoothed_path;
+    auto shortcutting_endt = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> shortcutting_time = shortcutting_endt - shortcutting_startt;
+    ROS_INFO_STREAM("Shortcutting time: " << shortcutting_time.count() << " sec");
+
     // Print nicely the path
     int counter = 0;
-    for (auto& state : path_) {
+    for (auto& state : path) {
         std::cout << "State: " << counter++ << ": ";
         for (auto& val : state) {
             std::cout << val << ", ";
@@ -210,14 +222,14 @@ int main(int argc, char** argv) {
     PlannerStats stats = planner.reportStats();
     ROS_INFO_STREAM("\n" << GREEN << "\t Planning time: " << stats.time << " sec" << std::endl
                     << "\t cost: " << stats.cost << std::endl
-                    << "\t Path length: " << path_.size() << std::endl
+                    << "\t Path length: " << path.size() << std::endl
                     << "\t Number of nodes expanded: " << stats.num_expanded << std::endl
                     << "\t Suboptimality: " << stats.suboptimality << RESET);
 
     // profile and execute the path
     // @{
     std::vector<StateType> traj;
-    for (auto& state : path_) {
+    for (auto& state : path) {
         traj.push_back(state);
     }
     moveit_msgs::RobotTrajectory trajectory;
