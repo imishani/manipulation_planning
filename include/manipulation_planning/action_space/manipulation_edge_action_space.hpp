@@ -74,6 +74,10 @@ protected:
     ros::NodeHandle nh_;
     ros::Publisher vis_pub_;
 
+    // Instance of the ManipulationActionSpace class to use some of its methods.
+    // Since the ManipulationActionSpace class does not have a default constructor, the line above does not work. So instead we set it to nullptr and instantiate it in the constructor.
+    std::shared_ptr<ManipulationActionSpace> manip_action_space_ = nullptr;
+
 public:
     /// @brief Constructor
     /// @param moveitInterface The moveit interface
@@ -86,86 +90,21 @@ public:
         // get the joint limits
         moveit_interface_->getJointLimits(joint_limits_);
         vis_pub_ = nh_.advertise<visualization_msgs::Marker>("visualization_marker", 0);
-    }
 
-    void getActionSequences(int state_id,
-                            std::vector<ActionSequence> &action_seqs,
-                            std::vector<std::vector<double>> &action_transition_costs,
-                            bool check_validity) {
-        auto curr_state = this->getRobotState(state_id);
-        auto curr_state_val = curr_state->state;
-        if (bfs_heuristic_ == nullptr) {
-            std::vector<ActionSequence> prim_actions_seqs;
-            std::vector<std::vector<double>> prim_action_transition_costs;
-            manipulation_type_->getPrimActions(prim_actions_seqs, prim_action_transition_costs);
-            for (int i{0}; i < prim_actions_seqs.size(); i++) {
-                auto prim_action_seq = prim_actions_seqs[i];
-                // Create the transformed action sequence. The action costs do not change.
-                ActionSequence transformed_action_seq;
-                std::vector<double> transformed_action_transition_costs = prim_action_transition_costs[i];
-                for (int i = 0; i < prim_action_seq.size(); i++) {
-                    const Action &prim_action = prim_action_seq[i];
-                    StateType next_state_val(curr_state_val.size());
-                    std::transform(curr_state_val.begin(), curr_state_val.end(), prim_action.begin(), next_state_val.begin(),
-                                   std::plus<>());
-                    transformed_action_seq.push_back(next_state_val);
-                }
-                action_seqs.push_back(transformed_action_seq);
-                action_transition_costs.push_back(transformed_action_transition_costs);
-            }
-        } else {
-            if (curr_state->state_mapped.empty()) {
-                moveit_interface_->calculateFK(curr_state_val, curr_state->state_mapped);
-                this->VisualizePoint(curr_state->state_mapped.at(0), curr_state->state_mapped.at(1), curr_state->state_mapped.at(2));
-            }
-            auto goal_dist = bfs_heuristic_->getMetricGoalDistance(curr_state->state_mapped.at(0),
-                                                                   curr_state->state_mapped.at(1),
-                                                                   curr_state->state_mapped.at(2));
-            auto start_dist = bfs_heuristic_->getMetricStartDistance(curr_state->state_mapped.at(0),
-                                                                     curr_state->state_mapped.at(1),
-                                                                     curr_state->state_mapped.at(2));
-            std::vector<ActionSequence> prim_action_seqs;
-            std::vector<std::vector<double>> prim_action_transition_costs;
-            manipulation_type_->getAdaptivePrimActionSequences(start_dist,
-                                                               goal_dist,
-                                                               prim_action_seqs,
-                                                               prim_action_transition_costs,
-                                                               true);
-
-            for (int i{0}; i < prim_action_seqs.size(); i++) {
-                auto prim_action_seq = prim_action_seqs[i];
-                ActionSequence transformed_action_seq;
-                std::vector<double> transformed_action_transition_costs = prim_action_transition_costs[i];
-                // if the action is snap, then the next state is the goal state
-                // TODO: Add the option to have a goal state defined in ws even if planning in conf space
-                if (prim_action_seq.back()[0] == INF_DOUBLE) {
-                    transformed_action_seq = {curr_state_val, bfs_heuristic_->goal_};  // TODO: It is wierd that I am using the heuristic here
-                    transformed_action_transition_costs = {1.0, 0.0};
-                } else {
-                    for (int i = 0; i < prim_action_seq.size(); i++) {
-                        const Action &prim_action = prim_action_seq[i];
-                        StateType next_state_val(curr_state_val.size());
-                        std::transform(curr_state_val.begin(), curr_state_val.end(), prim_action.begin(), next_state_val.begin(),
-                                       std::plus<>());
-                        transformed_action_seq.push_back(next_state_val);
-                    }
-                }
-                action_seqs.push_back(transformed_action_seq);
-                action_transition_costs.push_back(transformed_action_transition_costs);
-            }
-        }
+        // Instantiate the ManipulationActionSpace class, for use of some of its methods.
+        manip_action_space_ = std::make_shared<ManipulationActionSpace>(env, actions_ptr, bfs_heuristic);
     }
 
     void getActions(int state_id,
                     std::vector<ActionSequence> &action_seqs,
                     bool check_validity) override {
-        std::vector<std::vector<double>> action_transition_costs;
-        getActionSequences(state_id, action_seqs, action_transition_costs, check_validity);
+        this.manip_action_space_->getActions(state_id, action_seqs, check_validity);
     }
 
     /// @brief Set the manipulation space type
     /// @param SpaceType The manipulation type
     void setManipActionType(ManipulationType::SpaceType SpaceType) {
+        this.manip_action_space_->setManipActionType(SpaceType);
         manipulation_type_->setSpaceType(SpaceType);
     }
 
@@ -184,21 +123,7 @@ public:
     /// @brief Get the workspace state
     /// @param ws_state The workspace state
     void getCurrWorkspaceState(StateType &ws_state) {
-        // get the tip link name
-        auto tip_link = moveit_interface_->planning_scene_->getRobotModel()->getJointModelGroup(moveit_interface_->group_name_)->getLinkModelNames().back();
-        // get the end-effector pose
-        auto ee_pose = moveit_interface_->planning_scene_->getCurrentState().getGlobalLinkTransform(tip_link);
-        // get the euler angles
-        ws_state.resize(6);
-        ws_state[0] = ee_pose.translation().x();
-        ws_state[1] = ee_pose.translation().y();
-        ws_state[2] = ee_pose.translation().z();
-        Eigen::Vector3d euler_angles = ee_pose.rotation().eulerAngles(2, 1, 0);
-        ws_state[3] = euler_angles[2];
-        ws_state[4] = euler_angles[1];
-        ws_state[5] = euler_angles[0];
-        normalize_euler_zyx(ws_state[5], ws_state[4], ws_state[3]);
-        roundStateToDiscretization(ws_state, manipulation_type_->state_discretization_);
+        this.manip_action_space_->getCurrWorkspaceState(ws_state);
     }
 
     /// @brief Get the end effector pose in the robot frame.
@@ -208,32 +133,7 @@ public:
     }
 
     bool isStateValid(const StateType &state_val) override {
-        // check if the state is valid
-        switch (manipulation_type_->getSpaceType()) {
-            case ManipulationType::SpaceType::ConfigurationSpace:
-                return moveit_interface_->isStateValid(state_val);
-            case ManipulationType::SpaceType::WorkSpace:
-                // check if state exists with IK solution already
-                geometry_msgs::Pose pose;
-                pose.position.x = state_val[0];
-                pose.position.y = state_val[1];
-                pose.position.z = state_val[2];
-                // Euler angles to quaternion
-                Eigen::Quaterniond q;
-                from_euler_zyx(state_val[5], state_val[4], state_val[3], q);
-                pose.orientation.x = q.x();
-                pose.orientation.y = q.y();
-                pose.orientation.z = q.z();
-                pose.orientation.w = q.w();
-                StateType joint_state;
-                bool succ = moveit_interface_->calculateIK(pose, joint_state);
-                if (!succ) {
-                    return false;
-                } else {
-                    return moveit_interface_->isStateValid(joint_state);
-                }
-        }
-        return false;
+        return this.manip_action_space_->isStateValid(state_val);
     }
 
     /// @brief Check state validity (IK and collision) and saves the ik solution in joint_state
@@ -242,61 +142,13 @@ public:
     /// @return True if the state is valid, false otherwise
     bool isStateValid(const StateType &state_val,
                       StateType &joint_state) {
-        switch (manipulation_type_->getSpaceType()) {
-            case ManipulationType::SpaceType::ConfigurationSpace:
-                return moveit_interface_->isStateValid(state_val);
-            case ManipulationType::SpaceType::WorkSpace:
-                geometry_msgs::Pose pose;
-                pose.position.x = state_val[0];
-                pose.position.y = state_val[1];
-                pose.position.z = state_val[2];
-                // Euler angles to quaternion
-                Eigen::Quaterniond q;
-                from_euler_zyx(state_val[5], state_val[4], state_val[3], q);
-                pose.orientation.x = q.x();
-                pose.orientation.y = q.y();
-                pose.orientation.z = q.z();
-                pose.orientation.w = q.w();
-                bool succ = moveit_interface_->calculateIK(pose, joint_state);
-                if (!succ) {
-                    ROS_INFO("IK failed");
-                    return false;
-                } else {
-                    return moveit_interface_->isStateValid(joint_state);
-                }
-        }
-        return false;
+        return this.manip_action_space_->isStateValid(state_val, joint_state);
     }
 
     bool isStateValid(const StateType &state_val,
                       const StateType &seed,
                       StateType &joint_state) {
-        // check if the state is valid
-        switch (manipulation_type_->getSpaceType()) {
-            case ManipulationType::SpaceType::ConfigurationSpace:
-                return moveit_interface_->isStateValid(state_val);
-            case ManipulationType::SpaceType::WorkSpace:
-                geometry_msgs::Pose pose;
-                pose.position.x = state_val[0];
-                pose.position.y = state_val[1];
-                pose.position.z = state_val[2];
-                // Euler angles to quaternion
-                Eigen::Quaterniond q;
-                from_euler_zyx(state_val[5], state_val[4], state_val[3], q);
-                pose.orientation.x = q.x();
-                pose.orientation.y = q.y();
-                pose.orientation.z = q.z();
-                pose.orientation.w = q.w();
-                joint_state.resize(moveit_interface_->num_joints_);
-                bool succ = moveit_interface_->calculateIK(pose, seed, joint_state);
-                normalizeAngles(joint_state);
-                if (!succ) {
-                    return false;
-                } else {
-                    return moveit_interface_->isStateValid(joint_state);
-                }
-        }
-        return false;
+        return this.manip_action_space_->isStateValid(state_val, seed, joint_state);
     }
 
     bool isStateToStateValid(const StateType &start, const StateType &end) {
@@ -305,257 +157,13 @@ public:
     }
 
     bool isPathValid(const PathType &path) override {
-        switch (manipulation_type_->getSpaceType()) {
-            case ManipulationType::SpaceType::ConfigurationSpace:
-                return moveit_interface_->isPathValid(path);
-            case ManipulationType::SpaceType::WorkSpace:
-                PathType poses;
-                for (auto &state : path) {
-                    geometry_msgs::Pose pose;
-                    pose.position.x = state[0];
-                    pose.position.y = state[1];
-                    pose.position.z = state[2];
-                    // Euler angles to quaternion
-                    Eigen::Quaterniond q;
-                    from_euler_zyx(state[5], state[4], state[3], q);
-                    pose.orientation.x = q.x();
-                    pose.orientation.y = q.y();
-                    pose.orientation.z = q.z();
-                    pose.orientation.w = q.w();
-                    StateType joint_state;
-                    bool succ = moveit_interface_->calculateIK(pose, joint_state);
-                    if (!succ) {
-                        return false;
-                    } else {
-                        poses.push_back(joint_state);
-                    }
-                }
-                return moveit_interface_->isPathValid(poses);
-        }
-        return false;
-    }
-
-    virtual bool getSuccessorWs(int curr_state_ind,
-                                ActionSequence &prime_action_seq,
-                                std::vector<int> &seq_state_ids,
-                                std::vector<double> &seq_transition_costs) {
-        seqs_state_ids.clear();
-        seqs_transition_costs.clear();
-        // Get the primitive actions. Those will be "added" to the current state.
-        std::vector<ActionSequence> prim_action_seqs;
-        std::vector<std::vector<double>> prim_action_transition_costs;
-        manipulation_type_->getPrimActions(prim_action_seqs, prim_action_transition_costs);
-        // Get the current state.
-        auto curr_state = this->getRobotState(curr_state_ind);
-        StateType curr_state_val = curr_state->state;
-        Eigen::Quaterniond q_curr;
-        from_euler_zyx(curr_state_val[5], curr_state_val[4], curr_state_val[3], q_curr);
-
-        // Get the successors. Each successor is a sequence of state_ids and a sequence of transition costs.
-        for (size_t i{0}; i < prim_action_seqs.size(); i++) {
-            ActionSequence &prim_action_seq = prim_action_seqs[i];
-            // Objects for the successor resulting from this action.
-            std::vector<int> successor_seq_state_ids{curr_state_ind};
-            std::vector<double> successor_seq_transition_costs = prim_action_transition_costs[i];
-            // The first state is the current state and the last state is the successor.
-            // The primitive action sequences are of for xyz-xyzw. Those start from the origin.
-            // The first state is assumed to be valid.
-            // Go through all the states in the sequence, compute new quaternion, normalize, discretize, and check for validity.
-            for (size_t j{1}; j < prim_action_seq.size(); j++) {
-                Eigen::Quaterniond q_action{prim_action_seq[j][6], prim_action_seq[j][3], prim_action_seq[j][4], prim_action_seq[j][5]};
-                Eigen::Quaterniond q_new = q_curr * q_action;
-                // convert the quaternion to euler angles
-                double r, p, y;
-                get_euler_zyx(q_new, y, p, r);
-                // Create a new state. Now it is in xyzrpy.
-                StateType new_state_val = {curr_state_val[0] + prim_action_seq[j][0],  // Add the action on x.
-                                           curr_state_val[1] + prim_action_seq[j][1],  // Add the action on y.
-                                           curr_state_val[2] + prim_action_seq[j][2],  // Add the action on z.
-                                           r, p, y};
-                // Normalize the angles.
-                normalize_euler_zyx(new_state_val[5], new_state_val[4], new_state_val[3]);
-                // Discretize the state.
-                roundStateToDiscretization(new_state_val, manipulation_type_->state_discretization_);
-                // Check if the next state is valid.
-                bool succ;
-                StateType mapped_state;
-                if (curr_state->state_mapped.empty()) {
-                    succ = isStateValid(new_state_val,
-                                        mapped_state);
-                } else
-                    succ = isStateValid(new_state_val,
-                                        curr_state->state_mapped,
-                                        mapped_state);
-                if (succ) {
-                    // create a new state
-                    int next_state_ind = getOrCreateRobotState(new_state_val);
-                    auto new_state = this->getRobotState(next_state_ind);
-                    new_state->state_mapped = mapped_state;
-                    // Add the state to the successor sequence.
-                    successor_seq_state_ids.push_back(next_state_ind);
-                    // Add the cost. This overrides the value given from the primitive.
-                    double cost{0};
-                    for (int dim{0}; dim < 3; dim++) {
-                        cost += prim_action_seq[j][dim] * prim_action_seq[j][dim];
-                    }
-                    // Add the cost of the rotation which is quaternion
-                    double r, p, y;
-                    get_euler_zyx(q_action, y, p, r);
-                    cost += r * r + p * p + y * y;
-                    successor_seq_transition_costs[j - 1] = cost;  // TODO(yoraish): probably a cleaner way to do this.
-                } else {
-                    // If the state is not valid, break the loop.
-                    break;
-                }
-            }
-            // Add the successor to the list of successors.
-            seqs_state_ids.push_back(successor_seq_state_ids);
-            seqs_transition_costs.push_back(successor_seq_transition_costs);
-        }
-        return true;
-    }
-
-    virtual bool getSuccessorsWs(int curr_state_ind,
-                                 std::vector<std::vector<int>> &seqs_state_ids,
-                                 std::vector<std::vector<double>> &seqs_transition_costs) {
-        seqs_state_ids.clear();
-        seqs_transition_costs.clear();
-        // Get the primitive actions. Those will be "added" to the current state.
-        std::vector<ActionSequence> prim_action_seqs;
-        std::vector<std::vector<double>> prim_action_transition_costs;
-        manipulation_type_->getPrimActions(prim_action_seqs, prim_action_transition_costs);
-        // Get the current state.
-        auto curr_state = this->getRobotState(curr_state_ind);
-        StateType curr_state_val = curr_state->state;
-        Eigen::Quaterniond q_curr;
-        from_euler_zyx(curr_state_val[5], curr_state_val[4], curr_state_val[3], q_curr);
-
-        // Get the successors. Each successor is a sequence of state_ids and a sequence of transition costs.
-        for (size_t i{0}; i < prim_action_seqs.size(); i++) {
-            ActionSequence &prim_action_seq = prim_action_seqs[i];
-            // Objects for the successor resulting from this action.
-            std::vector<int> successor_seq_state_ids{curr_state_ind};
-            std::vector<double> successor_seq_transition_costs = prim_action_transition_costs[i];
-            // The first state is the current state and the last state is the successor.
-            // The primitive action sequences are of for xyz-xyzw. Those start from the origin.
-            // The first state is assumed to be valid.
-            // Go through all the states in the sequence, compute new quaternion, normalize, discretize, and check for validity.
-            for (size_t j{1}; j < prim_action_seq.size(); j++) {
-                Eigen::Quaterniond q_action{prim_action_seq[j][6], prim_action_seq[j][3], prim_action_seq[j][4], prim_action_seq[j][5]};
-                Eigen::Quaterniond q_new = q_curr * q_action;
-                // convert the quaternion to euler angles
-                double r, p, y;
-                get_euler_zyx(q_new, y, p, r);
-                // Create a new state. Now it is in xyzrpy.
-                StateType new_state_val = {curr_state_val[0] + prim_action_seq[j][0],  // Add the action on x.
-                                           curr_state_val[1] + prim_action_seq[j][1],  // Add the action on y.
-                                           curr_state_val[2] + prim_action_seq[j][2],  // Add the action on z.
-                                           r, p, y};
-                // Normalize the angles.
-                normalize_euler_zyx(new_state_val[5], new_state_val[4], new_state_val[3]);
-                // Discretize the state.
-                roundStateToDiscretization(new_state_val, manipulation_type_->state_discretization_);
-                // Check if the next state is valid.
-                bool succ;
-                StateType mapped_state;
-                if (curr_state->state_mapped.empty()) {
-                    succ = isStateValid(new_state_val,
-                                        mapped_state);
-                } else
-                    succ = isStateValid(new_state_val,
-                                        curr_state->state_mapped,
-                                        mapped_state);
-                if (succ) {
-                    // create a new state
-                    int next_state_ind = getOrCreateRobotState(new_state_val);
-                    auto new_state = this->getRobotState(next_state_ind);
-                    new_state->state_mapped = mapped_state;
-                    // Add the state to the successor sequence.
-                    successor_seq_state_ids.push_back(next_state_ind);
-                    // Add the cost. This overrides the value given from the primitive.
-                    double cost{0};
-                    for (int dim{0}; dim < 3; dim++) {
-                        cost += prim_action_seq[j][dim] * prim_action_seq[j][dim];
-                    }
-                    // Add the cost of the rotation which is quaternion
-                    double r, p, y;
-                    get_euler_zyx(q_action, y, p, r);
-                    cost += r * r + p * p + y * y;
-                    successor_seq_transition_costs[j - 1] = cost;  // TODO(yoraish): probably a cleaner way to do this.
-                } else {
-                    // If the state is not valid, break the loop.
-                    break;
-                }
-            }
-            // Add the successor to the list of successors.
-            seqs_state_ids.push_back(successor_seq_state_ids);
-            seqs_transition_costs.push_back(successor_seq_transition_costs);
-        }
-        return true;
-    }
-
-    virtual bool getSuccessorsCs(int curr_state_ind,
-                                 std::vector<std::vector<int>> &seqs_state_ids,
-                                 std::vector<std::vector<double>> &seqs_transition_costs) {
-        seqs_state_ids.clear();
-        seqs_transition_costs.clear();
-
-        std::vector<ActionSequence> action_seqs;
-        std::vector<std::vector<double>> action_transition_costs;
-        getActionSequences(curr_state_ind, action_seqs, action_transition_costs, false);
-        // Get the successors. Each successor is a sequence of state_ids and a sequence of transition costs.
-        for (size_t i{0}; i < action_seqs.size(); i++) {
-            ActionSequence &action_seq = action_seqs[i];
-            // Objects for the successor resulting from this action.
-            std::vector<int> successor_seq_state_ids{curr_state_ind};
-            std::vector<double> successor_seq_transition_costs = action_transition_costs[i];
-            // The first state is the current state and the last state is the successor.
-            // Go through all the states in the sequence, normalize angles, discretize, and check for validity.
-            // Normalize and discretize the first state and then go through all pairs [i, i+1].
-            // The first state is assumed to be valid.
-            normalizeAngles(action_seq.front(), joint_limits_);
-            roundStateToDiscretization(action_seq.front(), manipulation_type_->state_discretization_);
-            for (size_t j{0}; j < action_seq.size() - 1; j++) {
-                auto curr_state_val = action_seq[j];
-                auto new_state_val = action_seq[j + 1];
-                // Normalize the angles.
-                normalizeAngles(new_state_val, joint_limits_);
-                // Discretize the state.
-                roundStateToDiscretization(new_state_val, manipulation_type_->state_discretization_);
-                // Check if the state transition went through discontinuity.
-                bool discontinuity{false};
-                // check for maximum absolute action
-                for (int dim{0}; dim < curr_state_val.size(); dim++) {
-                    if (new_state_val[dim] < joint_limits_[dim].first || new_state_val[dim] > joint_limits_[dim].second) {
-                        discontinuity = true;
-                        break;
-                    }
-                }
-
-                if (!discontinuity && isStateToStateValid(curr_state_val, new_state_val)) {
-                    // create a new state
-                    int next_state_ind = getOrCreateRobotState(new_state_val);
-                    // add the state to the successors
-                    successor_seq_state_ids.push_back(next_state_ind);
-                    // Transition costs were already added before.
-                }
-            }
-            seqs_state_ids.push_back(successor_seq_state_ids);
-            seqs_transition_costs.push_back(successor_seq_transition_costs);
-        }
-        return true;
+        return this.manip_action_space_->isPathValid(path);
     }
 
     bool getSuccessors(int curr_state_ind,
                        std::vector<std::vector<int>> &seqs_state_ids,
                        std::vector<std::vector<double>> &seqs_transition_costs) override {
-        if (manipulation_type_->getSpaceType() == ManipulationType::SpaceType::ConfigurationSpace) {
-            return getSuccessorsCs(curr_state_ind, seqs_state_ids, seqs_transition_costs);
-        } else if (manipulation_type_->getSpaceType() == ManipulationType::SpaceType::WorkSpace) {
-            return getSuccessorsWs(curr_state_ind, seqs_state_ids, seqs_transition_costs);
-        } else {
-            throw std::runtime_error("Space type not supported.");
-        }
+        return this.manip_action_space_->getSuccessors(curr_state_ind, seqs_state_ids, seqs_transition_costs);
     }
 
     /// @brief Visualize a state point in rviz for debugging
