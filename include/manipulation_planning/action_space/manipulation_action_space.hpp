@@ -120,8 +120,8 @@ struct ManipulationType : ActionType {
 
     void loadMprimFamily(const YAML::Node &root_node,
                          const std::string &family_name,
-                         std::vector <ActionSequence> &action_seqs,
-                         std::vector <std::vector<double>> &action_transition_times) {
+                         std::vector<ActionSequence> &action_seqs,
+                         std::vector<std::vector<double>> &action_transition_times) {
         if (root_node[family_name]) {
             for (const auto &action: root_node[family_name]) {
                 std::string action_name = action.first.as<std::string>();
@@ -132,7 +132,7 @@ struct ManipulationType : ActionType {
                 //            mprim_sequence:
                 //              - [ 0, 0, 0, 0, 0, 0, 0 ]
                 //              - [ 7, 0, 0, 0, 0, 0, 0 ]
-                //            delta_time_steps: [ 1, 0 ]
+                //            mprim_sequence_transition_costs: [ 1, 0 ]
                 //            generate_negative: true
                 if (!action.second["mprim_sequence"]) {
                     std::cerr << "Action \"" << action_name << "\" does not have \"mprim_sequence\".\n";
@@ -145,7 +145,7 @@ struct ManipulationType : ActionType {
                 }
                 ActionSequence action_seq;
                 ActionSequence neg_action_seq;
-                std::vector <std::vector<double>> action_transition_cost;
+                std::vector<std::vector<double>> action_transition_cost;
                 for (const auto &action_seq_state_it: action.second["mprim_sequence"]) {
                     StateType state;
                     StateType neg_state;
@@ -171,10 +171,10 @@ struct ManipulationType : ActionType {
                 // Note that we do not add the action_seq and the neg_action_seq to the action_seqs. We only do it at the end as those may need to be modified.
                 // Get the transition times, if those are available.
                 // This does two things. First, it stores the transition times for each action sequence:
-                if (action.second["delta_time_steps"]) {
+                if (action.second["mprim_sequence_transition_costs"]) {
                     std::vector<double> transition_time; // This is the same for both the normal and negated action.
-                    for (size_t i{0}; i < action.second["delta_time_steps"].size(); i++) {
-                        double num = action.second["delta_time_steps"][i].as<TimeType>();
+                    for (size_t i{0}; i < action.second["mprim_sequence_transition_costs"].size(); i++) {
+                        double num = action.second["mprim_sequence_transition_costs"][i].as<TimeType>();
                         // Store the time interval of the step in the transition time.
                         transition_time.push_back(num);
                     }
@@ -307,11 +307,11 @@ struct ManipulationType : ActionType {
     std::vector<Action> getPrimActions() override {
         // Call the getPrimActions function.
         std::vector<ActionSequence> action_seqs;
-        std::vector <std::vector<double>> action_transition_times;
+        std::vector<std::vector<double>> action_transition_times;
         getPrimActions(action_seqs, action_transition_times);
 
         // Backwards compatability hack. This will return the actions_ vector where actions are only single-step actions.
-        std::vector <Action> actions;
+        std::vector<Action> actions;
         for (auto action_seq: action_seqs) {
             actions.push_back({action_seq.back()});
             // Only allow this if the action is a single step action (aka with exactly two elements in the sequence).
@@ -392,8 +392,8 @@ struct ManipulationType : ActionType {
     /// @note This should be named getAdaptivePrimActions since it returns non-transformed actions (delta from origin).
     [[deprecated("Use getAdaptivePrimActionSequences() instead.")]]
     std::vector<Action> getAdaptiveActions(double &start_dist,
-                                            double &goal_dist,
-                                            bool is_add_long_with_short = false
+                                           double &goal_dist,
+                                           bool is_add_long_with_short = false
     ) {
         // Call the getAdaptivePrimActionSequences function.
         std::vector<ActionSequence> action_seqs;
@@ -451,13 +451,13 @@ struct ManipulationType : ActionType {
     ///          Each entry is not a delta from the previous, but a delta from the zero state.
     std::vector<ActionSequence> short_mprim_seqs_;
     /// @brief The transitions costs at i are the time it takes to move from state i to state i+1 in the action sequence.
-    std::vector <std::vector<double>> short_mprim_transition_times_;
+    std::vector<std::vector<double>> short_mprim_transition_times_;
     /// @brief The long distance motion primitives. In radians. Similar explanations as for short_mprim_seqs_ and short_mprim_transition_times_.
-    std::vector <ActionSequence> long_mprim_seqs_;
-    std::vector <std::vector<double>> long_mprim_transition_times_;
+    std::vector<ActionSequence> long_mprim_seqs_;
+    std::vector<std::vector<double>> long_mprim_transition_times_;
     /// @brief The motion primitives. In radians.
-    std::vector <ActionSequence> action_seqs_; // This could be bug prone if getPrimActions is called after getAdaptiveActions since it will append to the actions_ vector.
-    std::vector <std::vector<double>> action_transition_times_;
+    std::vector<ActionSequence> action_seqs_; // This could be bug prone if getPrimActions is called after getAdaptiveActions since it will append to the actions_ vector.
+    std::vector<std::vector<double>> action_transition_times_;
 
     std::vector<bool> mprim_enabled_;
     std::vector<double> mprim_thresh_;
@@ -469,11 +469,11 @@ struct ManipulationType : ActionType {
 class ManipulationActionSpace : public ActionSpace {
 protected:
     /// @brief Manipulation type
-    std::shared_ptr <ManipulationType> manipulation_type_;
+    std::shared_ptr<ManipulationType> manipulation_type_;
     /// @brief Moveit interface
-    std::shared_ptr <MoveitInterface> moveit_interface_;
+    std::shared_ptr<MoveitInterface> moveit_interface_;
     /// @brief joint limits
-    std::vector <std::pair<double, double>> joint_limits_;
+    std::vector<std::pair<double, double>> joint_limits_;
     /// @brief The BFS heuristic
     BFSHeuristic *bfs_heuristic_;
 
@@ -497,14 +497,14 @@ public:
     }
 
     void getActionSequences(int state_id,
-                            std::vector <ActionSequence> &action_seqs,
-                            std::vector <std::vector<double>> &action_transition_costs,
+                            std::vector<ActionSequence> &action_seqs,
+                            std::vector<std::vector<double>> &action_transition_costs,
                             bool check_validity) {
         auto curr_state = this->getRobotState(state_id);
         auto curr_state_val = curr_state->state;
         if (bfs_heuristic_ == nullptr) {
-            std::vector <ActionSequence> prim_actions_seqs;
-            std::vector <std::vector<double>> prim_action_transition_costs;
+            std::vector<ActionSequence> prim_actions_seqs;
+            std::vector<std::vector<double>> prim_action_transition_costs;
             manipulation_type_->getPrimActions(prim_actions_seqs, prim_action_transition_costs);
             for (int i{0}; i < prim_actions_seqs.size(); i++) {
                 auto prim_action_seq = prim_actions_seqs[i];
@@ -535,8 +535,8 @@ public:
             auto start_dist = bfs_heuristic_->getMetricStartDistance(curr_state->state_mapped.at(0),
                                                                      curr_state->state_mapped.at(1),
                                                                      curr_state->state_mapped.at(2));
-            std::vector <ActionSequence> prim_action_seqs;
-            std::vector <std::vector<double>> prim_action_transition_costs;
+            std::vector<ActionSequence> prim_action_seqs;
+            std::vector<std::vector<double>> prim_action_transition_costs;
             manipulation_type_->getAdaptivePrimActionSequences(start_dist,
                                                                goal_dist,
                                                                prim_action_seqs,
@@ -571,9 +571,9 @@ public:
     }
 
     void getActions(int state_id,
-                    std::vector <ActionSequence> &action_seqs,
+                    std::vector<ActionSequence> &action_seqs,
                     bool check_validity) override {
-        std::vector <std::vector<double>> action_transition_costs;
+        std::vector<std::vector<double>> action_transition_costs;
         getActionSequences(state_id, action_seqs, action_transition_costs, check_validity);
     }
 
@@ -755,13 +755,13 @@ public:
     }
 
     virtual bool getSuccessorsWs(int curr_state_ind,
-                                 std::vector <std::vector<int>> &seqs_state_ids,
-                                 std::vector <std::vector<double>> &seqs_transition_costs) {
+                                 std::vector<std::vector<int>> &seqs_state_ids,
+                                 std::vector<std::vector<double>> &seqs_transition_costs) {
         seqs_state_ids.clear();
         seqs_transition_costs.clear();
         // Get the primitive actions. Those will be "added" to the current state.
-        std::vector <ActionSequence> prim_action_seqs;
-        std::vector <std::vector<double>> prim_action_transition_costs;
+        std::vector<ActionSequence> prim_action_seqs;
+        std::vector<std::vector<double>> prim_action_transition_costs;
         manipulation_type_->getPrimActions(prim_action_seqs, prim_action_transition_costs);
         // Get the current state.
         auto curr_state = this->getRobotState(curr_state_ind);
@@ -837,13 +837,13 @@ public:
     }
 
     virtual bool getSuccessorsCs(int curr_state_ind,
-                                 std::vector <std::vector<int>> &seqs_state_ids,
-                                 std::vector <std::vector<double>> &seqs_transition_costs) {
+                                 std::vector<std::vector<int>> &seqs_state_ids,
+                                 std::vector<std::vector<double>> &seqs_transition_costs) {
         seqs_state_ids.clear();
         seqs_transition_costs.clear();
 
-        std::vector <ActionSequence> action_seqs;
-        std::vector <std::vector<double>> action_transition_costs;
+        std::vector<ActionSequence> action_seqs;
+        std::vector<std::vector<double>> action_transition_costs;
         getActionSequences(curr_state_ind, action_seqs, action_transition_costs, false);
         // Get the successors. Each successor is a sequence of state_ids and a sequence of transition costs.
         for (size_t i{0}; i < action_seqs.size(); i++) {
@@ -890,8 +890,8 @@ public:
     }
 
     bool getSuccessors(int curr_state_ind,
-                       std::vector <std::vector<int>> &seqs_state_ids,
-                       std::vector <std::vector<double>> &seqs_transition_costs) override {
+                       std::vector<std::vector<int>> &seqs_state_ids,
+                       std::vector<std::vector<double>> &seqs_transition_costs) override {
         if (manipulation_type_->getSpaceType() == ManipulationType::SpaceType::ConfigurationSpace) {
             return getSuccessorsCs(curr_state_ind, seqs_state_ids, seqs_transition_costs);
         }

@@ -44,9 +44,9 @@ namespace ims {
 class EgraphManipulationActionSpace : public EGraphActionSpace {
 protected:
     /// @brief Manipulation type
-    std::shared_ptr <ManipulationType> manipulation_type_;
+    std::shared_ptr<ManipulationType> manipulation_type_;
     /// @brief Moveit interface
-    std::shared_ptr <MoveitInterface> moveit_interface_;
+    std::shared_ptr<MoveitInterface> moveit_interface_;
     /// @brief joint limits
     std::vector<std::pair<double, double>> joint_limits_;
     /// @brief Joint states seed
@@ -735,14 +735,14 @@ public:
         }
     }
 
-    const std::shared_ptr <ims::smpl::ExperienceGraph> getExperienceGraph() const override {
-        std::shared_ptr <ims::smpl::ExperienceGraph> egraph_ptr = std::make_shared<ims::smpl::ExperienceGraph>(
+    const std::shared_ptr<ims::smpl::ExperienceGraph> getExperienceGraph() const override {
+        std::shared_ptr<ims::smpl::ExperienceGraph> egraph_ptr = std::make_shared<ims::smpl::ExperienceGraph>(
                 egraph_);
         return egraph_ptr;
     }
 
-    std::shared_ptr <ims::smpl::ExperienceGraph> getExperienceGraph() override {
-        std::shared_ptr <ims::smpl::ExperienceGraph> egraph_ptr = std::make_shared<ims::smpl::ExperienceGraph>(
+    std::shared_ptr<ims::smpl::ExperienceGraph> getExperienceGraph() override {
+        std::shared_ptr<ims::smpl::ExperienceGraph> egraph_ptr = std::make_shared<ims::smpl::ExperienceGraph>(
                 egraph_);
         return egraph_ptr;
     }
