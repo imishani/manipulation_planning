@@ -474,21 +474,24 @@ public:
                     double r, p, y;
                     get_euler_zyx(q_action, y, p, r);
                     cost += r * r + p * p + y * y;
-                    successor_seq_transition_costs[j -
-                                                   1] = cost; // TODO(yoraish): probably a cleaner way to do this.
+                    successor_seq_transition_costs[j - 1] = cost; // TODO(yoraish): probably a cleaner way to do this.
                 }
                 else {
-                    // If the state is not valid, break the loop.
-                    break;
+                    // The transition is not valid.
+                    // Clear the successor sequence.
+                    successor_seq_state_ids.clear();
+                    successor_seq_transition_costs.clear();
+                    break; // From iterating through the sequence.
                 }
             }
-            // Add the successor to the list of successors.
-            seqs_state_ids.push_back(successor_seq_state_ids);
-            seqs_transition_costs.push_back(successor_seq_transition_costs);
+            if (!successor_seq_state_ids.empty()) {
+                seqs_state_ids.push_back(successor_seq_state_ids);
+                seqs_transition_costs.push_back(successor_seq_transition_costs);
+            }
         }
+        assert(seqs_state_ids.size() == seqs_transition_costs.size());
         return true;
     }
-
 
     virtual bool getSuccessorsCs(int curr_state_ind,
                                  std::vector<std::vector<int>> &seqs_state_ids,
@@ -536,10 +539,20 @@ public:
                     successor_seq_state_ids.push_back(next_state_ind);
                     // Transition costs were already added before.
                 }
+                else {
+                    // The transition is not valid.
+                    // Clear the successor sequence.
+                    successor_seq_state_ids.clear();
+                    successor_seq_transition_costs.clear();
+                    break; // From iterating through the sequence.
+                }
             }
-            seqs_state_ids.push_back(successor_seq_state_ids);
-            seqs_transition_costs.push_back(successor_seq_transition_costs);
+            if (!successor_seq_state_ids.empty()) {
+                seqs_state_ids.push_back(successor_seq_state_ids);
+                seqs_transition_costs.push_back(successor_seq_transition_costs);
+            }
         }
+        assert(seqs_state_ids.size() == seqs_transition_costs.size());
         return true;
     }
 
