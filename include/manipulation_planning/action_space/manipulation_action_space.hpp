@@ -34,10 +34,11 @@
 #pragma once
 
 // include standard libraries
+#include <yaml-cpp/yaml.h>
+
 #include <iostream>
 #include <utility>
 #include <vector>
-#include <yaml-cpp/yaml.h>
 
 // include ROS libraries
 #include <moveit/move_group_interface/move_group_interface.h>
@@ -61,7 +62,7 @@ struct ManipulationType : ActionType {
                                   space_type_(SpaceType::ConfigurationSpace),
                                   mprim_file_name_("../config/manip_6dof.mprim"),
                                   max_action_(0.0) {
-    };
+                                  };
 
     /// @brief Constructor with motion primitives file given
     /// @param[in] mprim_file The path to the motion primitives file
@@ -70,7 +71,7 @@ struct ManipulationType : ActionType {
                                                         space_type_(SpaceType::ConfigurationSpace),
                                                         mprim_file_name_(std::move(mprim_file)),
                                                         max_action_(0.0) {
-    };
+                                                        };
 
     /// @brief Constructor with adaptive motion primitives given
     /// @brief Destructor
@@ -123,7 +124,7 @@ struct ManipulationType : ActionType {
                          std::vector<ActionSequence> &action_seqs,
                          std::vector<std::vector<double>> &action_transition_times) {
         if (root_node[family_name]) {
-            for (const auto &action: root_node[family_name]) {
+            for (const auto &action : root_node[family_name]) {
                 std::string action_name = action.first.as<std::string>();
                 // Check if "mprim_sequence" exists in the key list.
                 // This will commonly be in degrees for configuration space primitives, and in [m, m, m, deg, deg, deg] for workspace.
@@ -132,7 +133,7 @@ struct ManipulationType : ActionType {
                 //            mprim_sequence:
                 //              - [ 0, 0, 0, 0, 0, 0, 0 ]
                 //              - [ 7, 0, 0, 0, 0, 0, 0 ]
-                //            mprim_sequence_transition_costs: [ 1, 0 ]
+                //            delta_time_steps: [ 1, 0 ]
                 //            generate_negative: true
                 if (!action.second["mprim_sequence"]) {
                     std::cerr << "Action \"" << action_name << "\" does not have \"mprim_sequence\".\n";
@@ -146,14 +147,13 @@ struct ManipulationType : ActionType {
                 ActionSequence action_seq;
                 ActionSequence neg_action_seq;
                 std::vector<std::vector<double>> action_transition_cost;
-                for (const auto &action_seq_state_it: action.second["mprim_sequence"]) {
+                for (const auto &action_seq_state_it : action.second["mprim_sequence"]) {
                     StateType state;
                     StateType neg_state;
                     for (int i{0}; i < action_seq_state_it.size(); i++) {
                         double num = action_seq_state_it[i].as<double>();
                         // Converte to radians if the planning space is configuration, or if planning in workspace and i in {3, 4 5}.
-                        if (space_type_ == SpaceType::ConfigurationSpace ||
-                            (space_type_ == SpaceType::WorkSpace && i > 2)) {
+                        if (space_type_ == SpaceType::ConfigurationSpace || (space_type_ == SpaceType::WorkSpace && i > 2)) {
                             num = num / 180.0 * M_PI;
                         }
                         // Populate max_action_.
@@ -171,10 +171,10 @@ struct ManipulationType : ActionType {
                 // Note that we do not add the action_seq and the neg_action_seq to the action_seqs. We only do it at the end as those may need to be modified.
                 // Get the transition times, if those are available.
                 // This does two things. First, it stores the transition times for each action sequence:
-                if (action.second["mprim_sequence_transition_costs"]) {
-                    std::vector<double> transition_time; // This is the same for both the normal and negated action.
-                    for (size_t i{0}; i < action.second["mprim_sequence_transition_costs"].size(); i++) {
-                        double num = action.second["mprim_sequence_transition_costs"][i].as<TimeType>();
+                if (action.second["delta_time_steps"]) {
+                    std::vector<double> transition_time;  // This is the same for both the normal and negated action.
+                    for (size_t i{0}; i < action.second["delta_time_steps"].size(); i++) {
+                        double num = action.second["delta_time_steps"][i].as<TimeType>();
                         // Store the time interval of the step in the transition time.
                         transition_time.push_back(num);
                     }
@@ -208,8 +208,7 @@ struct ManipulationType : ActionType {
                     action_seqs.push_back(neg_action_seq);
                 }
             }
-        }
-        else {
+        } else {
             std::cerr << "Family \"" << family_name << "\" not found in the YAML file.\n";
         }
         // Check that the length of the transition times is the same as the length of the action sequence.
@@ -228,8 +227,7 @@ struct ManipulationType : ActionType {
         if (space_type_ == SpaceType::ConfigurationSpace) {
             loadMprimFamily(mprim_config, "short_primitives", short_mprim_seqs_, short_mprim_transition_times_);
             loadMprimFamily(mprim_config, "long_primitives", long_mprim_seqs_, long_mprim_transition_times_);
-        }
-        else if (space_type_ == SpaceType::WorkSpace) {
+        } else if (space_type_ == SpaceType::WorkSpace) {
             // TODO(yoraish, imishani): keeping previous convention: using short_mprim_ for workspace motion primitives.
             loadMprimFamily(mprim_config, "short_primitives", short_mprim_seqs_, short_mprim_transition_times_);
         }
@@ -238,7 +236,6 @@ struct ManipulationType : ActionType {
     // Returns the actions as they are in the motion primitive file. Those are not rooted in any state, but in the origin.
     void getPrimActions(std::vector<ActionSequence> &action_seqs,
                         std::vector<std::vector<double>> &action_transition_costs) override {
-
         // Read the motion primitive file if needed.
         if (short_mprim_seqs_.empty() && long_mprim_seqs_.empty()) {
             readMPfile();
@@ -263,11 +260,10 @@ struct ManipulationType : ActionType {
                         case SpaceType::WorkSpace: {
                             // Populate the action_seqs_ vector with the short_mprim_ and the long_mprim_.
                             // Convert the euler angles (rad) to quaternions.
-                            for (int i_short_action_seq = 0;
-                                 i_short_action_seq < short_mprim_seqs_.size(); i_short_action_seq++) {
+                            for (int i_short_action_seq = 0; i_short_action_seq < short_mprim_seqs_.size(); i_short_action_seq++) {
                                 ActionSequence &short_action_seq = short_mprim_seqs_[i_short_action_seq];
                                 ActionSequence action_seq_converted;
-                                for (Action &short_action: short_action_seq) {
+                                for (Action &short_action : short_action_seq) {
                                     // Convert from euler angles (rad) to quaternions.
                                     tf::Quaternion q;
                                     q.setRPY(short_action[3],
@@ -341,8 +337,7 @@ struct ManipulationType : ActionType {
         action_transition_costs.clear();
         // Decide whether we are in the short- or long-primitive region.
         bool is_short = mprim_active_type_.short_dist.first &&
-                        (start_dist < mprim_active_type_.short_dist.second ||
-                         goal_dist < mprim_active_type_.short_dist.second);
+                        (start_dist < mprim_active_type_.short_dist.second || goal_dist < mprim_active_type_.short_dist.second);
 
         // Add long primitives under two conditions.
         // 1. If need to add short and adding the long primitives to the set of primitives is required, do that first.
@@ -362,8 +357,7 @@ struct ManipulationType : ActionType {
         }
 
         // If allowed, and the cartesian goal distance is less than a threshold, insert snap primitive. The time for this is 1.
-        ActionSequence snap_action_seq = {{0,          0,          0,          0,          0,          0},
-                                          {INF_DOUBLE, INF_DOUBLE, INF_DOUBLE, INF_DOUBLE, INF_DOUBLE, INF_DOUBLE}};
+        ActionSequence snap_action_seq = {{0, 0, 0, 0, 0, 0}, {INF_DOUBLE, INF_DOUBLE, INF_DOUBLE, INF_DOUBLE, INF_DOUBLE, INF_DOUBLE}};
         std::vector<double> snap_transition_time = {1.0, 0.0};
         // TODO(yoraish): the xyz and rpy snaps are not handled correctly yet.
         // Snap I: only xyz.
@@ -393,8 +387,7 @@ struct ManipulationType : ActionType {
     [[deprecated("Use getAdaptivePrimActionSequences() instead.")]]
     std::vector<Action> getAdaptiveActions(double &start_dist,
                                            double &goal_dist,
-                                           bool is_add_long_with_short = false
-    ) {
+                                           bool is_add_long_with_short = false) {
         // Call the getAdaptivePrimActionSequences function.
         std::vector<ActionSequence> action_seqs;
         std::vector<std::vector<double>> action_transition_times;
@@ -456,7 +449,7 @@ struct ManipulationType : ActionType {
     std::vector<ActionSequence> long_mprim_seqs_;
     std::vector<std::vector<double>> long_mprim_transition_times_;
     /// @brief The motion primitives. In radians.
-    std::vector<ActionSequence> action_seqs_; // This could be bug prone if getPrimActions is called after getAdaptiveActions since it will append to the actions_ vector.
+    std::vector<ActionSequence> action_seqs_;  // This could be bug prone if getPrimActions is called after getAdaptiveActions since it will append to the actions_ vector.
     std::vector<std::vector<double>> action_transition_times_;
 
     std::vector<bool> mprim_enabled_;
@@ -522,8 +515,7 @@ public:
                 action_seqs.push_back(transformed_action_seq);
                 action_transition_costs.push_back(transformed_action_transition_costs);
             }
-        }
-        else {
+        } else {
             if (curr_state->state_mapped.empty()) {
                 moveit_interface_->calculateFK(curr_state_val, curr_state->state_mapped);
                 this->VisualizePoint(curr_state->state_mapped.at(0), curr_state->state_mapped.at(1),
@@ -553,8 +545,7 @@ public:
                     transformed_action_seq = {curr_state_val,
                                               bfs_heuristic_->goal_};  // TODO: It is wierd that I am using the heuristic here
                     transformed_action_transition_costs = {1.0, 0.0};
-                }
-                else {
+                } else {
                     for (int i = 0; i < prim_action_seq.size(); i++) {
                         const Action &prim_action = prim_action_seq[i];
                         StateType next_state_val(curr_state_val.size());
@@ -644,8 +635,7 @@ public:
                 bool succ = moveit_interface_->calculateIK(pose, joint_state);
                 if (!succ) {
                     return false;
-                }
-                else {
+                } else {
                     return moveit_interface_->isStateValid(joint_state);
                 }
         }
@@ -677,8 +667,7 @@ public:
                 if (!succ) {
                     ROS_INFO("IK failed");
                     return false;
-                }
-                else {
+                } else {
                     return moveit_interface_->isStateValid(joint_state);
                 }
         }
@@ -709,8 +698,7 @@ public:
                 normalizeAngles(joint_state);
                 if (!succ) {
                     return false;
-                }
-                else {
+                } else {
                     return moveit_interface_->isStateValid(joint_state);
                 }
         }
@@ -744,14 +732,78 @@ public:
                     bool succ = moveit_interface_->calculateIK(pose, joint_state);
                     if (!succ) {
                         return false;
-                    }
-                    else {
+                    } else {
                         poses.push_back(joint_state);
                     }
                 }
                 return moveit_interface_->isPathValid(poses);
         }
         return false;
+    }
+
+    virtual bool getSuccessorWs(int curr_state_ind,
+                                ActionSequence &prim_action_seq,
+                                std::vector<int> &seq_state_ids,
+                                std::vector<double> &seq_transition_costs) {
+        // Get the current state.
+        auto curr_state = this->getRobotState(curr_state_ind);
+        StateType curr_state_val = curr_state->state;
+        Eigen::Quaterniond q_curr;
+        from_euler_zyx(curr_state_val[5], curr_state_val[4], curr_state_val[3], q_curr);
+
+        // The first state is the current state and the last state is the successor.
+        // The primitive action sequences are of for xyz-xyzw. Those start from the origin.
+        // The first state is assumed to be valid.
+        // Go through all the states in the sequence, compute new quaternion, normalize, discretize, and check for validity.
+        for (size_t j{1}; j < prim_action_seq.size(); j++) {
+            Eigen::Quaterniond q_action{prim_action_seq[j][6], prim_action_seq[j][3], prim_action_seq[j][4], prim_action_seq[j][5]};
+            Eigen::Quaterniond q_new = q_curr * q_action;
+            // convert the quaternion to euler angles
+            double r, p, y;
+            get_euler_zyx(q_new, y, p, r);
+            // Create a new state. Now it is in xyzrpy.
+            StateType new_state_val = {curr_state_val[0] + prim_action_seq[j][0],  // Add the action on x.
+                                       curr_state_val[1] + prim_action_seq[j][1],  // Add the action on y.
+                                       curr_state_val[2] + prim_action_seq[j][2],  // Add the action on z.
+                                       r, p, y};
+            // Normalize the angles.
+            normalize_euler_zyx(new_state_val[5], new_state_val[4], new_state_val[3]);
+            // Discretize the state.
+            roundStateToDiscretization(new_state_val, manipulation_type_->state_discretization_);
+            // Check if the next state is valid.
+            bool succ;
+            StateType mapped_state;
+            if (curr_state->state_mapped.empty()) {
+                succ = isStateValid(new_state_val,
+                                    mapped_state);
+            } else
+                succ = isStateValid(new_state_val,
+                                    curr_state->state_mapped,
+                                    mapped_state);
+            if (succ) {
+                // create a new state
+                int next_state_ind = getOrCreateRobotState(new_state_val);
+                auto new_state = this->getRobotState(next_state_ind);
+                new_state->state_mapped = mapped_state;
+                // Add the state to the successor sequence.
+                seq_state_ids.push_back(next_state_ind);
+                // Add the cost. This overrides the value given from the primitive.
+                double cost{0};
+                for (int dim{0}; dim < 3; dim++) {
+                    cost += prim_action_seq[j][dim] * prim_action_seq[j][dim];
+                }
+                // Add the cost of the rotation which is quaternion
+                double r, p, y;
+                get_euler_zyx(q_action, y, p, r);
+                cost += r * r + p * p + y * y;
+                seq_transition_costs[j - 1] = cost;  // TODO(yoraish): probably a cleaner way to do this.
+            } else {
+                // If the state is not valid, break the loop.
+                return false;
+            }
+        }
+
+        return true;
     }
 
     virtual bool getSuccessorsWs(int curr_state_ind,
@@ -763,11 +815,6 @@ public:
         std::vector<ActionSequence> prim_action_seqs;
         std::vector<std::vector<double>> prim_action_transition_costs;
         manipulation_type_->getPrimActions(prim_action_seqs, prim_action_transition_costs);
-        // Get the current state.
-        auto curr_state = this->getRobotState(curr_state_ind);
-        StateType curr_state_val = curr_state->state;
-        Eigen::Quaterniond q_curr;
-        from_euler_zyx(curr_state_val[5], curr_state_val[4], curr_state_val[3], q_curr);
 
         // Get the successors. Each successor is a sequence of state_ids and a sequence of transition costs.
         for (size_t i{0}; i < prim_action_seqs.size(); i++) {
@@ -775,69 +822,15 @@ public:
             // Objects for the successor resulting from this action.
             std::vector<int> successor_seq_state_ids{curr_state_ind};
             std::vector<double> successor_seq_transition_costs = prim_action_transition_costs[i];
-            // The first state is the current state and the last state is the successor.
-            // The primitive action sequences are of for xyz-xyzw. Those start from the origin.
-            // The first state is assumed to be valid.
-            // Go through all the states in the sequence, compute new quaternion, normalize, discretize, and check for validity.
-            for (size_t j{1}; j < prim_action_seq.size(); j++) {
-                Eigen::Quaterniond q_action{prim_action_seq[j][6], prim_action_seq[j][3], prim_action_seq[j][4],
-                                            prim_action_seq[j][5]};
-                Eigen::Quaterniond q_new = q_curr * q_action;
-                // convert the quaternion to euler angles
-                double r, p, y;
-                get_euler_zyx(q_new, y, p, r);
-                // Create a new state. Now it is in xyzrpy.
-                StateType new_state_val = {curr_state_val[0] + prim_action_seq[j][0], // Add the action on x.
-                                           curr_state_val[1] + prim_action_seq[j][1], // Add the action on y.
-                                           curr_state_val[2] + prim_action_seq[j][2], // Add the action on z.
-                                           r, p, y};
-                // Normalize the angles.
-                normalize_euler_zyx(new_state_val[5], new_state_val[4], new_state_val[3]);
-                // Discretize the state.
-                roundStateToDiscretization(new_state_val, manipulation_type_->state_discretization_);
-                // Check if the next state is valid.
-                bool succ;
-                StateType mapped_state;
-                if (curr_state->state_mapped.empty()) {
-                    succ = isStateValid(new_state_val,
-                                        mapped_state);
-                }
-                else
-                    succ = isStateValid(new_state_val,
-                                        curr_state->state_mapped,
-                                        mapped_state);
-                if (succ) {
-                    // create a new state
-                    int next_state_ind = getOrCreateRobotState(new_state_val);
-                    auto new_state = this->getRobotState(next_state_ind);
-                    new_state->state_mapped = mapped_state;
-                    // Add the state to the successor sequence.
-                    successor_seq_state_ids.push_back(next_state_ind);
-                    // Add the cost. This overrides the value given from the primitive.
-                    double cost{0};
-                    for (int dim{0}; dim < 3; dim++) {
-                        cost += prim_action_seq[j][dim] * prim_action_seq[j][dim];
-                    }
-                    // Add the cost of the rotation which is quaternion
-                    double r, p, y;
-                    get_euler_zyx(q_action, y, p, r);
-                    cost += r * r + p * p + y * y;
-                    successor_seq_transition_costs[j - 1] = cost; // TODO(yoraish): probably a cleaner way to do this.
-                }
-                else {
-                    // The transition is not valid.
-                    // Clear the successor sequence.
-                    successor_seq_state_ids.clear();
-                    successor_seq_transition_costs.clear();
-                    break; // From iterating through the sequence.
-                }
-            }
-            if (!successor_seq_state_ids.empty()) {
+
+            if (getSuccessorWs(curr_state_ind, prim_action_seq, successor_seq_state_ids, successor_seq_transition_costs)) {
                 seqs_state_ids.push_back(successor_seq_state_ids);
                 seqs_transition_costs.push_back(successor_seq_transition_costs);
             }
         }
-        assert(seqs_state_ids.size() == seqs_transition_costs.size());
+        if (seqs_state_ids.empty()) {
+            return false;
+        }
         return true;
     }
 
@@ -909,11 +902,9 @@ public:
                        std::vector<std::vector<double>> &seqs_transition_costs) override {
         if (manipulation_type_->getSpaceType() == ManipulationType::SpaceType::ConfigurationSpace) {
             return getSuccessorsCs(curr_state_ind, seqs_state_ids, seqs_transition_costs);
-        }
-        else if (manipulation_type_->getSpaceType() == ManipulationType::SpaceType::WorkSpace) {
+        } else if (manipulation_type_->getSpaceType() == ManipulationType::SpaceType::WorkSpace) {
             return getSuccessorsWs(curr_state_ind, seqs_state_ids, seqs_transition_costs);
-        }
-        else {
+        } else {
             throw std::runtime_error("Space type not supported.");
         }
     }
@@ -961,4 +952,3 @@ public:
     }
 };
 }  // namespace ims
-

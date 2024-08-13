@@ -205,6 +205,15 @@ target_link_libraries(${PROJECT_NAME}_egraph_test
         yaml-cpp
         )
 
+add_executable(${PROJECT_NAME}_parallel_test src/confspace_parallel_test.cpp)
+
+
+target_link_libraries(${PROJECT_NAME}_parallel_test
+        ${catkin_LIBRARIES}
+        ${eigen_LIBRARIES}
+        /usr/local/lib/${search_LIBRARIES}
+        yaml-cpp
+        )
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the

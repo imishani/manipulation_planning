@@ -58,7 +58,7 @@ namespace ims {
 
 /// @class ManipulationActionSpace
 /// @brief A class that implements the ActionSpace for Moveit
-class ManipulationActionSpace : public ActionSpace {
+class ManipulationEdgeActionSpace : public EdgeActionSpace {
 protected:
     /// @brief Manipulation type
     std::shared_ptr<ManipulationType> manipulation_type_;
@@ -78,9 +78,9 @@ public:
     /// @brief Constructor
     /// @param moveitInterface The moveit interface
     /// @param ManipulationType The manipulation type
-    ManipulationActionSpace(const MoveitInterface &env,
-                            const ManipulationType &actions_ptr,
-                            BFSHeuristic *bfs_heuristic = nullptr) : ActionSpace(), bfs_heuristic_(bfs_heuristic) {
+    ManipulationEdgeActionSpace(const MoveitInterface &env,
+                                const ManipulationType &actions_ptr,
+                                BFSHeuristic *bfs_heuristic = nullptr) : EdgeActionSpace(), bfs_heuristic_(bfs_heuristic) {
         moveit_interface_ = std::make_shared<MoveitInterface>(env);
         manipulation_type_ = std::make_shared<ManipulationType>(actions_ptr);
         // get the joint limits
@@ -333,6 +333,86 @@ public:
                 return moveit_interface_->isPathValid(poses);
         }
         return false;
+    }
+
+    virtual bool getSuccessorWs(int curr_state_ind,
+                                ActionSequence &prime_action_seq,
+                                std::vector<int> &seq_state_ids,
+                                std::vector<double> &seq_transition_costs) {
+        seqs_state_ids.clear();
+        seqs_transition_costs.clear();
+        // Get the primitive actions. Those will be "added" to the current state.
+        std::vector<ActionSequence> prim_action_seqs;
+        std::vector<std::vector<double>> prim_action_transition_costs;
+        manipulation_type_->getPrimActions(prim_action_seqs, prim_action_transition_costs);
+        // Get the current state.
+        auto curr_state = this->getRobotState(curr_state_ind);
+        StateType curr_state_val = curr_state->state;
+        Eigen::Quaterniond q_curr;
+        from_euler_zyx(curr_state_val[5], curr_state_val[4], curr_state_val[3], q_curr);
+
+        // Get the successors. Each successor is a sequence of state_ids and a sequence of transition costs.
+        for (size_t i{0}; i < prim_action_seqs.size(); i++) {
+            ActionSequence &prim_action_seq = prim_action_seqs[i];
+            // Objects for the successor resulting from this action.
+            std::vector<int> successor_seq_state_ids{curr_state_ind};
+            std::vector<double> successor_seq_transition_costs = prim_action_transition_costs[i];
+            // The first state is the current state and the last state is the successor.
+            // The primitive action sequences are of for xyz-xyzw. Those start from the origin.
+            // The first state is assumed to be valid.
+            // Go through all the states in the sequence, compute new quaternion, normalize, discretize, and check for validity.
+            for (size_t j{1}; j < prim_action_seq.size(); j++) {
+                Eigen::Quaterniond q_action{prim_action_seq[j][6], prim_action_seq[j][3], prim_action_seq[j][4], prim_action_seq[j][5]};
+                Eigen::Quaterniond q_new = q_curr * q_action;
+                // convert the quaternion to euler angles
+                double r, p, y;
+                get_euler_zyx(q_new, y, p, r);
+                // Create a new state. Now it is in xyzrpy.
+                StateType new_state_val = {curr_state_val[0] + prim_action_seq[j][0],  // Add the action on x.
+                                           curr_state_val[1] + prim_action_seq[j][1],  // Add the action on y.
+                                           curr_state_val[2] + prim_action_seq[j][2],  // Add the action on z.
+                                           r, p, y};
+                // Normalize the angles.
+                normalize_euler_zyx(new_state_val[5], new_state_val[4], new_state_val[3]);
+                // Discretize the state.
+                roundStateToDiscretization(new_state_val, manipulation_type_->state_discretization_);
+                // Check if the next state is valid.
+                bool succ;
+                StateType mapped_state;
+                if (curr_state->state_mapped.empty()) {
+                    succ = isStateValid(new_state_val,
+                                        mapped_state);
+                } else
+                    succ = isStateValid(new_state_val,
+                                        curr_state->state_mapped,
+                                        mapped_state);
+                if (succ) {
+                    // create a new state
+                    int next_state_ind = getOrCreateRobotState(new_state_val);
+                    auto new_state = this->getRobotState(next_state_ind);
+                    new_state->state_mapped = mapped_state;
+                    // Add the state to the successor sequence.
+                    successor_seq_state_ids.push_back(next_state_ind);
+                    // Add the cost. This overrides the value given from the primitive.
+                    double cost{0};
+                    for (int dim{0}; dim < 3; dim++) {
+                        cost += prim_action_seq[j][dim] * prim_action_seq[j][dim];
+                    }
+                    // Add the cost of the rotation which is quaternion
+                    double r, p, y;
+                    get_euler_zyx(q_action, y, p, r);
+                    cost += r * r + p * p + y * y;
+                    successor_seq_transition_costs[j - 1] = cost;  // TODO(yoraish): probably a cleaner way to do this.
+                } else {
+                    // If the state is not valid, break the loop.
+                    break;
+                }
+            }
+            // Add the successor to the list of successors.
+            seqs_state_ids.push_back(successor_seq_state_ids);
+            seqs_transition_costs.push_back(successor_seq_transition_costs);
+        }
+        return true;
     }
 
     virtual bool getSuccessorsWs(int curr_state_ind,

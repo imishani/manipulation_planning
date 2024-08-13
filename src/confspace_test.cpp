@@ -37,7 +37,7 @@
 #include <chrono>
 
 // project includes
-#include <manipulation_planning/action_space/manipulation_action_space.hpp>
+#include <manipulation_planning/action_space/manipulation_edge_action_space.hpp>
 #include <manipulation_planning/common/moveit_scene_interface.hpp>
 #include <search/planners/wastar.hpp>
 #include <manipulation_planning/heuristics/manip_heuristics.hpp>
