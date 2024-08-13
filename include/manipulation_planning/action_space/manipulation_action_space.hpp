@@ -802,7 +802,6 @@ public:
                 return false;
             }
         }
-
         return true;
     }
 
@@ -823,6 +822,9 @@ public:
             std::vector<int> successor_seq_state_ids{curr_state_ind};
             std::vector<double> successor_seq_transition_costs = prim_action_transition_costs[i];
 
+            // Only if the getSuccessorWs return true, add the successor_seq to the list.
+            // However, if a paritial action is desired, we need to add the partial successor_seq to the list.
+            // Here we are assuming that we only want the full action success cases to be returned.
             if (getSuccessorWs(curr_state_ind, prim_action_seq, successor_seq_state_ids, successor_seq_transition_costs)) {
                 seqs_state_ids.push_back(successor_seq_state_ids);
                 seqs_transition_costs.push_back(successor_seq_transition_costs);
@@ -830,6 +832,46 @@ public:
         }
         if (seqs_state_ids.empty()) {
             return false;
+        }
+        return true;
+    }
+
+    virtual bool getSuccessorCs(int curr_state_ind,
+                                ActionSequence &action_seq,
+                                std::vector<int> &seq_state_ids,
+                                std::vector<double> &seq_transition_costs) {
+        // The first state is the current state and the last state is the successor.
+        // Go through all the states in the sequence, normalize angles, discretize, and check for validity.
+        // Normalize and discretize the first state and then go through all pairs [i, i+1].
+        // The first state is assumed to be valid.
+        normalizeAngles(action_seq.front(), joint_limits_);
+        roundStateToDiscretization(action_seq.front(), manipulation_type_->state_discretization_);
+        for (size_t j{0}; j < action_seq.size() - 1; j++) {
+            auto curr_state_val = action_seq[j];
+            auto new_state_val = action_seq[j + 1];
+            // Normalize the angles.
+            normalizeAngles(new_state_val, joint_limits_);
+            // Discretize the state.
+            roundStateToDiscretization(new_state_val, manipulation_type_->state_discretization_);
+            // Check if the state transition went through discontinuity.
+            bool discontinuity{false};
+            // check for maximum absolute action
+            for (int dim{0}; dim < curr_state_val.size(); dim++) {
+                if (new_state_val[dim] < joint_limits_[dim].first || new_state_val[dim] > joint_limits_[dim].second) {
+                    discontinuity = true;
+                    break;
+                }
+            }
+
+            if (!discontinuity && isStateToStateValid(curr_state_val, new_state_val)) {
+                // create a new state
+                int next_state_ind = getOrCreateRobotState(new_state_val);
+                // add the state to the successors
+                seq_state_ids.push_back(next_state_ind);
+                // Transition costs were already added before.
+            } else {
+                return false;
+            }
         }
         return true;
     }
@@ -849,51 +891,14 @@ public:
             // Objects for the successor resulting from this action.
             std::vector<int> successor_seq_state_ids{curr_state_ind};
             std::vector<double> successor_seq_transition_costs = action_transition_costs[i];
-            // The first state is the current state and the last state is the successor.
-            // Go through all the states in the sequence, normalize angles, discretize, and check for validity.
-            // Normalize and discretize the first state and then go through all pairs [i, i+1].
-            // The first state is assumed to be valid.
-            normalizeAngles(action_seq.front(), joint_limits_);
-            roundStateToDiscretization(action_seq.front(), manipulation_type_->state_discretization_);
-            for (size_t j{0}; j < action_seq.size() - 1; j++) {
-                auto curr_state_val = action_seq[j];
-                auto new_state_val = action_seq[j + 1];
-                // Normalize the angles.
-                normalizeAngles(new_state_val, joint_limits_);
-                // Discretize the state.
-                roundStateToDiscretization(new_state_val, manipulation_type_->state_discretization_);
-                // Check if the state transition went through discontinuity.
-                bool discontinuity{false};
-                // check for maximum absolute action
-                for (int dim{0}; dim < curr_state_val.size(); dim++) {
-                    if (new_state_val[dim] < joint_limits_[dim].first ||
-                        new_state_val[dim] > joint_limits_[dim].second) {
-                        discontinuity = true;
-                        break;
-                    }
-                }
-
-                if (!discontinuity && isStateToStateValid(curr_state_val, new_state_val)) {
-                    // Create a new state.
-                    int next_state_ind = getOrCreateRobotState(new_state_val);
-                    // Add the state to the successors.
-                    successor_seq_state_ids.push_back(next_state_ind);
-                    // Transition costs were already added before.
-                }
-                else {
-                    // The transition is not valid.
-                    // Clear the successor sequence.
-                    successor_seq_state_ids.clear();
-                    successor_seq_transition_costs.clear();
-                    break; // From iterating through the sequence.
-                }
-            }
-            if (!successor_seq_state_ids.empty()) {
+            if (getSuccessorCs(curr_state_ind, action_seq, successor_seq_state_ids, successor_seq_transition_costs)) {
                 seqs_state_ids.push_back(successor_seq_state_ids);
                 seqs_transition_costs.push_back(successor_seq_transition_costs);
             }
         }
-        assert(seqs_state_ids.size() == seqs_transition_costs.size());
+        if (seqs_state_ids.empty()) {
+            return false;
+        }
         return true;
     }
 

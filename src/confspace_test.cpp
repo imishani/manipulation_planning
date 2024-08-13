@@ -120,6 +120,7 @@ int main(int argc, char** argv) {
                                                                                                                 heuristic);
 
     const std::vector<std::string>& joint_names = move_group.getVariableNames();
+    for (int i = 0; i < 7; i++) {
     StateType start_state(num_joints, 0);
 
     for (int i = 0; i < joint_names.size(); i++) {
@@ -136,8 +137,15 @@ int main(int argc, char** argv) {
 //    goal_state[2] = -0.9948*180/M_PI; //-18; //-30;
     goal_state[3] -= 40; // = -1.5708*180/M_PI; //-147; //0;
 //    goal_state[4] = 0; //73; //0;
-    goal_state[5] += 10;//-66; //0;
+    // goal_state[5] += 10;//-66; //0;
 
+    goal_state[0] = 44;
+    goal_state[1] = 7;
+    goal_state[2] = 9;
+    goal_state[3] = -30;
+    goal_state[4] = 4;  // 73; //0;
+    goal_state[5] = 34;
+    goal_state[6] = 57;
 
     ims::deg2rad(start_state); ims::deg2rad(goal_state);
     // normalize the start and goal states
