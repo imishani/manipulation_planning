@@ -98,13 +98,13 @@ public:
     void getActions(int state_id,
                     std::vector<ActionSequence> &action_seqs,
                     bool check_validity) override {
-        this.manip_action_space_->getActions(state_id, action_seqs, check_validity);
+        this->manip_action_space_->getActions(state_id, action_seqs, check_validity);
     }
 
     /// @brief Set the manipulation space type
     /// @param SpaceType The manipulation type
     void setManipActionType(ManipulationType::SpaceType SpaceType) {
-        this.manip_action_space_->setManipActionType(SpaceType);
+        this->manip_action_space_->setManipActionType(SpaceType);
         manipulation_type_->setSpaceType(SpaceType);
     }
 
@@ -123,7 +123,7 @@ public:
     /// @brief Get the workspace state
     /// @param ws_state The workspace state
     void getCurrWorkspaceState(StateType &ws_state) {
-        this.manip_action_space_->getCurrWorkspaceState(ws_state);
+        this->manip_action_space_->getCurrWorkspaceState(ws_state);
     }
 
     /// @brief Get the end effector pose in the robot frame.
@@ -133,7 +133,7 @@ public:
     }
 
     bool isStateValid(const StateType &state_val) override {
-        return this.manip_action_space_->isStateValid(state_val);
+        return this->manip_action_space_->isStateValid(state_val);
     }
 
     /// @brief Check state validity (IK and collision) and saves the ik solution in joint_state
@@ -142,13 +142,13 @@ public:
     /// @return True if the state is valid, false otherwise
     bool isStateValid(const StateType &state_val,
                       StateType &joint_state) {
-        return this.manip_action_space_->isStateValid(state_val, joint_state);
+        return this->manip_action_space_->isStateValid(state_val, joint_state);
     }
 
     bool isStateValid(const StateType &state_val,
                       const StateType &seed,
                       StateType &joint_state) {
-        return this.manip_action_space_->isStateValid(state_val, seed, joint_state);
+        return this->manip_action_space_->isStateValid(state_val, seed, joint_state);
     }
 
     bool isStateToStateValid(const StateType &start, const StateType &end) {
@@ -157,13 +157,60 @@ public:
     }
 
     bool isPathValid(const PathType &path) override {
-        return this.manip_action_space_->isPathValid(path);
+        return this->manip_action_space_->isPathValid(path);
     }
 
     bool getSuccessors(int curr_state_ind,
                        std::vector<std::vector<int>> &seqs_state_ids,
                        std::vector<std::vector<double>> &seqs_transition_costs) override {
-        return this.manip_action_space_->getSuccessors(curr_state_ind, seqs_state_ids, seqs_transition_costs);
+        return this->manip_action_space_->getSuccessors(curr_state_ind, seqs_state_ids, seqs_transition_costs);
+    }
+
+    bool getSuccessor(int curr_edge_ind,
+                      std::vector<int> &seq_state_ids,
+                      std::vector<double> &seq_transition_costs) override {
+        // Get the seq transition cost for the specific action of the edge
+        int curr_state_ind = getRobotStateId(getRobotEdge(curr_edge_ind)->state);
+        ActionSequence action_seq = getRobotEdge(curr_edge_ind)->action;
+        getActionCost(curr_state_ind, action_seq, seq_transition_costs);
+
+        if (manipulation_type_->getSpaceType() == ManipulationType::SpaceType::ConfigurationSpace) {
+            return this->manip_action_space_->getSuccessorCs(curr_state_ind, action_seq, seq_state_ids, seq_transition_costs);
+        } else if (manipulation_type_->getSpaceType() == ManipulationType::SpaceType::WorkSpace) {
+            return this->manip_action_space_->getSuccessorWs(curr_state_ind, action_seq, seq_state_ids, seq_transition_costs);
+        } else {
+            throw std::runtime_error("Space type not supported.");
+        }
+    }
+
+    void getActionCost(int curr_state_ind,
+                       const ActionSequence &action_seq,
+                       std::vector<double> &seq_transition_costs) {
+        if (manipulation_type_->getSpaceType() == ManipulationType::SpaceType::ConfigurationSpace) {
+            std::vector<ActionSequence> action_seqs;
+            std::vector<std::vector<double>> action_transition_costs;
+            this->manip_action_space_->getActionSequences(curr_state_ind, action_seqs, action_transition_costs, false);
+            for (int i{0}; i < action_seqs.size(); i++) {
+                if (action_seqs[i] == action_seq) {
+                    seq_transition_costs = action_transition_costs[i];
+                    return;
+                }
+            }
+            throw std::runtime_error("Action sequence not found in manipulation_type_(cspace)'s action seqs.");
+        } else if (manipulation_type_->getSpaceType() == ManipulationType::SpaceType::WorkSpace) {
+            std::vector<ActionSequence> prim_action_seqs;
+            std::vector<std::vector<double>> prim_action_transition_costs;
+            manipulation_type_->getPrimActions(prim_action_seqs, prim_action_transition_costs);
+            for (int i{0}; i < prim_action_seqs.size(); i++) {
+                if (prim_action_seqs[i] == action_seq) {
+                    seq_transition_costs = prim_action_transition_costs[i];
+                    return;
+                }
+            }
+            throw std::runtime_error("Action sequence not found in manipulation_type_(wspace)'s prim action seqs.");
+        } else {
+            throw std::runtime_error("Space type not supported.");
+        }
     }
 
     /// @brief Visualize a state point in rviz for debugging
