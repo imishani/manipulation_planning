@@ -171,10 +171,10 @@ struct ManipulationType : ActionType {
                 // Note that we do not add the action_seq and the neg_action_seq to the action_seqs. We only do it at the end as those may need to be modified.
                 // Get the transition times, if those are available.
                 // This does two things. First, it stores the transition times for each action sequence:
-                if (action.second["delta_time_steps"]) {
+                if (action.second["mprim_sequence_transition_costs"]) {
                     std::vector<double> transition_time;  // This is the same for both the normal and negated action.
-                    for (size_t i{0}; i < action.second["delta_time_steps"].size(); i++) {
-                        double num = action.second["delta_time_steps"][i].as<TimeType>();
+                    for (size_t i{0}; i < action.second["mprim_sequence_transition_costs"].size(); i++) {
+                        double num = action.second["mprim_sequence_transition_costs"][i].as<TimeType>();
                         // Store the time interval of the step in the transition time.
                         transition_time.push_back(num);
                     }

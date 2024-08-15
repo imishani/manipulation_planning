@@ -16,31 +16,31 @@ long_primitives:
     mprim_sequence:
       - [ 0, 0, 0, 0, 0, 0, 0 ]
       - [ 7, 0, 0, 0, 0, 0, 0 ]
-    mprim_sequence_transition_costs: [ 1000, 0 ]
+    mprim_sequence_transition_costs: [ 7, 0 ]
     generate_negative: true
   joint1:
     mprim_sequence:
       - [ 0, 0, 0, 0, 0, 0, 0 ]
       - [ 0, 7, 0, 0, 0, 0, 0 ]
-    mprim_sequence_transition_costs: [ 1000, 0 ]
+    mprim_sequence_transition_costs: [ 7, 0 ]
     generate_negative: true
   joint2:
     mprim_sequence:
       - [ 0, 0, 0, 0, 0, 0, 0 ]
       - [ 0, 0, 7, 0, 0, 0, 0 ]
-    mprim_sequence_transition_costs: [ 1000, 0 ]
+    mprim_sequence_transition_costs: [ 7, 0 ]
     generate_negative: true
   joint3:
     mprim_sequence:
       - [ 0, 0, 0, 0, 0, 0, 0 ]
       - [ 0, 0, 0, 7, 0, 0, 0 ]
-    mprim_sequence_transition_costs: [ 1000, 0 ]
+    mprim_sequence_transition_costs: [ 7, 0 ]
     generate_negative: true
   joint4:
     mprim_sequence:
       - [ 0, 0, 0, 0, 0, 0, 0 ]
       - [ 0, 0, 0, 0, 7, 0, 0 ]
-    mprim_sequence_transition_costs: [ 1000, 0 ]
+    mprim_sequence_transition_costs: [ 7, 0 ]
     generate_negative: true
 #  wait: # Optional wait action. Normally not used in single-agent planning / non-dynamic environments.
 #    mprim_sequence:
@@ -54,41 +54,41 @@ short_primitives:
     mprim_sequence:
       - [ 0, 0, 0, 0, 0, 0, 0 ]
       - [ 4, 0, 0, 0, 0, 0, 0 ]
-    mprim_sequence_transition_costs: [ 1000, 0 ]
+    mprim_sequence_transition_costs: [ 4, 0 ]
     generate_negative: true
   joint1:
     mprim_sequence:
       - [ 0, 0, 0, 0, 0, 0, 0 ]
       - [ 0, 4, 0, 0, 0, 0, 0 ]
-    mprim_sequence_transition_costs: [ 1000, 0 ]
+    mprim_sequence_transition_costs: [ 4, 0 ]
     generate_negative: true
   joint2:
     mprim_sequence:
       - [ 0, 0, 0, 0, 0, 0, 0 ]
       - [ 0, 0, 4, 0, 0, 0, 0 ]
-    mprim_sequence_transition_costs: [ 1000, 0 ]
+    mprim_sequence_transition_costs: [ 4, 0 ]
     generate_negative: true
   joint3:
     mprim_sequence:
       - [ 0, 0, 0, 0, 0, 0, 0 ]
       - [ 0, 0, 0, 4, 0, 0, 0 ]
-    mprim_sequence_transition_costs: [ 1000, 0 ]
+    mprim_sequence_transition_costs: [ 4, 0 ]
     generate_negative: true
   joint4:
     mprim_sequence:
       - [ 0, 0, 0, 0, 0, 0, 0 ]
       - [ 0, 0, 0, 0, 4, 0, 0 ]
-    mprim_sequence_transition_costs: [ 1000, 0 ]
+    mprim_sequence_transition_costs: [ 4, 0 ]
     generate_negative: true
   joint5:
     mprim_sequence:
       - [ 0, 0, 0, 0, 0, 0, 0 ]
       - [ 0, 0, 0, 0, 0, 4, 0 ]
-    mprim_sequence_transition_costs: [ 1000, 0 ]
+    mprim_sequence_transition_costs: [ 4, 0 ]
     generate_negative: true
   joint6:
     mprim_sequence:
       - [ 0, 0, 0, 0, 0, 0, 0 ]
       - [ 0, 0, 0, 0, 0, 0, 4 ]
-    mprim_sequence_transition_costs: [ 1000, 0 ]
+    mprim_sequence_transition_costs: [ 4, 0 ]
     generate_negative: true

@@ -120,7 +120,6 @@ int main(int argc, char** argv) {
                                                                                                                 heuristic);
 
     const std::vector<std::string>& joint_names = move_group.getVariableNames();
-    for (int i = 0; i < 7; i++) {
     StateType start_state(num_joints, 0);
 
     for (int i = 0; i < joint_names.size(); i++) {

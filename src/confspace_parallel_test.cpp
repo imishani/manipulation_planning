@@ -50,7 +50,7 @@
 #include <moveit/occupancy_map_monitor/occupancy_map_monitor.h>
 #include <ros/ros.h>
 
-#define VERBOSE false
+#define VERBOSE true
 
 int main(int argc, char** argv) {
     ros::init(argc, argv, "configuration_test");
@@ -146,9 +146,10 @@ int main(int argc, char** argv) {
     std::shared_ptr<ims::ManipulationEdgeActionSpace> edge_action_space = std::make_shared<ims::ManipulationEdgeActionSpace>(scene_interface, action_type,
                                                                                                                              heuristic);
 
-    StateType start_state{0, 0, 0, 0, 0, 0, 0};
     const std::vector<std::string>& joint_names = move_group.getVariableNames();
-    for (int i = 0; i < 7; i++) {
+    StateType start_state(num_joints, 0);
+
+    for (int i = 0; i < joint_names.size(); i++) {
         start_state[i] = current_state->getVariablePosition(joint_names[i]);
         ROS_INFO_STREAM("Joint " << joint_names[i] << " is " << start_state[i]);
     }
