@@ -37,15 +37,20 @@
 
 // project includes
 #include <manipulation_planning/action_space/manipulation_action_space.hpp>
+#include <manipulation_planning/action_space/manipulation_edge_action_space.hpp>
 #include <manipulation_planning/common/moveit_scene_interface.hpp>
 #include <manipulation_planning/common/utils.hpp>
 #include <manipulation_planning/heuristics/manip_heuristics.hpp>
+#include <search/planners/parallel_search/epase.hpp>
+#include <search/planners/parallel_search/pase.hpp>
 #include <search/planners/wastar.hpp>
 
 // ROS includes
 #include <moveit/collision_distance_field/collision_env_distance_field.h>
 #include <moveit/occupancy_map_monitor/occupancy_map_monitor.h>
 #include <ros/ros.h>
+
+#define VERBOSE false
 
 int main(int argc, char** argv) {
     ros::init(argc, argv, "configuration_test");
@@ -54,25 +59,31 @@ int main(int argc, char** argv) {
     spinner.start();
 
     std::string group_name = "manipulator_1";
+    std::string planner_name = "wastar";
     double discret = 1;
     bool save_experience = false;
 
     if (argc == 0) {
         ROS_INFO_STREAM(BOLDMAGENTA << "No arguments given: using default values");
-        ROS_INFO_STREAM("<group_name(string)> <discretization(int)> <save_experience(bool int)>");
+        ROS_INFO_STREAM("<group_name(string)> <planner_name(string)> <discretization(int)> <save_experience(bool int)>");
         ROS_INFO_STREAM("Using default values: manipulator_1 1 0" << RESET);
     } else if (argc == 2) {
         group_name = argv[1];
     } else if (argc == 3) {
         group_name = argv[1];
-        discret = std::stod(argv[2]);
+        planner_name = argv[2];
     } else if (argc == 4) {
         group_name = argv[1];
-        discret = std::stod(argv[2]);
-        save_experience = std::stoi(argv[3]);
+        planner_name = argv[2];
+        discret = std::stod(argv[3]);
+    } else if (argc == 5) {
+        group_name = argv[1];
+        planner_name = argv[2];
+        discret = std::stod(argv[3]);
+        save_experience = std::stoi(argv[4]);
     } else {
         ROS_INFO_STREAM(BOLDMAGENTA << "No arguments given: using default values");
-        ROS_INFO_STREAM("<group_name(string)> <discretization(int)> <save_experience(bool int)>");
+        ROS_INFO_STREAM("<group_name(string)> <planner_name(string)> <discretization(int)> <save_experience(bool int)>");
         ROS_INFO_STREAM("Using default values: manipulator_1 1 0" << RESET);
     }
 
@@ -84,6 +95,8 @@ int main(int argc, char** argv) {
     int num_joints = (int)move_group.getVariableCount();
 
     std::string path_mprim = full_path.string() + "/config/manip_" + std::to_string(num_joints) + "dof_mprim.yaml";
+
+    ROS_WARN_STREAM(path_mprim);
 
     moveit::core::RobotStatePtr current_state = move_group.getCurrentState();
 
@@ -99,12 +112,26 @@ int main(int argc, char** argv) {
     ros::Publisher bb_pub = nh.advertise<visualization_msgs::Marker>("bb_marker", 10);
     // get the planning frame
     ims::visualizeBoundingBox(df, bb_pub, move_group.getPlanningFrame());
-    auto* heuristic = new ims::BFSHeuristic(df, group_name);
+    auto heuristic = std::make_shared<ims::BFSHeuristic>(df, group_name);
+    auto i_heuristic = std::make_shared<ims::JointAnglesHeuristic>();
     //    auto* heuristic = new ims::JointAnglesHeuristic;
     double weight = 100.0;
+    int num_threads = 12;
 
-    ims::wAStarParams params(heuristic, weight);
-    params.verbose = true;
+    std::shared_ptr<ims::PlannerParams> params = std::make_shared<ims::PlannerParams>();
+
+    if (planner_name == "wastar") {
+        params = std::make_shared<ims::wAStarParams>(heuristic.get(), weight);
+        if (VERBOSE)
+            params->verbose = true;
+    } else if (planner_name == "epase" || planner_name == "pase") {
+        params = std::make_shared<ims::ParallelSearchParams>(heuristic, i_heuristic, num_threads, weight);
+        if (VERBOSE)
+            params->verbose = true;
+    } else {
+        ROS_ERROR_STREAM("Planner " << planner_name << " not recognized");
+        return 0;
+    }
 
     ims::MoveitInterface scene_interface(group_name);
 
@@ -115,7 +142,9 @@ int main(int argc, char** argv) {
 
     //    std::shared_ptr<ims::ManipulationActionSpace> action_space = std::make_shared<ims::ManipulationActionSpace>(scene_interface, action_type);
     std::shared_ptr<ims::ManipulationActionSpace> action_space = std::make_shared<ims::ManipulationActionSpace>(scene_interface, action_type,
-                                                                                                                heuristic);
+                                                                                                                heuristic.get());
+    std::shared_ptr<ims::ManipulationEdgeActionSpace> edge_action_space = std::make_shared<ims::ManipulationEdgeActionSpace>(scene_interface, action_type,
+                                                                                                                             heuristic);
 
     StateType start_state{0, 0, 0, 0, 0, 0, 0};
     const std::vector<std::string>& joint_names = move_group.getVariableNames();
@@ -154,15 +183,43 @@ int main(int argc, char** argv) {
     ims::roundStateToDiscretization(start_state, action_type.state_discretization_);
     ims::roundStateToDiscretization(goal_state, action_type.state_discretization_);
 
-    ims::wAStar planner(params);
-    try {
-        planner.initializePlanner(action_space, start_state, goal_state);
-    } catch (std::exception& e) {
-        ROS_INFO_STREAM(e.what() << std::endl);
+    std::shared_ptr<ims::Planner> planner;
+
+    if (planner_name == "wastar") {
+        planner = std::make_shared<ims::wAStar>(*std::dynamic_pointer_cast<ims::wAStarParams>(params));
+    } else if (planner_name == "epase") {
+        planner = std::make_shared<ims::Epase>(*std::dynamic_pointer_cast<ims::ParallelSearchParams>(params));
+    } else if (planner_name == "pase") {
+        planner = std::make_shared<ims::Pase>(*std::dynamic_pointer_cast<ims::ParallelSearchParams>(params));
+    } else {
+        ROS_ERROR_STREAM("Planner " << planner_name << " not recognized");
+        return 0;
+    }
+
+    if (planner_name == "wastar") {
+        try {
+            planner->initializePlanner(action_space, start_state, goal_state);
+        } catch (std::exception& e) {
+            ROS_INFO_STREAM(e.what() << std::endl);
+        }
+    } else if (planner_name == "epase") {
+        try {
+            ROS_INFO_STREAM("Initializing epase planners.");
+            std::dynamic_pointer_cast<ims::Epase>(planner)->initializePlanner(edge_action_space, start_state, goal_state);
+        } catch (std::exception& e) {
+            ROS_INFO_STREAM(e.what() << std::endl);
+        }
+    } else if (planner_name == "pase") {
+        try {
+            ROS_INFO_STREAM("Initializing pase planners.");
+            std::dynamic_pointer_cast<ims::Pase>(planner)->initializePlanner(edge_action_space, start_state, goal_state);
+        } catch (std::exception& e) {
+            ROS_INFO_STREAM(e.what() << std::endl);
+        }
     }
 
     std::vector<StateType> path_;
-    if (!planner.plan(path_)) {
+    if (!planner->plan(path_)) {
         ROS_INFO_STREAM(RED << "No path found" << RESET);
         return 0;
     } else {
@@ -212,13 +269,23 @@ int main(int argc, char** argv) {
     }
 
     // report stats
-    PlannerStats stats = planner.reportStats();
-    ROS_INFO_STREAM("\n"
-                    << GREEN << "\t Planning time: " << stats.time << " sec" << std::endl
-                    << "\t cost: " << stats.cost << std::endl
-                    << "\t Path length: " << path_.size() << std::endl
-                    << "\t Number of nodes expanded: " << stats.num_expanded << std::endl
-                    << "\t Suboptimality: " << stats.suboptimality << RESET);
+    if (planner_name == "wastar") {
+        PlannerStats stats = planner->reportStats();
+        ROS_INFO_STREAM("\n"
+                        << GREEN << "\t Planning time: " << stats.time << " sec" << std::endl
+                        << "\t cost: " << stats.cost << std::endl
+                        << "\t Path length: " << path_.size() << std::endl
+                        << "\t Number of nodes expanded: " << stats.num_expanded << std::endl
+                        << "\t Suboptimality: " << stats.suboptimality << RESET);
+    } else {
+        ims::ParallelSearchPlannerStats stats = std::dynamic_pointer_cast<ims::ParallelSearch>(planner)->reportStats();
+        ROS_INFO_STREAM("\n"
+                        << GREEN << "\t Planning time: " << stats.time << " sec" << std::endl
+                        << "\t cost: " << stats.cost << std::endl
+                        << "\t Path length: " << path_.size() << std::endl
+                        << "\t Number of nodes expanded: " << stats.num_expanded << std::endl
+                        << "\t Suboptimality: " << stats.suboptimality << RESET);
+    }
 
     // profile and execute the path
     // @{
