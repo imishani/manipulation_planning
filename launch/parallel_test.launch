@@ -1,0 +1,10 @@
+<launch>
+    <arg name="robot" default="panda_arm"/>
+    <arg name="planner" default="wastar"/>
+    <arg name="verbose" default="0"/>
+
+    <!-- Given the published joint states, publish tf for the robot links -->
+    <node name="parallel_test" pkg="manipulation_planning" type="manipulation_planning_parallel_test" output="screen" args="$(arg robot) $(arg planner) $(arg verbose)"/>
+
+
+</launch>
