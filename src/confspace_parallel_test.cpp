@@ -43,6 +43,7 @@
 #include <manipulation_planning/heuristics/manip_heuristics.hpp>
 #include <search/planners/parallel_search/epase.hpp>
 #include <search/planners/parallel_search/pase.hpp>
+#include <search/planners/parallel_search/qpase.hpp>
 #include <search/planners/wastar.hpp>
 
 // ROS includes
@@ -50,7 +51,45 @@
 #include <moveit/occupancy_map_monitor/occupancy_map_monitor.h>
 #include <ros/ros.h>
 
-#define VERBOSE true
+/// @brief Visualize the goal state
+/// @param type The type of state (greedy, attractor, etc)
+void VisualizePoint(ims::MoveitInterface& moveit_interface_, double x, double y, double z) {
+    visualization_msgs::Marker marker;
+    marker.header.frame_id = moveit_interface_.planning_scene_->getPlanningFrame();
+    marker.header.stamp = ros::Time();
+    marker.ns = "graph";
+    marker.id = 20000;
+    marker.type = visualization_msgs::Marker::SPHERE;
+    marker.action = visualization_msgs::Marker::ADD;
+    marker.pose.position.x = x;
+    marker.pose.position.y = y;
+    marker.pose.position.z = z;
+    marker.pose.orientation.x = 0.0;
+    marker.pose.orientation.y = 0.0;
+    marker.pose.orientation.z = 0.0;
+    marker.pose.orientation.w = 1.0;
+
+    marker.scale.x = 0.05;
+    marker.scale.y = 0.05;
+    marker.scale.z = 0.05;
+    // green
+    marker.color.r = 0.0;
+    marker.color.g = 0.0;
+    marker.color.b = 1.0;
+    marker.color.a = 0.5;
+
+    // Lifetime.
+    marker.lifetime = ros::Duration(350.0);
+
+    // visualize
+    ros::NodeHandle nh_;
+    ros::Publisher vis_pub_;
+    ros::Duration(0.3).sleep();
+    vis_pub_ = nh_.advertise<visualization_msgs::Marker>("visualization_marker", 0);
+    ros::Duration(0.3).sleep();
+    vis_pub_.publish(marker);
+    ros::Duration(0.3).sleep();
+}
 
 int main(int argc, char** argv) {
     ros::init(argc, argv, "configuration_test");
@@ -60,6 +99,7 @@ int main(int argc, char** argv) {
 
     std::string group_name = "manipulator_1";
     std::string planner_name = "wastar";
+    bool verbose = false;
     double discret = 1;
     bool save_experience = false;
 
@@ -75,12 +115,18 @@ int main(int argc, char** argv) {
     } else if (argc == 4) {
         group_name = argv[1];
         planner_name = argv[2];
-        discret = std::stod(argv[3]);
+        verbose = std::stoi(argv[3]);
     } else if (argc == 5) {
         group_name = argv[1];
         planner_name = argv[2];
-        discret = std::stod(argv[3]);
-        save_experience = std::stoi(argv[4]);
+        verbose = std::stoi(argv[3]);
+        discret = std::stod(argv[4]);
+    } else if (argc == 6) {
+        group_name = argv[1];
+        planner_name = argv[2];
+        verbose = std::stoi(argv[3]);
+        discret = std::stod(argv[4]);
+        save_experience = std::stoi(argv[5]);
     } else {
         ROS_INFO_STREAM(BOLDMAGENTA << "No arguments given: using default values");
         ROS_INFO_STREAM("<group_name(string)> <planner_name(string)> <discretization(int)> <save_experience(bool int)>");
@@ -113,20 +159,29 @@ int main(int argc, char** argv) {
     // get the planning frame
     ims::visualizeBoundingBox(df, bb_pub, move_group.getPlanningFrame());
     auto heuristic = std::make_shared<ims::BFSHeuristic>(df, group_name);
+    // auto heuristic = std::make_shared<ims::JointAnglesHeuristic>();
+    auto a_heuristic = std::make_shared<ims::BFSHeuristic>(df, group_name);
+    auto q_heuristic = std::make_shared<ims::JointAnglesHeuristic>();
     auto i_heuristic = std::make_shared<ims::JointAnglesHeuristic>();
     //    auto* heuristic = new ims::JointAnglesHeuristic;
     double weight = 100.0;
-    int num_threads = 12;
+    // double i_weight = 3000*weight;
+    double i_weight = 10 * weight;
+    // int num_threads = 1;
+    // int num_threads = 4;
+    // int num_threads = 12;
+    int num_threads = 24;
 
     std::shared_ptr<ims::PlannerParams> params = std::make_shared<ims::PlannerParams>();
 
     if (planner_name == "wastar") {
         params = std::make_shared<ims::wAStarParams>(heuristic.get(), weight);
-        if (VERBOSE)
+        if (verbose)
             params->verbose = true;
-    } else if (planner_name == "epase" || planner_name == "pase") {
-        params = std::make_shared<ims::ParallelSearchParams>(heuristic, i_heuristic, num_threads, weight);
-        if (VERBOSE)
+    } else if (planner_name == "epase" || planner_name == "pase" || planner_name == "qpase") {
+        params = std::make_shared<ims::ParallelSearchParams>(heuristic, i_heuristic, num_threads, weight, i_weight);
+        params->time_limit_ = 300.0;
+        if (verbose)
             params->verbose = true;
     } else {
         ROS_ERROR_STREAM("Planner " << planner_name << " not recognized");
@@ -145,6 +200,8 @@ int main(int argc, char** argv) {
                                                                                                                 heuristic.get());
     std::shared_ptr<ims::ManipulationEdgeActionSpace> edge_action_space = std::make_shared<ims::ManipulationEdgeActionSpace>(scene_interface, action_type,
                                                                                                                              heuristic);
+    // std::shared_ptr<ims::ManipulationEdgeActionSpace> edge_action_space = std::make_shared<ims::ManipulationEdgeActionSpace>(scene_interface, action_type,
+    //                                                                                                                          q_heuristic);
 
     const std::vector<std::string>& joint_names = move_group.getVariableNames();
     StateType start_state(num_joints, 0);
@@ -188,6 +245,8 @@ int main(int argc, char** argv) {
 
     if (planner_name == "wastar") {
         planner = std::make_shared<ims::wAStar>(*std::dynamic_pointer_cast<ims::wAStarParams>(params));
+    } else if (planner_name == "qpase") {
+        planner = std::make_shared<ims::Qpase>(*std::dynamic_pointer_cast<ims::ParallelSearchParams>(params));
     } else if (planner_name == "epase") {
         planner = std::make_shared<ims::Epase>(*std::dynamic_pointer_cast<ims::ParallelSearchParams>(params));
     } else if (planner_name == "pase") {
@@ -200,6 +259,13 @@ int main(int argc, char** argv) {
     if (planner_name == "wastar") {
         try {
             planner->initializePlanner(action_space, start_state, goal_state);
+        } catch (std::exception& e) {
+            ROS_INFO_STREAM(e.what() << std::endl);
+        }
+    } else if (planner_name == "qpase") {
+        try {
+            ROS_INFO_STREAM("Initializing qpase planners.");
+            std::dynamic_pointer_cast<ims::Qpase>(planner)->initializePlanner(edge_action_space, start_state, goal_state);
         } catch (std::exception& e) {
             ROS_INFO_STREAM(e.what() << std::endl);
         }
@@ -218,6 +284,11 @@ int main(int argc, char** argv) {
             ROS_INFO_STREAM(e.what() << std::endl);
         }
     }
+
+    // Print the goal configuration marker
+    auto goal_state_mapped = goal_state;
+    scene_interface.calculateFK(goal_state, goal_state_mapped);
+    VisualizePoint(scene_interface, goal_state_mapped[0], goal_state_mapped[1], goal_state_mapped[2]);
 
     std::vector<StateType> path_;
     if (!planner->plan(path_)) {
@@ -285,6 +356,7 @@ int main(int argc, char** argv) {
                         << "\t cost: " << stats.cost << std::endl
                         << "\t Path length: " << path_.size() << std::endl
                         << "\t Number of nodes expanded: " << stats.num_expanded << std::endl
+                        << "\t Number of edges evaluated: " << stats.num_evaluated << std::endl
                         << "\t Suboptimality: " << stats.suboptimality << RESET);
     }
 
@@ -302,7 +374,7 @@ int main(int argc, char** argv) {
                            trajectory);
 
     ROS_INFO("Executing trajectory");
-    move_group.execute(trajectory);
+    // move_group.execute(trajectory);
     // @}
     return 0;
 }
