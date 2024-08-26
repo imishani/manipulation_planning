@@ -80,7 +80,8 @@ public:
     /// @param ManipulationType The manipulation type
     ManipulationEdgeActionSpace(const MoveitInterface &env,
                                 const ManipulationType &actions_ptr,
-                                std::shared_ptr<BFSHeuristic> bfs_heuristic = nullptr) : EdgeActionSpace(), bfs_heuristic_(bfs_heuristic) {
+                                // std::shared_ptr<BaseHeuristic> q_heuristic = nullptr,
+                                std::shared_ptr<BFSHeuristic> bfs_heuristic = nullptr) : EdgeActionSpace(bfs_heuristic), bfs_heuristic_(bfs_heuristic) {
         moveit_interface_ = std::make_shared<MoveitInterface>(env);
         manipulation_type_ = std::make_shared<ManipulationType>(actions_ptr);
         // get the joint limits
@@ -116,8 +117,9 @@ public:
         } else {
             if (curr_state->state_mapped.empty()) {
                 moveit_interface_->calculateFK(curr_state_val, curr_state->state_mapped);
-                this->VisualizePoint(curr_state->state_mapped.at(0), curr_state->state_mapped.at(1), curr_state->state_mapped.at(2));
             }
+            moveit_interface_->calculateFK(curr_state_val, curr_state->state_mapped);
+            this->VisualizePoint(curr_state->state_mapped.at(0), curr_state->state_mapped.at(1), curr_state->state_mapped.at(2));
             auto goal_dist = bfs_heuristic_->getMetricGoalDistance(curr_state->state_mapped.at(0),
                                                                    curr_state->state_mapped.at(1),
                                                                    curr_state->state_mapped.at(2));
@@ -160,16 +162,6 @@ public:
                     bool check_validity) override {
         std::vector<std::vector<double>> action_transition_costs;
         getActionSequences(state_id, action_seqs, action_transition_costs, check_validity);
-        std::cout << "The Action Sequence for State " << state_id << " is: " << std::endl;
-        for (int i = 0; i < action_seqs.size(); i++) {
-            std::cout << "Action Sequence " << i << ": " << std::endl;
-            for (int j = 0; j < action_seqs[i].size(); j++) {
-                for (int k = 0; k < action_seqs[i][j].size(); k++) {
-                    std::cout << action_seqs[i][j][k] << " ";
-                }
-                std::cout << std::endl;
-            }
-        }
     }
 
     /// @brief Set the manipulation space type
@@ -276,7 +268,6 @@ public:
         }
         return false;
     }
-
 
     bool isStateValid(const StateType &state_val,
                       const StateType &seed,
@@ -498,6 +489,10 @@ public:
             if (getSuccessorCs(curr_state_ind, action_seq, successor_seq_state_ids, successor_seq_transition_costs)) {
                 seqs_state_ids.push_back(successor_seq_state_ids);
                 seqs_transition_costs.push_back(successor_seq_transition_costs);
+
+            } else {
+                seqs_state_ids.push_back(std::vector<int>{});
+                seqs_transition_costs.push_back(std::vector<double>{});
             }
         }
         if (seqs_state_ids.empty()) {
@@ -513,6 +508,44 @@ public:
             return getSuccessorsCs(curr_state_ind, seqs_state_ids, seqs_transition_costs);
         } else if (manipulation_type_->getSpaceType() == ManipulationType::SpaceType::WorkSpace) {
             return getSuccessorsWs(curr_state_ind, seqs_state_ids, seqs_transition_costs);
+        } else {
+            throw std::runtime_error("Space type not supported.");
+        }
+    }
+
+    bool getSuccessorProxy(int curr_edge_ind, StateType &next_state_val) override {
+        // Get the seq transition cost for the specific action of the edge
+        int curr_state_ind = getRobotStateId(getRobotEdge(curr_edge_ind)->state);
+        ActionSequence action_seq = getRobotEdge(curr_edge_ind)->action;
+        std::vector<double> seq_transition_costs;
+        getActionCost(curr_state_ind, action_seq, seq_transition_costs);
+
+        if (manipulation_type_->getSpaceType() == ManipulationType::SpaceType::ConfigurationSpace) {
+            // The first state is the current state and the last state is the successor.
+            // Go through all the states in the sequence, normalize angles, discretize, and check for validity.
+            // Normalize and discretize the first state and then go through all pairs [i, i+1].
+            // The first state is assumed to be valid.
+            normalizeAngles(action_seq.front(), joint_limits_);
+            roundStateToDiscretization(action_seq.front(), manipulation_type_->state_discretization_);
+
+            auto curr_state_val = action_seq[0];
+            auto next_state_val = action_seq.back();
+            // Normalize the angles.
+            normalizeAngles(next_state_val, joint_limits_);
+            // Discretize the state.
+            roundStateToDiscretization(next_state_val, manipulation_type_->state_discretization_);
+            // Check if the state transition went through discontinuity.
+            bool discontinuity{false};
+            // check for maximum absolute action
+            for (int dim{0}; dim < curr_state_val.size(); dim++) {
+                if (next_state_val[dim] < joint_limits_[dim].first || next_state_val[dim] > joint_limits_[dim].second) {
+                    discontinuity = true;
+                    return false;
+                }
+            }
+            return true;
+        } else if (manipulation_type_->getSpaceType() == ManipulationType::SpaceType::WorkSpace) {
+            throw std::runtime_error("Space type (WorkSpace) not yet supported.");
         } else {
             throw std::runtime_error("Space type not supported.");
         }
@@ -537,7 +570,7 @@ public:
 
     void getActionCost(int curr_state_ind,
                        const ActionSequence &action_seq,
-                       std::vector<double> &seq_transition_costs) {
+                       std::vector<double> &seq_transition_costs) override {
         if (manipulation_type_->getSpaceType() == ManipulationType::SpaceType::ConfigurationSpace) {
             std::vector<ActionSequence> action_seqs;
             std::vector<std::vector<double>> action_transition_costs;
@@ -597,6 +630,7 @@ public:
         marker.lifetime = ros::Duration(5.0);
 
         // visualize
+        ros::Duration(0.03).sleep();
         vis_pub_.publish(marker);
         vis_id_++;
     }
