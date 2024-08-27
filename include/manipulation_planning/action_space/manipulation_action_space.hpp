@@ -255,8 +255,7 @@ struct ManipulationType : ActionType {
                                                             short_mprim_transition_times_.begin(),
                                                             short_mprim_transition_times_.end());
 
-                        }
-                            break;
+                        } break;
                         case SpaceType::WorkSpace: {
                             // Populate the action_seqs_ vector with the short_mprim_ and the long_mprim_.
                             // Convert the euler angles (rad) to quaternions.
@@ -308,12 +307,12 @@ struct ManipulationType : ActionType {
 
         // Backwards compatability hack. This will return the actions_ vector where actions are only single-step actions.
         std::vector<Action> actions;
-        for (auto action_seq: action_seqs) {
+        for (auto action_seq : action_seqs) {
             actions.push_back({action_seq.back()});
             // Only allow this if the action is a single step action (aka with exactly two elements in the sequence).
             if (action_seq.size() != 2) {
                 throw std::runtime_error(
-                        "The action sequence is not a single step action, GetPrimActions will lose information. Aborting.");
+                    "The action sequence is not a single step action, GetPrimActions will lose information. Aborting.");
             }
         }
         return actions;
@@ -358,7 +357,7 @@ struct ManipulationType : ActionType {
 
         // If allowed, and the cartesian goal distance is less than a threshold, insert snap primitive. The time for this is 1.
         ActionSequence snap_action_seq = {{0, 0, 0, 0, 0, 0}, {INF_DOUBLE, INF_DOUBLE, INF_DOUBLE, INF_DOUBLE, INF_DOUBLE, INF_DOUBLE}};
-        std::vector<double> snap_transition_time = {1.0, 0.0};
+        std::vector<double> snap_transition_time = {230, 0.0};
         // TODO(yoraish): the xyz and rpy snaps are not handled correctly yet.
         // Snap I: only xyz.
         if (mprim_active_type_.snap_xyz.first && goal_dist < mprim_active_type_.snap_xyz.second) {
@@ -396,11 +395,11 @@ struct ManipulationType : ActionType {
         std::vector<Action> actions;
         // Backwards compatability hack. This will return the only single-step actions and abort if the action sequences
         // are not of a single step (two states).
-        for (auto action_seq: action_seqs) {
+        for (auto action_seq : action_seqs) {
             actions.push_back({action_seq.back()});
             if (action_seq.size() != 2) {
                 throw std::runtime_error(
-                        "The action sequence is not a single step action, GetAdaptiveActions will lose information. Aborting.");
+                    "The action sequence is not a single step action, GetAdaptiveActions will lose information. Aborting.");
             }
         }
         return actions;
@@ -431,7 +430,9 @@ struct ManipulationType : ActionType {
         std::pair<bool, double> long_dist = std::make_pair(true, 0.4);
         std::pair<bool, double> snap_xyz = std::make_pair(false, 0.2);
         std::pair<bool, double> snap_rpy = std::make_pair(false, 0.2);
-        std::pair<bool, double> snap_xyzrpy = std::make_pair(true, 0.04);
+        // std::pair<bool, double> snap_xyzrpy = std::make_pair(true, 0.04);
+        std::pair<bool, double> snap_xyzrpy = std::make_pair(true, 0.4);
+        // std::pair<bool, double> snap_xyzrpy = std::make_pair(true, 0.05);
     };
 
     ActionType action_type_;
@@ -474,6 +475,7 @@ protected:
     int vis_id_ = 0;
     ros::NodeHandle nh_;
     ros::Publisher vis_pub_;
+    bool vis_ = false;
 
 public:
     /// @brief Constructor
@@ -517,6 +519,9 @@ public:
             }
         } else {
             if (curr_state->state_mapped.empty()) {
+                moveit_interface_->calculateFK(curr_state_val, curr_state->state_mapped);
+            }
+            if (vis_) {
                 moveit_interface_->calculateFK(curr_state_val, curr_state->state_mapped);
                 this->VisualizePoint(curr_state->state_mapped.at(0), curr_state->state_mapped.at(1),
                                      curr_state->state_mapped.at(2));
@@ -591,7 +596,9 @@ public:
     void getCurrWorkspaceState(StateType &ws_state) {
         // get the tip link name
         auto tip_link = moveit_interface_->planning_scene_->getRobotModel()->getJointModelGroup(
-                moveit_interface_->group_name_)->getLinkModelNames().back();
+                                                                               moveit_interface_->group_name_)
+                            ->getLinkModelNames()
+                            .back();
         // get the end-effector pose
         auto ee_pose = moveit_interface_->planning_scene_->getCurrentState().getGlobalLinkTransform(tip_link);
         // get the euler angles
@@ -716,7 +723,7 @@ public:
                 return moveit_interface_->isPathValid(path);
             case ManipulationType::SpaceType::WorkSpace:
                 PathType poses;
-                for (auto &state: path) {
+                for (auto &state : path) {
                     geometry_msgs::Pose pose;
                     pose.position.x = state[0];
                     pose.position.y = state[1];
@@ -914,6 +921,10 @@ public:
         }
     }
 
+    void setVisualization(bool vis) {
+        vis_ = vis;
+    }
+
     /// @brief Visualize a state point in rviz for debugging
     /// @param state_id The state id
     /// @param type The type of state (greedy, attractor, etc)
@@ -946,6 +957,7 @@ public:
         marker.lifetime = ros::Duration(5.0);
 
         // visualize
+        ros::Duration(0.01).sleep();
         vis_pub_.publish(marker);
         vis_id_++;
     }

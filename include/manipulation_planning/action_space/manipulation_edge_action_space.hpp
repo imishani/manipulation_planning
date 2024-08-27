@@ -74,13 +74,16 @@ protected:
     ros::NodeHandle nh_;
     ros::Publisher vis_pub_;
 
+    // Debug
+    bool vis_ = false;
+
 public:
     /// @brief Constructor
     /// @param moveitInterface The moveit interface
     /// @param ManipulationType The manipulation type
     ManipulationEdgeActionSpace(const MoveitInterface &env,
                                 const ManipulationType &actions_ptr,
-                                // std::shared_ptr<BaseHeuristic> q_heuristic = nullptr,
+                                // std::shared_ptr<BFSHeuristic> q_heuristic = nullptr,
                                 std::shared_ptr<BFSHeuristic> bfs_heuristic = nullptr) : EdgeActionSpace(bfs_heuristic), bfs_heuristic_(bfs_heuristic) {
         moveit_interface_ = std::make_shared<MoveitInterface>(env);
         manipulation_type_ = std::make_shared<ManipulationType>(actions_ptr);
@@ -118,8 +121,10 @@ public:
             if (curr_state->state_mapped.empty()) {
                 moveit_interface_->calculateFK(curr_state_val, curr_state->state_mapped);
             }
-            moveit_interface_->calculateFK(curr_state_val, curr_state->state_mapped);
-            this->VisualizePoint(curr_state->state_mapped.at(0), curr_state->state_mapped.at(1), curr_state->state_mapped.at(2));
+            // if (vis_) {
+            //     moveit_interface_->calculateFK(curr_state_val, curr_state->state_mapped);
+            //     this->VisualizePoint(curr_state->state_mapped.at(0), curr_state->state_mapped.at(1), curr_state->state_mapped.at(2));
+            // }
             auto goal_dist = bfs_heuristic_->getMetricGoalDistance(curr_state->state_mapped.at(0),
                                                                    curr_state->state_mapped.at(1),
                                                                    curr_state->state_mapped.at(2));
@@ -441,6 +446,12 @@ public:
         // The first state is assumed to be valid.
         normalizeAngles(action_seq.front(), joint_limits_);
         roundStateToDiscretization(action_seq.front(), manipulation_type_->state_discretization_);
+        if (vis_) {
+            auto curr_state = this->getRobotState(curr_state_ind);
+            auto curr_state_val = curr_state->state;
+            moveit_interface_->calculateFK(curr_state_val, curr_state->state_mapped);
+            this->VisualizePoint(curr_state->state_mapped.at(0), curr_state->state_mapped.at(1), curr_state->state_mapped.at(2));
+        }
         for (size_t j{0}; j < action_seq.size() - 1; j++) {
             auto curr_state_val = action_seq[j];
             auto new_state_val = action_seq[j + 1];
@@ -515,10 +526,10 @@ public:
 
     bool getSuccessorProxy(int curr_edge_ind, StateType &next_state_val) override {
         // Get the seq transition cost for the specific action of the edge
-        int curr_state_ind = getRobotStateId(getRobotEdge(curr_edge_ind)->state);
-        ActionSequence action_seq = getRobotEdge(curr_edge_ind)->action;
-        std::vector<double> seq_transition_costs;
-        getActionCost(curr_state_ind, action_seq, seq_transition_costs);
+        auto curr_edge = getRobotEdge(curr_edge_ind);
+        int curr_state_ind = getRobotStateId(curr_edge->state);
+        ActionSequence action_seq = curr_edge->action;
+        std::vector<double> seq_transition_costs = curr_edge->action_cost;
 
         if (manipulation_type_->getSpaceType() == ManipulationType::SpaceType::ConfigurationSpace) {
             // The first state is the current state and the last state is the successor.
@@ -555,9 +566,10 @@ public:
                       std::vector<int> &seq_state_ids,
                       std::vector<double> &seq_transition_costs) override {
         // Get the seq transition cost for the specific action of the edge
-        int curr_state_ind = getRobotStateId(getRobotEdge(curr_edge_ind)->state);
-        ActionSequence action_seq = getRobotEdge(curr_edge_ind)->action;
-        getActionCost(curr_state_ind, action_seq, seq_transition_costs);
+        auto curr_edge = getRobotEdge(curr_edge_ind);
+        int curr_state_ind = getRobotStateId(curr_edge->state);
+        ActionSequence action_seq = curr_edge->action;
+        seq_transition_costs = curr_edge->action_cost;
 
         if (manipulation_type_->getSpaceType() == ManipulationType::SpaceType::ConfigurationSpace) {
             return getSuccessorCs(curr_state_ind, action_seq, seq_state_ids, seq_transition_costs);
@@ -568,34 +580,8 @@ public:
         }
     }
 
-    void getActionCost(int curr_state_ind,
-                       const ActionSequence &action_seq,
-                       std::vector<double> &seq_transition_costs) override {
-        if (manipulation_type_->getSpaceType() == ManipulationType::SpaceType::ConfigurationSpace) {
-            std::vector<ActionSequence> action_seqs;
-            std::vector<std::vector<double>> action_transition_costs;
-            getActionSequences(curr_state_ind, action_seqs, action_transition_costs, false);
-            for (int i{0}; i < action_seqs.size(); i++) {
-                if (action_seqs[i] == action_seq) {
-                    seq_transition_costs = action_transition_costs[i];
-                    return;
-                }
-            }
-            throw std::runtime_error("Action sequence not found in manipulation_type_(cspace)'s action seqs.");
-        } else if (manipulation_type_->getSpaceType() == ManipulationType::SpaceType::WorkSpace) {
-            std::vector<ActionSequence> prim_action_seqs;
-            std::vector<std::vector<double>> prim_action_transition_costs;
-            manipulation_type_->getPrimActions(prim_action_seqs, prim_action_transition_costs);
-            for (int i{0}; i < prim_action_seqs.size(); i++) {
-                if (prim_action_seqs[i] == action_seq) {
-                    seq_transition_costs = prim_action_transition_costs[i];
-                    return;
-                }
-            }
-            throw std::runtime_error("Action sequence not found in manipulation_type_(wspace)'s prim action seqs.");
-        } else {
-            throw std::runtime_error("Space type not supported.");
-        }
+    void setVisualization(bool vis) {
+        vis_ = vis;
     }
 
     /// @brief Visualize a state point in rviz for debugging
@@ -630,7 +616,7 @@ public:
         marker.lifetime = ros::Duration(5.0);
 
         // visualize
-        ros::Duration(0.03).sleep();
+        ros::Duration(0.01).sleep();
         vis_pub_.publish(marker);
         vis_id_++;
     }
