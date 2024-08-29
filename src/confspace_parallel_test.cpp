@@ -54,11 +54,35 @@
 #define EXPERIMENT 0
 // #define EXPERIMENT 10
 
+/// @brief Load the start and goal configuration from file
+/// @param starts The start configurations
+/// @param goals The goal configurations
+/// @param num_runs The number of runs
+///@param path The path to the file
+void loadStartsGoalsFromFile(std::vector<std::vector<double>>& starts, std::vector<std::vector<double>>& goals, int num_runs, const std::string& path) {
+    std::ifstream starts_fin(path + "panda_starts.txt");
+    std::ifstream goals_fin(path + "panda_goals.txt");
+
+    for (int j = 0; j < num_runs; ++j) {
+        std::vector<double> start, goal;
+        double val_start, val_goal;
+        for (int i = 0; i < 7; ++i) {
+            starts_fin >> val_start;
+            goals_fin >> val_goal;
+            start.push_back(val_start);
+            goal.push_back(val_goal);
+        }
+
+        starts.emplace_back(start);
+        goals.emplace_back(goal);
+    }
+}
+
 /// @brief Log the statistics of a parallel planner to a file.
 /// @param stats The statistics of the planner.
 /// @param problem_ind The index of the problem.
 /// @param planner_name The name of the planner.
-void logStats(const std::unordered_map<int, ims::ParallelSearchPlannerStats>& stats,
+void logStats(const std::map<int, ims::ParallelSearchPlannerStats>& stats,
               int map_index,
               const std::string& planner_name) {
     // save the logs to a file in current directory
@@ -122,37 +146,32 @@ int main(int argc, char** argv) {
     std::string group_name = "manipulator_1";
     std::string planner_name = "wastar";
     bool verbose = false;
+    int num_runs = 0;
     double discret = 1;
     bool save_experience = false;
 
     if (argc == 0) {
         ROS_INFO_STREAM(BOLDMAGENTA << "No arguments given: using default values");
-        ROS_INFO_STREAM("<group_name(string)> <planner_name(string)> <discretization(int)> <save_experience(bool int)>");
-        ROS_INFO_STREAM("Using default values: manipulator_1 1 0" << RESET);
-    } else if (argc == 2) {
+        ROS_INFO_STREAM("<group_name(string)> <planner_name(string)> <verbose(bool)> <num_runs(int)> <discretization(int)> <save_experience(bool int)>");
+        ROS_INFO_STREAM("Using default values: manipulator_1 wastar 0 0 1 0" << RESET);
+    }
+    if (argc >= 2) {
         group_name = argv[1];
-    } else if (argc == 3) {
-        group_name = argv[1];
+    }
+    if (argc >= 3) {
         planner_name = argv[2];
-    } else if (argc == 4) {
-        group_name = argv[1];
-        planner_name = argv[2];
+    }
+    if (argc >= 4) {
         verbose = std::stoi(argv[3]);
-    } else if (argc == 5) {
-        group_name = argv[1];
-        planner_name = argv[2];
-        verbose = std::stoi(argv[3]);
-        discret = std::stod(argv[4]);
-    } else if (argc == 6) {
-        group_name = argv[1];
-        planner_name = argv[2];
-        verbose = std::stoi(argv[3]);
-        discret = std::stod(argv[4]);
-        save_experience = std::stoi(argv[5]);
-    } else {
-        ROS_INFO_STREAM(BOLDMAGENTA << "No arguments given: using default values");
-        ROS_INFO_STREAM("<group_name(string)> <planner_name(string)> <discretization(int)> <save_experience(bool int)>");
-        ROS_INFO_STREAM("Using default values: manipulator_1 1 0" << RESET);
+    }
+    if (argc >= 5) {
+        num_runs = std::stoi(argv[4]);
+    }
+    if (argc >= 6) {
+        discret = std::stod(argv[5]);
+    }
+    if (argc >= 7) {
+        save_experience = std::stoi(argv[6]);
     }
 
     auto full_path = boost::filesystem::path(__FILE__).parent_path().parent_path();
@@ -186,7 +205,7 @@ int main(int argc, char** argv) {
     auto q_heuristic = std::make_shared<ims::JointAnglesHeuristic>();
     auto i_heuristic = std::make_shared<ims::JointAnglesHeuristic>();
     //    auto* heuristic = new ims::JointAnglesHeuristic;
-    double weight = 10.0;
+    double weight = 100.0;
     // double i_weight = 3000*weight;
     double i_weight = 20 * weight;
     // int num_threads = 1;
@@ -196,10 +215,16 @@ int main(int argc, char** argv) {
     // int num_threads = 24;
 
     int iter{1};
-    std::unordered_map<int, ims::ParallelSearchPlannerStats> logs;
-    if (EXPERIMENT) {
-        iter = EXPERIMENT;
+    std::map<int, ims::ParallelSearchPlannerStats> logs;
+    if (num_runs > 0) {
+        iter = num_runs;
     }
+
+    std::string ros_path = ros::package::getPath("manipulation_planning");
+    std::string scene_path = ros_path + "/domains/panda/scene1/";
+    std::vector<StateType> starts;
+    std::vector<StateType> goals;
+    loadStartsGoalsFromFile(starts, goals, num_runs, scene_path);
 
     std::vector<StateType> traj;
     moveit_msgs::RobotTrajectory trajectory;
@@ -212,7 +237,7 @@ int main(int argc, char** argv) {
                 params->verbose = true;
         } else if (planner_name == "epase" || planner_name == "pase" || planner_name == "qpase") {
             params = std::make_shared<ims::ParallelSearchParams>(heuristic, i_heuristic, num_threads, weight, i_weight);
-            params->time_limit_ = 300.0;
+            params->time_limit_ = 10.0;
             if (verbose) {
                 params->verbose = true;
                 // std::dynamic_pointer_cast<ims::ParallelSearchParams>(params)->debug = true;
@@ -239,16 +264,42 @@ int main(int argc, char** argv) {
         // std::shared_ptr<ims::ManipulationEdgeActionSpace> edge_action_space = std::make_shared<ims::ManipulationEdgeActionSpace>(scene_interface, action_type,
         //                                                                                                                          q_heuristic);
 
+        // std::cout << "ROS path is : " << ros_path << std::endl;
+        // At each emplace_back, use the full pathh and concatenate the map name
+        // maps.emplace_back(full_path.string() + "/../domains/2d_robot_nav/data/hrt201n/hrt201n.map");
+        // maps.emplace_back(full_path.string() + "/../domains/2d_robot_nav/data/den501d/den501d.map");
+        // maps.emplace_back(full_path.string() + "/../domains/2d_robot_nav/data/den520d/den520d.map");
+        // maps.emplace_back(full_path.string() + "/../domains/2d_robot_nav/data/ht_chantry/ht_chantry.map");
+        // maps.emplace_back(full_path.string() + "/../domains/2d_robot_nav/data/brc203d/brc203d.map");
+        //
+        // std::vector<std::string> starts_goals_path = {
+        //     full_path.string() + "/../domains/2d_robot_nav/data/hrt201n/",
+        //     full_path.string() + "/../domains/2d_robot_nav/data/den501d/",
+        //     full_path.string() + "/../domains/2d_robot_nav/data/den520d/",
+        //     full_path.string() + "/../domains/2d_robot_nav/data/ht_chantry/",
+        //     full_path.string() + "/../domains/2d_robot_nav/data/brc203d/",
+        // };
+
         const std::vector<std::string>& joint_names = move_group.getVariableNames();
         StateType start_state(num_joints, 0);
-
-        for (int i = 0; i < joint_names.size(); i++) {
-            start_state[i] = current_state->getVariablePosition(joint_names[i]);
-            ROS_INFO_STREAM("Joint " << joint_names[i] << " is " << start_state[i]);
-        }
-        // make a goal_state a copy of start_state
-        ims::rad2deg(start_state);
         StateType goal_state = start_state;
+
+        if (num_runs) {
+            start_state = starts[i];
+            goal_state = goals[i];
+        } else {
+            for (int i = 0; i < joint_names.size(); i++) {
+                start_state[i] = current_state->getVariablePosition(joint_names[i]);
+                ROS_INFO_STREAM("Joint " << joint_names[i] << " is " << start_state[i]);
+            }
+            goal_state[0] = 44;
+            goal_state[1] = 7;
+            goal_state[2] = 9;
+            goal_state[3] = -30;
+            goal_state[4] = 4;  // 73; //0;
+            goal_state[5] = 34;
+            goal_state[6] = 57;
+        }
 
         // change the goal state
         // goal_state[0] = 1.5708*180/M_PI;// 78; //0;
@@ -265,14 +316,6 @@ int main(int argc, char** argv) {
         // 17 52 -37 -47 28 92 36
         // 28 58 -31 -84 36 132 29
         // 41 62 -49 -72 -140 57 57
-
-        goal_state[0] = 44;
-        goal_state[1] = 7;
-        goal_state[2] = 9;
-        goal_state[3] = -30;
-        goal_state[4] = 4;  // 73; //0;
-        goal_state[5] = 34;
-        goal_state[6] = 57;
 
         ims::deg2rad(start_state);
         ims::deg2rad(goal_state);
@@ -337,10 +380,12 @@ int main(int argc, char** argv) {
         scene_interface.calculateFK(goal_state, goal_state_mapped);
         VisualizePoint(scene_interface, goal_state_mapped[0], goal_state_mapped[1], goal_state_mapped[2]);
 
+        bool success = false;
         std::vector<StateType> path_;
-        if (!planner->plan(path_)) {
+        success = planner->plan(path_);
+        if (!success) {
             ROS_INFO_STREAM(RED << "No path found" << RESET);
-            return 0;
+            // return 0;
         } else {
             ROS_INFO_STREAM(GREEN << "Path found" << RESET);
             if (save_experience) {
@@ -415,6 +460,10 @@ int main(int argc, char** argv) {
                             << "\t Suboptimality: " << stats.suboptimality << RESET);
             logs[i] = stats;
         }
+        
+        if (!success) {
+            continue;
+        }
 
         // profile and execute the path
         // @{
@@ -427,7 +476,7 @@ int main(int argc, char** argv) {
                                move_group,
                                trajectory);
     }
-    if (EXPERIMENT) {
+    if (num_runs) {
         logStats(logs, 1, planner_name);
     }
     ROS_INFO("Executing trajectory");

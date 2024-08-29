@@ -431,8 +431,8 @@ struct ManipulationType : ActionType {
         std::pair<bool, double> snap_xyz = std::make_pair(false, 0.2);
         std::pair<bool, double> snap_rpy = std::make_pair(false, 0.2);
         // std::pair<bool, double> snap_xyzrpy = std::make_pair(true, 0.04);
-        std::pair<bool, double> snap_xyzrpy = std::make_pair(true, 0.4);
         // std::pair<bool, double> snap_xyzrpy = std::make_pair(true, 0.05);
+        std::pair<bool, double> snap_xyzrpy = std::make_pair(true, 0.4);
     };
 
     ActionType action_type_;
