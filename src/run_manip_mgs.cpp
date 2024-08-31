@@ -104,7 +104,7 @@ int main(int argc, char** argv) {
     auto* heuristic_joints = new ims::JointAnglesHeuristic;
     double weight = 100.0;
 
-    ims::MGSParams params(heuristic_joints, 500);
+    ims::MGSParams params(heuristic_joints);
     params.verbose = true;
 
     ims::MoveitInterface scene_interface(group_name);
