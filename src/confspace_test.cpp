@@ -83,7 +83,7 @@ int main(int argc, char** argv) {
     // Define Robot inteface to give commands and get info from moveit:
     moveit::planning_interface::MoveGroupInterface move_group(group_name);
     // get the number of joints
-    int num_joints = (int)move_group.getVariableCount();
+    int num_joints = static_cast<int>(move_group.getVariableCount());
 
     std::string path_mprim = full_path.string() + "/config/manip_" + std::to_string(num_joints) + "dof.mprim";
 
@@ -91,7 +91,7 @@ int main(int argc, char** argv) {
 
     // check for collision
     planning_scene::PlanningScenePtr planning_scene;
-    planning_scene.reset(new planning_scene::PlanningScene(move_group.getRobotModel()));
+    planning_scene = std::make_shared<planning_scene::PlanningScene>(move_group.getRobotModel());
     collision_detection::CollisionRequest collision_request;
     collision_detection::CollisionResult collision_result;
     planning_scene->checkCollision(collision_request, collision_result, *current_state);
@@ -118,9 +118,9 @@ int main(int argc, char** argv) {
     std::shared_ptr<ims::ManipulationActionSpace> action_space = std::make_shared<ims::ManipulationActionSpace>(scene_interface, action_type,
                                                                                                                 heuristic);
 
-    StateType start_state {0, 0, 0, 0, 0, 0};
+    StateType start_state = StateType(num_joints, 0);
     const std::vector<std::string>& joint_names = move_group.getVariableNames();
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < num_joints; i++) {
         start_state[i] = current_state->getVariablePosition(joint_names[i]);
         ROS_INFO_STREAM("Joint " << joint_names[i] << " is " << start_state[i]);
     }
@@ -129,12 +129,13 @@ int main(int argc, char** argv) {
     StateType goal_state = start_state;
 
     // change the goal state
-    goal_state[0] = 1.5708*180/M_PI;// 78; //0;
-    goal_state[1] = 0.0698132*180/M_PI; //25; //30;
-    goal_state[2] = -0.9948*180/M_PI; //-18; //-30;
-    goal_state[3] = -1.5708*180/M_PI; //-147; //0;
-    goal_state[4] = 0; //73; //0;
-    goal_state[5] = 0;//-66; //0;
+    goal_state[0] -= 20;// 78; //0;
+    goal_state[1] += 50; //25; //30;
+    // goal_state[2] = -0.9948*180/M_PI; //-18; //-30;
+    // goal_state[3] = -1.5708*180/M_PI; //-147; //0;
+    // goal_state[4] = 0; //73; //0;
+    // goal_state[5] = 0;//-66; //0;
+    goal_state[6] += 30;//-66; //0;
 
 
     ims::deg2rad(start_state); ims::deg2rad(goal_state);
@@ -158,7 +159,7 @@ int main(int argc, char** argv) {
     std::vector<StateType> path_;
     if (!planner.plan(path_)) {
         ROS_INFO_STREAM(RED << "No path found" << RESET);
-        return 0;
+        return 1;
     }
     else {
         ROS_INFO_STREAM(GREEN << "Path found" << RESET);
@@ -217,9 +218,11 @@ int main(int argc, char** argv) {
     // profile and execute the path
     // @{
     std::vector<StateType> traj;
-    for (auto& state : path_) {
-        traj.push_back(state);
-    }
+    ims::shortcutPath(path_,
+        move_group,
+        planning_scene,
+        traj, 1);
+
     moveit_msgs::RobotTrajectory trajectory;
     ims::profileTrajectory(start_state,
                       goal_state,

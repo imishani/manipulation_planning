@@ -32,8 +32,8 @@
  * \date   4/3/23
  */
 
-#ifndef MANIPULATION_PLANNING_MOVEITINTERFACE_HPP
-#define MANIPULATION_PLANNING_MOVEITINTERFACE_HPP
+#pragma once
+
 
 // include standard libraries
 #include <iostream>
@@ -110,7 +110,7 @@ public:
     };
 
     /// @brief Constructor with the option to set the planning scene.
-    MoveitInterface(const std::string &group_name, planning_scene::PlanningScenePtr &planning_scene) {
+    MoveitInterface(const std::string &group_name, const planning_scene::PlanningScenePtr &planning_scene) {
         // planning scene monitor
         planning_scene_monitor_ = std::make_shared<planning_scene_monitor::PlanningSceneMonitor>("robot_description");
         planning_scene_monitor_->startSceneMonitor();
@@ -190,7 +190,7 @@ public:
         num_collision_checks_++;
 
         // Convert the collision result to a collision collective.
-        std::string agent_name_prefix = group_name_.substr(0, group_name_.find("_"));
+        std::string agent_name_prefix = group_name_.substr(0, group_name_.find('_'));
         moveitCollisionResultToCollisionsCollective(collision_result, collisions_collective, agent_name_prefix);
 
         return collisions_collective.size() == 0;
@@ -235,7 +235,7 @@ public:
         num_collision_checks_++;
 
         // Convert the collision result to a collision collective.
-        std::string agent_name_prefix = group_name_.substr(0, group_name_.find("_"));
+        std::string agent_name_prefix = group_name_.substr(0, group_name_.find('_'));
         std::vector<std::string> other_agent_name_prefixes;
         for (auto &other_move_group_name : other_move_group_names) {
             std::string other_agent_name_prefix = other_move_group_name.substr(0, other_move_group_name.find("_"));
@@ -650,7 +650,7 @@ public:
         group_name_ee_ = group_name_ee;
     }
 
-    std::shared_ptr<planning_scene::PlanningScene> getPlanningSceneMoveit() {
+    std::shared_ptr<planning_scene::PlanningScene> getPlanningSceneMoveit() const {
         return planning_scene_;
     }
 
@@ -671,4 +671,3 @@ public:
 };
 }  // namespace ims
 
-#endif  // MANIPULATION_PLANNING_MOVEITINTERFACE_HPP

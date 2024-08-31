@@ -298,7 +298,7 @@ struct ManipulationType : ActionType {
         if (mprim_active_type_.long_dist.first)  // insert long distance primitive and convert to radians
             for (auto &action_ : long_mprim_) {
                 std::vector<double> action, action_rev;
-                for (auto &num : action_) {
+                for (const auto &num : action_) {
                     action.push_back(num * M_PI / 180.0);
                     action_rev.push_back(-num * M_PI / 180.0);
                 }
@@ -308,7 +308,7 @@ struct ManipulationType : ActionType {
         if (mprim_active_type_.short_dist.first && (start_dist < mprim_active_type_.short_dist.second || goal_dist < mprim_active_type_.short_dist.second))
             for (auto &action_ : short_mprim_) {
                 std::vector<double> action, action_rev;
-                for (auto &num : action_) {
+                for (const auto &num : action_) {
                     action.push_back(num * M_PI / 180.0);
                     action_rev.push_back(-num * M_PI / 180.0);
                 }
@@ -336,11 +336,11 @@ struct ManipulationType : ActionType {
     /// @param snap_xyz The snap xyz threshold
     /// @param snap_rpy The snap rpy threshold
     /// @param snap_xyzrpy The snap xyzrpy threshold
-    void setMprimActiveType(std::pair<bool, double> short_dist,
-                            std::pair<bool, double> long_dist,
-                            std::pair<bool, double> snap_xyz,
-                            std::pair<bool, double> snap_rpy,
-                            std::pair<bool, double> snap_xyzrpy) {
+    void setMprimActiveType(const std::pair<bool, double> &short_dist,
+                            const std::pair<bool, double> &long_dist,
+                            const std::pair<bool, double> &snap_xyz,
+                            const std::pair<bool, double> &snap_rpy,
+                            const std::pair<bool, double> &snap_xyzrpy) {
         mprim_active_type_.short_dist = short_dist;
         mprim_active_type_.long_dist = long_dist;
         mprim_active_type_.snap_xyz = snap_xyz;
@@ -355,7 +355,7 @@ struct ManipulationType : ActionType {
         std::pair<bool, double> long_dist = std::make_pair(true, 0.4);
         std::pair<bool, double> snap_xyz = std::make_pair(false, 0.2);
         std::pair<bool, double> snap_rpy = std::make_pair(false, 0.2);
-        std::pair<bool, double> snap_xyzrpy = std::make_pair(true, 0.04);
+        std::pair<bool, double> snap_xyzrpy = std::make_pair(true, 0.2);
     };
 
     ActionType action_type_;
@@ -733,7 +733,7 @@ public:
         // get the successors
         for (auto &action : actions) {
             // the first state is the current state and the last state is the successor
-            auto curr_state_val = action.front();
+            const auto& curr_state_val = action.front();
             auto new_state_val = action.back();
             // normalize the angles
             normalizeAngles(new_state_val, joint_limits_);
