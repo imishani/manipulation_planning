@@ -154,6 +154,7 @@ add_library(${PROJECT_NAME}
         include/manipulation_planning/common/moveit_scene_interface.hpp
         include/manipulation_planning/heuristics/manip_heuristics.hpp
         include/manipulation_planning/common/utils.hpp
+        include/manipulation_planning/controllers/controllers_manip.hpp
 )
 
 target_link_libraries(${PROJECT_NAME}

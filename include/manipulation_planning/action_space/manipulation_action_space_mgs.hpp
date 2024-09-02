@@ -112,7 +112,7 @@ public:
         // bernoulli distribution
         std::random_device rd0;
         std::mt19937 gen0(rd0());
-        std::bernoulli_distribution dis0(0.1);
+        std::bernoulli_distribution dis0(0.5);
         if (dis0(gen0)){
             return ActionSpaceMGS::generateRandomState(s1, s2, dist, random_state);
         }

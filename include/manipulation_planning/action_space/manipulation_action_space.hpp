@@ -533,7 +533,7 @@ public:
     /// @param joint_state The ik solution
     /// @return True if the state is valid, false otherwise
     bool isStateValid(const StateType &state_val,
-                      StateType &joint_state) {
+                      StateType &joint_state) const {
         switch (manipulation_type_->getSpaceType()) {
             case ManipulationType::SpaceType::ConfigurationSpace:
                 return moveit_interface_->isStateValid(state_val);

@@ -955,7 +955,7 @@ inline void moveitCollisionResultToCollisionsCollective(const collision_detectio
 {
     // Add "base" to the list of other agents prefixes.
     // TODO(yoraish): this is a hack to remove. The reason is that the base is not considered an agent in the collision detection.
-    other_agent_name_prefixes.push_back("base");
+    other_agent_name_prefixes.emplace_back("base");
 
     collisions.clear();
     for (const auto& collision_pair_and_contacts : collision_result.contacts) {
@@ -1349,7 +1349,7 @@ inline bool isPathInCollision(PathType path,
                               const moveit::planning_interface::MoveGroupInterface& move_group,
                               const planning_scene::PlanningScenePtr& planning_scene) {
     // Densify the path.
-    densifyPath(path, 3);
+    densifyPath(path, 10);
 
     // Iterate over the states in the path and check for validity.
     collision_detection::CollisionRequest collision_request;

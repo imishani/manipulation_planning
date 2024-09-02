@@ -41,6 +41,7 @@
 #include <search/planners/mgs.hpp>
 #include <manipulation_planning/heuristics/manip_heuristics.hpp>
 #include <manipulation_planning/common/utils.hpp>
+#include <manipulation_planning/controllers/controllers_manip.hpp>
 
 // ROS includes
 #include <ros/ros.h>
@@ -105,7 +106,9 @@ int main(int argc, char** argv) {
     double weight = 100.0;
 
     ims::MGSParams params(heuristic_joints);
+    params.time_limit_ = 5;
     params.verbose = true;
+    params.w_ = weight;
 
     ims::MoveitInterface scene_interface(group_name);
 
@@ -120,9 +123,9 @@ int main(int argc, char** argv) {
                                                           action_type,
                                                           heuristic);
 
-    StateType start_state {0, 0, 0, 0, 0, 0};
+    StateType start_state = StateType(num_joints, 0);
     const std::vector<std::string>& joint_names = move_group.getVariableNames();
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < num_joints; i++) {
         start_state[i] = current_state->getVariablePosition(joint_names[i]);
         ROS_INFO_STREAM("Joint " << joint_names[i] << " is " << start_state[i]);
     }
@@ -131,16 +134,13 @@ int main(int argc, char** argv) {
     StateType goal_state = start_state;
 
     // change the goal state
-//    goal_state[0] = 1.5708*180/M_PI;// 78; //0;
-//    goal_state[1] = 0.0698132*180/M_PI; //25; //30;
-//    goal_state[2] = -0.9948*180/M_PI; //-18; //-30;
-//    goal_state[3] = -1.5708*180/M_PI; //-147; //0;
     goal_state[0] = 0;// 78; //0;
-    goal_state[1] = 90; //25; //30;
-    goal_state[2] = 90; //-18; //-30;
-    goal_state[3] = 90; //-147; //0;
+    goal_state[1] = 68; //25; //30;
+    goal_state[2] = 0;
+    goal_state[3] = -48; //-147; //0;
     goal_state[4] = 0; //73; //0;
-    goal_state[5] = 0;//-66; //0;
+    goal_state[5] = -60;//-66; //0;
+    goal_state[6] = 0;//-66; //0;
 
 
     ims::deg2rad(start_state); ims::deg2rad(goal_state);
@@ -154,16 +154,30 @@ int main(int argc, char** argv) {
     ims::roundStateToDiscretization(goal_state, action_type.state_discretization_);
 
     ims::MGS planner(params);
+    auto controllers = std::make_shared<std::vector<ims::Controller>>();
+
+    ims::PointSamplerController controller;
+    controller.init(action_space, start_state, goal_state, 1, 100);
+    controller.solver_fn = ims::PointSamplerControllerFn;
+    controllers->push_back(controller);
+
+    ims::PointsIKAroundObjectsController ik_controller;
+    ik_controller.init(action_space, std::make_shared<ims::MoveitInterface>(scene_interface));
+    ik_controller.solver_fn = ims::PointsIKAroundObjectsControllerFn;
+    controllers->push_back(ik_controller);
+
     try {
-        planner.initializePlanner(action_space, start_state, goal_state, params.g_num_);
+        planner.initializePlanner(action_space, controllers, start_state, goal_state);
     }
     catch (std::exception& e) {
         ROS_INFO_STREAM("ERROR " << e.what() << std::endl);
+        delete heuristic_joints;
     }
 
     std::vector<StateType> path_;
     if (!planner.plan(path_)) {
         ROS_INFO_STREAM(RED << "No path found" << RESET);
+        delete heuristic_joints;
         return 0;
     }
     else {
@@ -234,7 +248,13 @@ int main(int argc, char** argv) {
                            trajectory);
 
     ROS_INFO("Executing trajectory");
+    // set velocity scaling factor
+    move_group.setMaxVelocityScalingFactor(0.8);
+    //set acceleration scaling factor
+    move_group.setMaxAccelerationScalingFactor(0.8);
     move_group.execute(trajectory);
     // @}
+    delete heuristic_joints;
+
     return 0;
 }

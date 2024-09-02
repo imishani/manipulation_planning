@@ -60,7 +60,6 @@ namespace ims {
 /// @details This class implements the SceneInterface for Moveit. It is used to get the current state of the robot and to
 /// get all information needed about the scene (e.g. obstacles, robot, etc.)
 class MoveitInterface : public SceneInterface {
-private:
     bool verbose_ = false;
 
     // The number of collision checks carried out.
@@ -400,7 +399,7 @@ public:
     bool calculateIK(const Eigen::Isometry3d &pose,
                      const StateType &joint_state_seed,
                      StateType &joint_state,
-                     double timeout = 0.1) {
+                     double timeout = 0.1) const {
         // Convert the input to a geometry_msgs::Pose.
         geometry_msgs::Pose pose_msg;
         tf::poseEigenToMsg(pose, pose_msg);
@@ -416,7 +415,7 @@ public:
     /// @return True if IK was found, false otherwise
     bool calculateIK(const geometry_msgs::Pose &pose,
                      StateType &joint_state,
-                     double timeout = 0.1) {
+                     double timeout = 0.1) const {
         // resize the joint state
         joint_state.resize(num_joints_);
         // set joint model group as random, only the relevant kinematic group
@@ -447,7 +446,7 @@ public:
                      const StateType &seed,
                      StateType &joint_state,
                      double consistency_limit = 1.0,
-                     double timeout = 0.1) {
+                     double timeout = 0.1) const {
         // resize the joint state
         joint_state.resize(num_joints_);
         // set the pose
@@ -479,7 +478,7 @@ public:
     /// @param pose The pose to store the FK solution
     /// @return True if FK was found, false otherwise
     bool calculateFK(const StateType &joint_state,
-                     StateType &pose) {
+                     StateType &pose) const {
         // set the joint state
         kinematic_state_->setJointGroupPositions(joint_model_group_, joint_state);
         // update
@@ -550,7 +549,7 @@ public:
     /// @param point The point to get the distance to, specified in the world frame (the planning frame of the scene).
     /// @param max_distance The maximum distance to check for. If a distance larger than this is found, the function returns this value.
     /// @param distance The distance to the robot to be populated by the function.
-    void getDistanceToRobot(const StateType& state, const Eigen::Vector3d& point, double max_distance, double& distance) {
+    void getDistanceToRobot(const StateType& state, const Eigen::Vector3d& point, double max_distance, double& distance) const {
         // Set the state of the ego robot and reset the states of all others.
         moveit::core::RobotState &current_scene_state = planning_scene_->getCurrentStateNonConst();
         // Reset the scene.
