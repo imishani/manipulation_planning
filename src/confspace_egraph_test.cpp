@@ -57,6 +57,7 @@ int main(int argc, char** argv) {
 
     std::string group_name = "manipulator_1";
     double discret = 1;
+    bool save_experience = false;
 
     if (argc == 0) {
         ROS_INFO_STREAM(BOLDMAGENTA << "No arguments given: using default values");
@@ -67,6 +68,10 @@ int main(int argc, char** argv) {
     } else if (argc == 3) {
         group_name = argv[1];
         discret = std::stod(argv[2]);
+    } else if (argc == 4) {
+        group_name = argv[1];
+        discret = std::stod(argv[2]);
+        save_experience = std::stoi(argv[3]);
     } else {
         ROS_INFO_STREAM(BOLDMAGENTA << "No arguments given: using default values");
         ROS_INFO_STREAM("<group_name(string)> <discretization(int)> ");
@@ -79,6 +84,7 @@ int main(int argc, char** argv) {
     moveit::planning_interface::MoveGroupInterface move_group(group_name);
     // get the number of joints
     int num_joints = (int)move_group.getVariableCount();
+    std::cout << "num_joints: " << num_joints << std::endl;
 
     std::string path_mprim = full_path.string() + "/config/manip_" + std::to_string(num_joints) + "dof.mprim";
 
@@ -99,9 +105,11 @@ int main(int argc, char** argv) {
 
     auto* heuristic = new ims::BFSHeuristicEgraph;
     double weight = 100.0;
+    double eg_epsilon = 100.0;
 
-    ims::ExperienceWAStarParams params(heuristic, weight, 100.0,
+    ims::ExperienceWAStarParams params(heuristic, weight, eg_epsilon,
                                        full_path.string() + "/data/experiences/" + group_name);
+    heuristic->setWeightEGraph(eg_epsilon);
 
     ims::MoveitInterface scene_interface(group_name);
 
@@ -116,7 +124,7 @@ int main(int argc, char** argv) {
 
     heuristic->init(action_space, df, group_name);
 
-    StateType start_state {0, 0, 0, 0, 0, 0};
+    StateType start_state {0, 0, 0, 0, 0, 0, 0};
     const std::vector<std::string>& joint_names = move_group.getVariableNames();
     int num_joints_ = (int)move_group.getVariableCount();
     for (int i = 0; i < num_joints; i++) {
@@ -128,13 +136,21 @@ int main(int argc, char** argv) {
     StateType goal_state = start_state;
 
     // change the goal state
-    goal_state[0] = 5;// 78; //0;
-    goal_state[1] = 30; //25; //30;
-    goal_state[2] = -39; //-18; //-30;
-    goal_state[3] = 0; //-147; //0;
-    goal_state[4] = 0; //73; //0;
-    goal_state[5] = 0;//-66; //0;
+    // goal_state[0] = 1.5708*180/M_PI;// 78; //0;
+    // goal_state[1] = 0.0698132*180/M_PI; //25; //30;
+    // goal_state[2] = -0.9948*180/M_PI; //-18; //-30;
+    // goal_state[3] = -1.5708*180/M_PI; //-147; //0;
+    // goal_state[4] = 0; //73; //0;
+    // goal_state[5] = 0;//-66; //0;
+    // goal_state[6] = 0;//-66; //0;
 
+    goal_state[0] = 81; //108; 76;
+    goal_state[1] = -94; //16; -25;
+    goal_state[2] = 120; //135; -133;
+    goal_state[3] = -113; //-125; -6;
+    goal_state[4] = -150; //-80; -89;
+    goal_state[5] = 35; //140; 11;
+    goal_state[6] = 51; //52; 104;
 
     ims::deg2rad(start_state); ims::deg2rad(goal_state);
     // normalize the start and goal states

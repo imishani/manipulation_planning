@@ -534,13 +534,18 @@ namespace ims {
                     auto& prev_state = egraph_states.front();
                     roundStateToDiscretization(prev_state, manipulation_type_->state_discretization_);
                     auto pid = egraph_.insert_node(prev_state);
-                    state_to_egraph_nodes_[prev_state].push_back(pid);
-
                     int entry_s_id = getOrCreateRobotState(prev_state);
+                    // state_to_egraph_nodes_[prev_state].push_back(pid);
 
                     // map the state id to the node id in the experience graph
-                    egraph_state_ids_.resize(pid + 1, -1);
-                    egraph_state_ids_[pid] = entry_s_id;
+                    if (pid == egraph_.num_nodes() - 1)
+                    {
+                        state_to_egraph_nodes_[prev_state].push_back(pid);
+                        egraph_state_ids_.resize(pid + 1, -1);
+                        egraph_state_ids_[pid] = entry_s_id;
+                    }
+                    // egraph_state_ids_.resize(pid + 1, -1);
+                    // egraph_state_ids_[pid] = entry_s_id;
                     states_to_nodes_[entry_s_id] = pid;
 
                     std::vector<StateType> edge_data;
@@ -549,13 +554,17 @@ namespace ims {
                         StateType cs = curr_state;
                         if (curr_state != prev_state) { // TODO: check if its fine
                             auto cid = egraph_.insert_node(curr_state);
-                            state_to_egraph_nodes_[curr_state].push_back(cid);
-
                             int curr_s_id = getOrCreateRobotState(curr_state);
+                            // state_to_egraph_nodes_[curr_state].push_back(cid);
 
                             // map the state id to the node id in the experience graph
-                            egraph_state_ids_.resize(cid + 1, -1);
-                            egraph_state_ids_[cid] = curr_s_id;
+                            if (cid == egraph_.num_nodes() - 1){
+                                state_to_egraph_nodes_[curr_state].push_back(cid);
+                                egraph_state_ids_.resize(cid + 1, -1);
+                                egraph_state_ids_[cid] = curr_s_id;
+                            }
+                            // egraph_state_ids_.resize(cid + 1, -1);
+                            // egraph_state_ids_[cid] = curr_s_id;
                             states_to_nodes_[curr_s_id] = cid;
 
                             // add edge
@@ -576,6 +585,23 @@ namespace ims {
             }
             return true;
         }
+
+
+    bool loadEGraphFromNN(const std::string& path, const StateType& start, const StateType& goal) override {
+        return true;
+    }
+
+    bool getUniformSamples(int num_samples, std::vector<StateType>& sampled_states) override {
+        return true;
+    }
+
+    bool getEllipsoidalSamples(int num_samples, std::vector<StateType>& sampled_states, const StateType& start, const StateType& goal) override {
+        return true;
+    }
+
+    bool getLinkSamples(int num_samples, std::vector<StateType>& sampled_states, const StateType& start, const StateType& goal) override {
+        return true;
+    }
 
         void getEGraphNodes(int state_id,
                             std::vector<ims::smpl::ExperienceGraph::node_id> &nodes) override {

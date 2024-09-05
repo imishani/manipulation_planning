@@ -118,9 +118,9 @@ int main(int argc, char** argv) {
     std::shared_ptr<ims::ManipulationActionSpace> action_space = std::make_shared<ims::ManipulationActionSpace>(scene_interface, action_type,
                                                                                                                 heuristic);
 
-    StateType start_state {0, 0, 0, 0, 0, 0};
+    StateType start_state {0, 0, 0, 0, 0, 0, 0};
     const std::vector<std::string>& joint_names = move_group.getVariableNames();
-    for (int i = 0; i < 6; i++) {
+    for (int i = 0; i < 7; i++) {
         start_state[i] = current_state->getVariablePosition(joint_names[i]);
         ROS_INFO_STREAM("Joint " << joint_names[i] << " is " << start_state[i]);
     }
@@ -128,13 +128,31 @@ int main(int argc, char** argv) {
     ims::rad2deg(start_state);
     StateType goal_state = start_state;
 
-    // change the goal state
-    goal_state[0] = 1.5708*180/M_PI;// 78; //0;
-    goal_state[1] = 0.0698132*180/M_PI; //25; //30;
-    goal_state[2] = -0.9948*180/M_PI; //-18; //-30;
-    goal_state[3] = -1.5708*180/M_PI; //-147; //0;
-    goal_state[4] = 0; //73; //0;
-    goal_state[5] = 0;//-66; //0;
+    // goal_state[0] = 1.5*180/M_PI;// 78; //0;
+    // goal_state[1] = 1.585*180/M_PI; //25; //30;
+    // goal_state[2] = 1.2*180/M_PI; //-18; //-30;
+    // goal_state[3] = 0*180/M_PI; //-147; //0;
+    // goal_state[4] = 0.5; //10*M_PI/180;
+    // goal_state[5] = -0.4;
+    // goal_state[6] = 0.6;//-66; //0;
+
+    goal_state[0] = -21;//-82;//2;
+    goal_state[1] = 70;//41;//-43;
+    goal_state[2] = -146;//127;//-72;
+    goal_state[3] = -74;//-126;//-40;
+    goal_state[4] = 48;//146;//20;
+    goal_state[5] = 59;//51;//105;
+    goal_state[6] = -1;//-106;//42;
+
+
+    // goal_state[0] = 81; //108;
+    // goal_state[1] = -94; //16;
+    // goal_state[2] = 113; //135;
+    // goal_state[3] = -113; //-125;
+    // goal_state[4] = -161; //-80;
+    // goal_state[5] = 35; //140;
+    // goal_state[6] = 51; //52;
+
 
 
     ims::deg2rad(start_state); ims::deg2rad(goal_state);
@@ -162,6 +180,7 @@ int main(int argc, char** argv) {
     }
     else {
         ROS_INFO_STREAM(GREEN << "Path found" << RESET);
+        save_experience = false;
         if (save_experience) {
             ROS_INFO("Saving path as experience");
             // check if the directory exists

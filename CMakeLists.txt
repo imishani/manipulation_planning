@@ -1,8 +1,14 @@
-cmake_minimum_required(VERSION 3.0.2)
+cmake_minimum_required(VERSION 3.16.3)
 project(manipulation_planning)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
+set(CMAKE_CXX_STANDARD 17)
+
+if(DEFINED ENV{CONDA_PREFIX})
+    set(CMAKE_IGNORE_PATH $ENV{CONDA_PREFIX}/bin)
+endif()
+set(catkin_DIR "/opt/ros/noetic/share/catkin/cmake")
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -173,6 +179,14 @@ target_link_libraries(${PROJECT_NAME}_cspace_test
         ${eigen_LIBRARIES}
         /usr/local/lib/${search_LIBRARIES}
         )
+
+add_executable(${PROJECT_NAME}_traj_vis_test src/traj_vis.cpp)
+
+target_link_libraries(${PROJECT_NAME}_traj_vis_test
+        ${catkin_LIBRARIES}
+        ${eigen_LIBRARIES}
+        /usr/local/lib/${search_LIBRARIES}
+)
 
 add_executable(${PROJECT_NAME}_wspace_test src/workspace_test.cpp)
 
