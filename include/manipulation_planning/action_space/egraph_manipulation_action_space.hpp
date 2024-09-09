@@ -587,21 +587,125 @@ namespace ims {
         }
 
 
-    bool loadEGraphFromNN(const std::string& path, const StateType& start, const StateType& goal) override {
-        return true;
-    }
+        bool loadEGraphFromNN(const std::string& path, const StateType& start, const StateType& goal) override {
+            std::cout << GREEN << "Loading Egraph from NN model..." << RESET << std::endl;
+            std::cout << path << std::endl;
+            // The path needs to be a directory containing the experience files
+            // check if path is a directory
+            boost::filesystem::path p(path);
+            if (!boost::filesystem::is_directory(p)) {
+                std::cout << RED << "[ERROR]: Path in loadEGraph is not a directory" << RESET << std::endl;
+                return false;
+            }
+            std::cout << GREEN << "Storing start and goal pos for NN model..." << RESET << std::endl;
+            std::string input_file_path = path + "/input";
+            std::ofstream input_file(input_file_path);
+            if (input_file.is_open()) {
+                for (auto val : start) {
+                    input_file << val << " ";
+                }
+                input_file << "\n";
+                for (auto val : goal) {
+                    input_file << val << " ";
+                }
+                input_file << "\n";
+            }
+            input_file.close();
 
-    bool getUniformSamples(int num_samples, std::vector<StateType>& sampled_states) override {
-        return true;
-    }
+            boost::filesystem::path currentPath = boost::filesystem::current_path();
+            // Run python service client here !!!!!
+            std::string command = "bash -c '";
+            command += "source ~/.bashrc && source ~/repos/manipulation_ws/devel/setup.bash && ";
+            command += "rosrun manipulation_planning nn_inference_client.py'";
+            std::cout << command << std::endl;
 
-    bool getEllipsoidalSamples(int num_samples, std::vector<StateType>& sampled_states, const StateType& start, const StateType& goal) override {
-        return true;
-    }
+            // Run the command
+            int result = std::system(command.c_str());
 
-    bool getLinkSamples(int num_samples, std::vector<StateType>& sampled_states, const StateType& start, const StateType& goal) override {
-        return true;
-    }
+            if (result == 0) {
+                std::cout << "NN model finish running." << std::endl;
+            } else {
+                std::cout << "Error running Python script. Error code: " << result << std::endl;
+            }
+
+            // Continue with C++ code after the Python script finishes
+            std::cout << "Back to planner" << std::endl;
+
+            // leave same!!!
+
+            // loop through all files in the directory and parse them
+            for (auto& entry : boost::make_iterator_range(boost::filesystem::directory_iterator(p), {})) {
+                if (entry.path().extension() == ".csv") {
+                    std::vector<StateType> egraph_states;
+                    if (!parseEGraphFile(entry.path().string(), egraph_states) || egraph_states.empty()) {
+                        continue;
+                    }
+                    auto& prev_state = egraph_states.front();
+                    roundStateToDiscretization(prev_state, manipulation_type_->state_discretization_);
+                    auto pid = egraph_.insert_node(prev_state);
+                    int entry_s_id = getOrCreateRobotState(prev_state);
+                    // state_to_egraph_nodes_[prev_state].push_back(pid);
+
+                    // map the state id to the node id in the experience graph
+                    if (pid == egraph_.num_nodes() - 1)
+                    {
+                        state_to_egraph_nodes_[prev_state].push_back(pid);
+                        egraph_state_ids_.resize(pid + 1, -1);
+                        egraph_state_ids_[pid] = entry_s_id;
+                    }
+                    // egraph_state_ids_.resize(pid + 1, -1);
+                    // egraph_state_ids_[pid] = entry_s_id;
+                    states_to_nodes_[entry_s_id] = pid;
+
+                    std::vector<StateType> edge_data;
+                    for (size_t i = 1; i < egraph_states.size(); ++i) {
+                        auto& curr_state = egraph_states[i];
+                        StateType cs = curr_state;
+                        if (curr_state != prev_state) { // TODO: check if its fine
+                            auto cid = egraph_.insert_node(curr_state);
+                            int curr_s_id = getOrCreateRobotState(curr_state);
+                            // state_to_egraph_nodes_[curr_state].push_back(cid);
+
+                            // map the state id to the node id in the experience graph
+                            if (cid == egraph_.num_nodes() - 1){
+                                state_to_egraph_nodes_[curr_state].push_back(cid);
+                                egraph_state_ids_.resize(cid + 1, -1);
+                                egraph_state_ids_[cid] = curr_s_id;
+                            }
+                            // egraph_state_ids_.resize(cid + 1, -1);
+                            // egraph_state_ids_[cid] = curr_s_id;
+                            states_to_nodes_[curr_s_id] = cid;
+
+                            // add edge
+                            egraph_.insert_edge(pid, cid, edge_data);
+                            pid = cid;
+                            prev_state = cs;
+                        } else {
+                            edge_data.push_back(curr_state);
+                        }
+                    }
+                }
+            }
+            // make sure all states have FK
+            for (auto &state : states_) {
+                if (state->state_mapped.empty()) {
+                    moveit_interface_->calculateFK(state->state, state->state_mapped);
+                }
+            }
+            return true;
+        }
+
+        bool getUniformSamples(int num_samples, std::vector<StateType>& sampled_states) override {
+            return true;
+        }
+
+        bool getEllipsoidalSamples(int num_samples, std::vector<StateType>& sampled_states, const StateType& start, const StateType& goal) override {
+            return true;
+        }
+
+        bool getLinkSamples(int num_samples, std::vector<StateType>& sampled_states, const StateType& start, const StateType& goal) override {
+            return true;
+        }
 
         void getEGraphNodes(int state_id,
                             std::vector<ims::smpl::ExperienceGraph::node_id> &nodes) override {
@@ -640,6 +744,7 @@ namespace ims {
                         assert(entry);
                         trans_path.push_back(entry->state);
                     }
+                    std::cout << GREEN << "Using experience graph" << RESET << std::endl;
                     return true;
                 } else {
                     return false;
@@ -805,7 +910,7 @@ namespace ims {
                 min->closed = true;
 
                 if (min == &search_nodes[goal_node]) {
-                    std::cout << RED << "[ERROR]: Found shortest experience graph path" << RESET << std::endl;
+                    std::cout << GREEN << "[INFO]: Found shortest experience graph path" << RESET << std::endl;
                     ExperienceGraphSearchNode* ps = nullptr;
                     for (ExperienceGraphSearchNode* s = &search_nodes[goal_node];
                          s; s = s->bp)

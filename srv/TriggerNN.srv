@@ -1,0 +1,3 @@
+bool trigger  # This could be an int or bool signal
+---
+bool success  # The server signals back when done

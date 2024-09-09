@@ -108,7 +108,7 @@ int main(int argc, char** argv) {
     double eg_epsilon = 100.0;
 
     ims::ExperienceWAStarParams params(heuristic, weight, eg_epsilon,
-                                       full_path.string() + "/data/experiences/" + group_name);
+                                       full_path.string() + "/data/experiences_from_model/" + group_name);
     heuristic->setWeightEGraph(eg_epsilon);
 
     ims::MoveitInterface scene_interface(group_name);
