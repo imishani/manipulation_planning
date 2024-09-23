@@ -106,7 +106,7 @@ int main(int argc, char** argv) {
     double weight = 100.0;
 
     ims::MGSParams params(heuristic_joints);
-    params.time_limit_ = 5;
+    params.time_limit_ = 10;
     params.verbose = true;
     params.w_ = weight;
 
@@ -134,13 +134,22 @@ int main(int argc, char** argv) {
     StateType goal_state = start_state;
 
     // change the goal state
-    goal_state[0] = 0;// 78; //0;
-    goal_state[1] = 68; //25; //30;
-    goal_state[2] = 0;
-    goal_state[3] = -48; //-147; //0;
-    goal_state[4] = 0; //73; //0;
-    goal_state[5] = -60;//-66; //0;
-    goal_state[6] = 0;//-66; //0;
+    // goal_state[0] = 6;// 78; //0;
+    // goal_state[1] = 43; //25; //30;
+    // goal_state[2] = -18;
+    // goal_state[3] = -41; //-147; //0;
+    // goal_state[4] = 93; //73; //0;
+    // goal_state[5] = -20;//-66; //0;
+    // goal_state[6] = 13;//-66; //0;
+
+    // change the goal state
+    goal_state[0] = -27;// 78; //0;
+    goal_state[1] = 15; //25; //30;
+    goal_state[2] = -7;
+    goal_state[3] = -87; //-147; //0;
+    goal_state[4] = 92; //73; //0;
+    goal_state[5] = 100;//-66; //0;
+    goal_state[6] = -12;//-66; //0;
 
 
     ims::deg2rad(start_state); ims::deg2rad(goal_state);
@@ -164,7 +173,7 @@ int main(int argc, char** argv) {
     ims::PointsIKAroundObjectsController ik_controller;
     ik_controller.init(action_space, std::make_shared<ims::MoveitInterface>(scene_interface));
     ik_controller.solver_fn = ims::PointsIKAroundObjectsControllerFn;
-    controllers->push_back(ik_controller);
+    // controllers->push_back(ik_controller);
 
     try {
         planner.initializePlanner(action_space, controllers, start_state, goal_state);

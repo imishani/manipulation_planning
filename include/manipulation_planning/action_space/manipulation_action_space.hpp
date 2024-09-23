@@ -351,11 +351,11 @@ struct ManipulationType : ActionType {
     /// @brief Motion primitive active type: Used for adaptive motion primitives, given a few motion primitives,
     /// which one is active at a given time and it's threshold
     struct MotionPrimitiveActiveType {
-        std::pair<bool, double> short_dist = std::make_pair(true, 0.1);
+        std::pair<bool, double> short_dist = std::make_pair(true, 0.2);
         std::pair<bool, double> long_dist = std::make_pair(true, 0.4);
         std::pair<bool, double> snap_xyz = std::make_pair(false, 0.2);
         std::pair<bool, double> snap_rpy = std::make_pair(false, 0.2);
-        std::pair<bool, double> snap_xyzrpy = std::make_pair(true, 0.2);
+        std::pair<bool, double> snap_xyzrpy = std::make_pair(true, 0.5);
     };
 
     ActionType action_type_;
@@ -599,7 +599,7 @@ public:
     /// @param resolution The resolution of the path (default: 0.005 rad)
     /// @return The interpolated path
     static PathType interpolatePath(const StateType &start, const StateType &end,
-                                    const double resolution = 0.05) {
+                                    const double resolution = 0.01) {
         // TODO: Currently only works for configuration space
         assert(start.size() == end.size());
         PathType path;

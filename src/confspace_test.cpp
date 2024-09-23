@@ -48,6 +48,7 @@
 #include <moveit/occupancy_map_monitor/occupancy_map_monitor.h>
 
 
+
 int main(int argc, char** argv) {
 
     ros::init(argc, argv, "configuration_test");
@@ -55,7 +56,7 @@ int main(int argc, char** argv) {
     ros::AsyncSpinner spinner(8);
     spinner.start();
 
-    std::string group_name = "manipulator_1";
+    std::string group_name = "l_arm";
     double discret = 1;
     bool save_experience = false;
 
@@ -80,7 +81,7 @@ int main(int argc, char** argv) {
 
     auto full_path = boost::filesystem::path(__FILE__).parent_path().parent_path();
 
-    // Define Robot inteface to give commands and get info from moveit:
+    // Define Robot interface to give commands and get info from moveit:
     moveit::planning_interface::MoveGroupInterface move_group(group_name);
     // get the number of joints
     int num_joints = static_cast<int>(move_group.getVariableCount());
@@ -92,6 +93,14 @@ int main(int argc, char** argv) {
     // check for collision
     planning_scene::PlanningScenePtr planning_scene;
     planning_scene = std::make_shared<planning_scene::PlanningScene>(move_group.getRobotModel());
+    std::vector<std::string> nmame;
+    planning_scene->getCollisionDetectorNames(nmame);
+    // planning_scene->getCollisionDetectorNames()
+    // auto cc = collision_detection::CollisionDetectorAllocatorBullet::create();
+    // planning_scene->addCollisionDetector(collision_detection::CollisionDetectorAllocatorBullet::create());
+    // planning_scene->setActiveCollisionDetector(collision_detection::CollisionDetectorAllocatorBullet::create(),
+                                     // true /* exclusive */);
+    // planning_scene->setActiveCollisionDetector(cc, false);
     collision_detection::CollisionRequest collision_request;
     collision_detection::CollisionResult collision_result;
     planning_scene->checkCollision(collision_request, collision_result, *current_state);
@@ -102,11 +111,13 @@ int main(int argc, char** argv) {
     // get the planning frame
     ims::visualizeBoundingBox(df, bb_pub, move_group.getPlanningFrame());
     auto* heuristic = new ims::BFSHeuristic(df, group_name);
+    ims::visualizeOccupancy(df, bb_pub, move_group.getPlanningFrame());
 //    auto* heuristic = new ims::JointAnglesHeuristic;
     double weight = 100.0;
 
     ims::wAStarParams params(heuristic, weight);
 
+    // ims::MoveitInterface scene_interface(group_name, planning_scene);
     ims::MoveitInterface scene_interface(group_name);
 
     ims::ManipulationType action_type (path_mprim);
@@ -129,13 +140,22 @@ int main(int argc, char** argv) {
     StateType goal_state = start_state;
 
     // change the goal state
-    goal_state[0] -= 20;// 78; //0;
-    goal_state[1] += 50; //25; //30;
-    // goal_state[2] = -0.9948*180/M_PI; //-18; //-30;
-    // goal_state[3] = -1.5708*180/M_PI; //-147; //0;
-    // goal_state[4] = 0; //73; //0;
-    // goal_state[5] = 0;//-66; //0;
-    goal_state[6] += 30;//-66; //0;
+    goal_state[0] = 6;// 78; //0;
+    goal_state[1] = 43; //25; //30;
+    goal_state[2] = -18;
+    goal_state[3] = -41; //-147; //0;
+    goal_state[4] = 93; //73; //0;
+    goal_state[5] = -20;//-66; //0;
+    goal_state[6] = 13;//-66; //0;
+
+    // // change the goal state
+    // goal_state[0] = -27;// 78; //0;
+    // goal_state[1] = 15; //25; //30;
+    // goal_state[2] = -7;
+    // goal_state[3] = -87; //-147; //0;
+    // goal_state[4] = 92; //73; //0;
+    // goal_state[5] = 100;//-66; //0;
+    // goal_state[6] = -12;//-66; //0;
 
 
     ims::deg2rad(start_state); ims::deg2rad(goal_state);
@@ -221,7 +241,7 @@ int main(int argc, char** argv) {
     ims::shortcutPath(path_,
         move_group,
         planning_scene,
-        traj, 1);
+        traj, 0.5);
 
     moveit_msgs::RobotTrajectory trajectory;
     ims::profileTrajectory(start_state,

@@ -44,6 +44,9 @@
 #include <moveit/move_group_interface/move_group_interface.h>
 #include <moveit/planning_scene_interface/planning_scene_interface.h>
 #include <moveit/planning_scene_monitor/planning_scene_monitor.h>
+#include <moveit/collision_detection_bullet/collision_env_bullet.h>
+#include <moveit/collision_detection_bullet/collision_detector_allocator_bullet.h>
+#include <moveit/collision_detection/collision_tools.h>
 #include <ros/ros.h>
 
 // project includes
@@ -66,6 +69,7 @@ class MoveitInterface : public SceneInterface {
     int num_collision_checks_ = 0;
 
 public:
+    [[deprecated("This constructor is deprecated. Please use the constructor with the planning scene as an argument.")]]
     /// @brief Constructor
     explicit MoveitInterface(const std::string &group_name) {
         // planning scene monitor
@@ -76,6 +80,8 @@ public:
         planning_scene_monitor_->requestPlanningSceneState();
         ros::Duration(0.3).sleep();
         planning_scene_ = planning_scene_monitor_->getPlanningScene();
+        // enable collision checking using Bullet
+        // planning_scene_->setActiveCollisionDetector(collision_detection::CollisionDetectorAllocatorBullet::create(), true);
         group_name_ = group_name;
 
         kinematic_state_ = std::make_shared<moveit::core::RobotState>(planning_scene_->getCurrentState());
@@ -109,7 +115,8 @@ public:
     };
 
     /// @brief Constructor with the option to set the planning scene.
-    MoveitInterface(const std::string &group_name, const planning_scene::PlanningScenePtr &planning_scene) {
+    MoveitInterface(const std::string &group_name,
+        const planning_scene::PlanningScenePtr &planning_scene) {
         // planning scene monitor
         planning_scene_monitor_ = std::make_shared<planning_scene_monitor::PlanningSceneMonitor>("robot_description");
         planning_scene_monitor_->startSceneMonitor();

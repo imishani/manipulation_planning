@@ -243,12 +243,24 @@ public:
         // setup robot move group and planning scene
         move_group = std::make_shared<moveit::planning_interface::MoveGroupInterface>(group_name);
         // robot model
-        robot_model = move_group->getRobotModel();
-        // joint model group
-        joint_model_group = robot_model->getJointModelGroup(group_name);
+        // robot_model = move_group->getRobotModel();
+        robot_model_loader_ = robot_model_loader::RobotModelLoader("robot_description");
+        robot_model = robot_model_loader_.getModel();
+        const robot_model::RobotModelPtr& kinematic_model = robot_model_loader_.getModel();
+        ROS_INFO("Model frame: %s", kinematic_model->getModelFrame().c_str());
+        kinematic_state = std::make_shared<moveit::core::RobotState>(kinematic_model);
+        kinematic_state->setToDefaultValues();
+        joint_model_group = kinematic_model->getJointModelGroup(group_name);
 
-        kinematic_state = std::make_shared<moveit::core::RobotState>(robot_model);
-        auto names = joint_model_group->getLinkModelNames();
+        const std::vector<std::string> &joint_names = joint_model_group->getJointModelNames();
+
+        // // joint model group
+        // joint_model_group = robot_model->getJointModelGroup(group_name);
+        //
+        // kinematic_state = std::make_shared<moveit::core::RobotState>(robot_model);
+        // auto names = joint_model_group->getLinkModelNames();
+
+
         // get the planning group tip link
         tip_link = joint_model_group->getLinkModelNames().back();
 
@@ -257,6 +269,11 @@ public:
         // Flag for whether the goal is set.
         is_goal_set = false;
     }
+
+    // /// @brief Destructor
+    // ~BFSHeuristic() override {
+    //
+    // }
 
     void setInflationRadius(double radius) {
         inflation_radius_ = radius;
@@ -281,6 +298,14 @@ public:
 
         // Compute the goal position in world space.
         kinematic_state->setJointGroupPositions(joint_model_group, goal_);
+        std::vector<std::string> joint_names = joint_model_group->getVariableNames();
+
+        StateType verify;
+        for (int i{0}; i < goal_.size(); i++) {
+            verify.push_back(kinematic_state->getJointPositions(joint_names[i])[0]);
+        }
+        // bool success;
+        // auto check = kinematic_state->getFrameTransform(tip_link, &success);
         ee_goal_state_ = kinematic_state->getGlobalLinkTransform(tip_link);
 
         auto goal_position = ee_goal_state_.translation();
@@ -461,8 +486,9 @@ private:
 
     std::string tip_link;
     std::shared_ptr<moveit::planning_interface::MoveGroupInterface> move_group;
+    robot_model_loader::RobotModelLoader robot_model_loader_;
     moveit::core::RobotModelConstPtr robot_model;
-    const moveit::core::JointModelGroup *joint_model_group;
+    moveit::core::JointModelGroup *joint_model_group;
     moveit::core::RobotStatePtr kinematic_state;
 };
 
