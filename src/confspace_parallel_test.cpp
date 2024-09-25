@@ -208,10 +208,10 @@ int main(int argc, char** argv) {
     double weight = 100.0;
     // double i_weight = 3000*weight;
     double i_weight = 20 * weight;
-    // int num_threads = 1;
+    int num_threads = 1;
     // int num_threads = 4;
     // int num_threads = 12;
-    int num_threads = 14;
+    // int num_threads = 14;
     // int num_threads = 24;
 
     int iter{1};
@@ -237,7 +237,7 @@ int main(int argc, char** argv) {
                 params->verbose = true;
         } else if (planner_name == "epase" || planner_name == "pase" || planner_name == "qpase") {
             params = std::make_shared<ims::ParallelSearchParams>(heuristic, i_heuristic, num_threads, weight, i_weight);
-            params->time_limit_ = 10.0;
+            params->time_limit_ = 60.0;
             if (verbose) {
                 params->verbose = true;
                 // std::dynamic_pointer_cast<ims::ParallelSearchParams>(params)->debug = true;

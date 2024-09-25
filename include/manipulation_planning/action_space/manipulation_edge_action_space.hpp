@@ -92,6 +92,19 @@ public:
         vis_pub_ = nh_.advertise<visualization_msgs::Marker>("visualization_marker", 0);
     }
 
+    bool isGoalState(int state_id) {
+        auto curr_state = this->getRobotState(state_id);
+        auto ee_goal = bfs_heuristic_->getGoalPoseEExyzrpy();
+        if (curr_state->state_mapped.empty()) {
+            moveit_interface_->calculateFK(curr_state->state, curr_state->state_mapped);
+        }
+
+        // Calculate the distance to the goal
+        auto goal_dist = (std::abs(curr_state->state_mapped[0] - ee_goal[0]) + std::abs(curr_state->state_mapped[1] - ee_goal[1]) + std::abs(curr_state->state_mapped[2] - ee_goal[2]));
+        
+        return goal_dist < 0.05;
+    }
+
     void getActionSequences(int state_id,
                             std::vector<ActionSequence> &action_seqs,
                             std::vector<std::vector<double>> &action_transition_costs,
