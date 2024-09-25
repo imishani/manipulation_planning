@@ -559,7 +559,7 @@ inline std::shared_ptr<distance_field::PropagationDistanceField> getEmptyDistanc
 inline std::shared_ptr<distance_field::PropagationDistanceField> getDistanceFieldMoveIt(double df_size_x = 3.0,
                                                                                         double df_size_y = 3.0,
                                                                                         double df_size_z = 3.0,
-                                                                                        double df_res = 0.02,
+                                                                                        double df_res = 0.01,
                                                                                         double df_origin_x = -0.75,
                                                                                         double df_origin_y = -1.5,
                                                                                         double df_origin_z = 0.0,
