@@ -288,6 +288,7 @@ int main(int argc, char** argv) {
             start_state = starts[i];
             goal_state = goals[i];
         } else {
+            current_state = move_group.getCurrentState();
             for (int i = 0; i < joint_names.size(); i++) {
                 start_state[i] = current_state->getVariablePosition(joint_names[i]);
                 ROS_INFO_STREAM("Joint " << joint_names[i] << " is " << start_state[i]);
@@ -317,7 +318,7 @@ int main(int argc, char** argv) {
         // 28 58 -31 -84 36 132 29
         // 41 62 -49 -72 -140 57 57
 
-        ims::deg2rad(start_state);
+        // ims::deg2rad(start_state);
         ims::deg2rad(goal_state);
         // normalize the start and goal states
         // get the joint limits
@@ -460,7 +461,7 @@ int main(int argc, char** argv) {
                             << "\t Suboptimality: " << stats.suboptimality << RESET);
             logs[i] = stats;
         }
-        
+
         if (!success) {
             continue;
         }
