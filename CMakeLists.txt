@@ -26,6 +26,10 @@ find_package(search REQUIRED)
 # find eigen
 find_package(Eigen3 REQUIRED)
 
+# Only when using NNs
+set(Torch_DIR /usr/local/libtorch/share/cmake/Torch)
+find_package(Torch REQUIRED)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
@@ -140,6 +144,7 @@ include_directories(
     ${catkin_INCLUDE_DIRS}
     ${search_INCLUDE_DIRS}
     ${EIGEN3_INCLUDE_DIR}
+    ${TORCH_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library
@@ -207,13 +212,23 @@ target_link_libraries(${PROJECT_NAME}_egraph_test
 
 add_executable(${PROJECT_NAME}_parallel_test src/confspace_parallel_test.cpp)
 
-
 target_link_libraries(${PROJECT_NAME}_parallel_test
         ${catkin_LIBRARIES}
         ${eigen_LIBRARIES}
         /usr/local/lib/${search_LIBRARIES}
         yaml-cpp
         )
+
+add_executable(${PROJECT_NAME}_rl_test src/confspace_rl_test.cpp)
+
+target_link_libraries(${PROJECT_NAME}_rl_test
+        ${catkin_LIBRARIES}
+        ${eigen_LIBRARIES}
+        /usr/local/lib/${search_LIBRARIES}
+        ${TORCH_LIBRARIES}
+        yaml-cpp
+        )
+set_property(TARGET ${PROJECT_NAME}_rl_test PROPERTY CXX_STANDARD 17)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
