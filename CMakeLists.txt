@@ -151,6 +151,7 @@ add_library(${PROJECT_NAME}
         src/confspace_test.cpp
         include/manipulation_planning/action_space/manipulation_action_space.hpp
         include/manipulation_planning/action_space/egraph_manipulation_action_space.hpp
+#        include/manipulation_planning/action_space/mobile_manipulation_action_space.hpp
         include/manipulation_planning/common/moveit_scene_interface.hpp
         include/manipulation_planning/heuristics/manip_heuristics.hpp
         include/manipulation_planning/common/utils.hpp
@@ -213,6 +214,21 @@ target_link_libraries(${PROJECT_NAME}_egraph_test
         /usr/local/lib/${search_LIBRARIES}
         )
 
+add_executable(${PROJECT_NAME}_mobile_manip src/run_mobile_manip.cpp)
+
+target_link_libraries(${PROJECT_NAME}_mobile_manip
+        ${catkin_LIBRARIES}
+        ${eigen_LIBRARIES}
+        /usr/local/lib/${search_LIBRARIES}
+        )
+
+add_executable(${PROJECT_NAME}_mobile_manip_mgs src/run_mobile_manip_mgs.cpp)
+
+target_link_libraries(${PROJECT_NAME}_mobile_manip_mgs
+        ${catkin_LIBRARIES}
+        ${eigen_LIBRARIES}
+        /usr/local/lib/${search_LIBRARIES}
+)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the

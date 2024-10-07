@@ -32,8 +32,8 @@
  * \date   4/3/23
  */
 
-#ifndef MANIPULATION_PLANNING_MANIPULATIONACTIONSPACE_HPP
-#define MANIPULATION_PLANNING_MANIPULATIONACTIONSPACE_HPP
+#ifndef MANIPULATIONACTIONSPACE_HPP
+#define MANIPULATIONACTIONSPACE_HPP
 
 // include standard libraries
 #include <iostream>
@@ -47,330 +47,14 @@
 #include <tf/transform_datatypes.h>
 
 // project includes
-#include <search/action_space/action_space.hpp>
+// #include <search/action_space/action_space.hpp>
+#include "action_types.hpp"
 
 #include "manipulation_planning/common/moveit_scene_interface.hpp"
 #include "manipulation_planning/common/utils.hpp"
 #include "manipulation_planning/heuristics/manip_heuristics.hpp"
 
 namespace ims {
-
-struct ManipulationType : ActionType {
-    /// @brief Constructor
-    /// @param[in] bfs_heuristic A pointer to a BFSHeuristic object. Default = nullptr
-    explicit ManipulationType() : action_type_(ActionType::MOVE),
-                                  space_type_(SpaceType::ConfigurationSpace),
-                                  mprim_file_name_("../config/manip_6dof.mprim"),
-                                  max_action_(0.0){
-                                      //            readMPfile();
-                                  };
-
-    /// @brief Constructor with motion primitives file given
-    /// @param[in] mprim_file The path to the motion primitives file
-    /// @param[in] bfs_heuristic A pointer to a BFSHeuristic object
-    explicit ManipulationType(std::string mprim_file) : action_type_(ActionType::MOVE),
-                                                        space_type_(SpaceType::ConfigurationSpace),
-                                                        mprim_file_name_(std::move(mprim_file)),
-                                                        max_action_(0.0){
-                                                            //            readMPfile();
-                                                        };
-
-    /// @brief Constructor with adaptive motion primitives given
-    /// @brief Destructor
-    ~ManipulationType() override = default;
-
-    /// @brief The type of the action
-    enum class ActionType {
-        MOVE,
-        GRASP,
-        RELEASE
-    };
-
-    enum class SpaceType {
-        ConfigurationSpace,
-        WorkSpace
-    };
-    /// @{ getters and setters
-    /// @brief Get the action type
-    /// @return The action type
-    ActionType getActionType() const {
-        return action_type_;
-    }
-
-    /// @brief Set the action type
-    /// @param ActionType The action type
-    void setActionType(ActionType ActionType) {
-        action_type_ = ActionType;
-    }
-
-    /// @brief Get the space type
-    /// @return The space type
-    SpaceType getSpaceType() const {
-        return space_type_;
-    }
-
-    /// @brief Set the space type
-    /// @param SpaceType The space type
-    void setSpaceType(SpaceType SpaceType) {
-        space_type_ = SpaceType;
-    }
-    /// @}
-
-    void Discretization(StateType &state_des) override {
-        state_discretization_ = state_des;
-    }
-
-    void readMPfile() {
-        std::ifstream file(mprim_file_name_);
-        std::string line;
-        std::vector<std::vector<double>> mprim;
-        switch (space_type_) {
-            case SpaceType::ConfigurationSpace: {
-                int tot_prim{0}, dof{0}, num_short_prim{0};
-                int i{0};
-                while (std::getline(file, line)) {
-                    if (i == 0) {
-                        // First line being with: "Motion_Primitives(degrees): " and then three numbers. Make sure the line begins with the string and then get the numbers
-                        std::string first_line = "Motion_Primitives(degrees): ";
-                        // Check if the line begins with the string
-                        if (line.find(first_line) != 0) {
-                            ROS_ERROR_STREAM("The first line of the motion primitives file should begin with: " << first_line);
-                        }
-                        // Get the numbers
-                        std::istringstream iss(line.substr(first_line.size()));
-                        if (!(iss >> tot_prim >> dof >> num_short_prim)) {
-                            ROS_ERROR_STREAM("The first line of the motion primitives file should begin with: " << first_line);
-                        }
-                        i++;
-                        continue;
-                    }
-                    std::istringstream iss(line);
-                    std::vector<double> line_;
-                    double num;
-                    while (iss >> num) {
-                        line_.push_back(num);
-                        if (abs(num * M_PI / 180.0) > max_action_) {
-                            max_action_ = abs(num * M_PI / 180.0);
-                        }
-                    }
-                    // Check if short or long primitive (the last num_short_prim lines are short)
-                    if (i > tot_prim - num_short_prim) {
-                        short_mprim_.push_back(line_);
-                    }
-                    else {
-                        long_mprim_.push_back(line_);
-                    }
-                    i++;
-                }
-            } break;
-            case SpaceType::WorkSpace: {
-                int tot_ptim{0}, positions_prims{0}, orientations_prims{0};
-                int i{0};
-                while (std::getline(file, line)) {
-                    if (i == 0) {
-                        // First line being with: "Motion_Primitives(degrees): " and then three numbers. Make sure the line begins with the string and then get the numbers
-                        std::string first_line = "Motion_Primitives(meters/degrees): ";
-                        // Check if the line begins with the string
-                        if (line.find(first_line) != 0) {
-                            ROS_ERROR_STREAM("The first line of the motion primitives file should begin with: " << first_line);
-                        }
-                        // Get the numbers
-                        std::istringstream iss(line.substr(first_line.size()));
-                        if (!(iss >> tot_ptim >> positions_prims >> orientations_prims)) {
-                            ROS_ERROR_STREAM("The first line of the motion primitives file should begin with: " << first_line);
-                        }
-                        i++;
-                        continue;
-                    }
-                    std::istringstream iss(line);
-                    std::vector<double> line_;
-                    double num;
-                    while (iss >> num) {
-                        line_.push_back(num);
-                        if (abs(num) > max_action_) {
-                            max_action_ = abs(num);
-                        }
-                    }
-                    // TODO: Currently I am using short_mprim_ to store the work space motion primitives. This is not correct.
-                    short_mprim_.push_back(line_);
-                    i++;
-                }
-            }
-        }
-    }
-
-    /// @brief Get the possible actions
-    /// @return A vector of all possible actions
-    std::vector<Action> getPrimActions() override {
-        if (short_mprim_.empty() && long_mprim_.empty()) {
-            readMPfile();
-        }
-        if (actions_.empty()) {
-            switch (action_type_) {
-                case ActionType::MOVE:
-                    switch (space_type_) {
-                        case SpaceType::ConfigurationSpace: {
-                            // TODO: Add snap option
-                            std::vector<std::vector<double>> mprim;
-                            mprim.insert(mprim.end(), long_mprim_.begin(), long_mprim_.end());
-                            mprim.insert(mprim.end(), short_mprim_.begin(), short_mprim_.end());
-                            for (auto &action_ : mprim) {
-                                // convert from degrees to radians
-                                for (auto &num : action_) {
-                                    num = num * M_PI / 180.0;
-                                }
-                                actions_.push_back(action_);
-                                // get the opposite action
-                                for (auto &num : action_) {
-                                    num = -num;
-                                }
-                                actions_.push_back(action_);
-                            }
-                        } break;
-                        case SpaceType::WorkSpace: {
-                            std::vector<std::vector<double>> mprim;
-                            mprim.insert(mprim.end(), short_mprim_.begin(), short_mprim_.end());
-                            for (auto &action_ : mprim) {
-                                // make an inverted action
-                                Action inverted_action(action_.size());
-                                inverted_action[0] = -action_[0];
-                                inverted_action[1] = -action_[1];
-                                inverted_action[2] = -action_[2];
-                                inverted_action[3] = -action_[3];
-                                inverted_action[4] = -action_[4];
-                                inverted_action[5] = -action_[5];
-                                // convert from euler angles to quaternions
-                                tf::Quaternion q;
-                                q.setRPY(action_[3] * M_PI / 180.0,
-                                         action_[4] * M_PI / 180,
-                                         action_[5] * M_PI / 180);
-                                // check from antipodal quaternions
-                                int sign = 1;
-                                if (q.w() < 0) {
-                                    sign = -1;
-                                }
-                                action_.resize(7);
-                                action_[3] = sign * q.x();
-                                action_[4] = sign * q.y();
-                                action_[5] = sign * q.z();
-                                action_[6] = sign * q.w();
-                                actions_.push_back(action_);
-                                // get the opposite action
-                                q.setRPY(inverted_action[3] * M_PI / 180,
-                                         inverted_action[4] * M_PI / 180,
-                                         inverted_action[5] * M_PI / 180);
-                                // check from antipodal quaternions
-                                sign = 1;
-                                if (q.w() < 0) {
-                                    sign = -1;
-                                }
-                                inverted_action.resize(7);
-                                inverted_action[3] = sign * q.x();
-                                inverted_action[4] = sign * q.y();
-                                inverted_action[5] = sign * q.z();
-                                inverted_action[6] = sign * q.w();
-                                actions_.push_back(inverted_action);
-                            }
-                        } break;
-                    }
-                    break;
-                case ActionType::GRASP:
-                    break;
-                case ActionType::RELEASE:
-                    break;
-            }
-            return actions_;
-        }
-        else {
-            return actions_;
-        }
-    }
-
-    /// @brief Get adaptive motion primitives
-    /// @param start_dist The distance from the start
-    /// @param goal_dist The distance from the goal
-    /// @return A vector of actions
-    std::vector<Action> getAdaptiveActions(double &start_dist, double &goal_dist) {
-        if (short_mprim_.empty() && long_mprim_.empty()) {
-            readMPfile();
-        }
-        actions_.clear();
-        if (mprim_active_type_.long_dist.first)  // insert long distance primitive and convert to radians
-            for (auto &action_ : long_mprim_) {
-                std::vector<double> action, action_rev;
-                for (const auto &num : action_) {
-                    action.push_back(num * M_PI / 180.0);
-                    action_rev.push_back(-num * M_PI / 180.0);
-                }
-                actions_.push_back(action);
-                actions_.push_back(action_rev);
-            }
-        if (mprim_active_type_.short_dist.first && (start_dist < mprim_active_type_.short_dist.second || goal_dist < mprim_active_type_.short_dist.second))
-            for (auto &action_ : short_mprim_) {
-                std::vector<double> action, action_rev;
-                for (const auto &num : action_) {
-                    action.push_back(num * M_PI / 180.0);
-                    action_rev.push_back(-num * M_PI / 180.0);
-                }
-                actions_.push_back(action);
-                actions_.push_back(action_rev);
-            }
-        if (mprim_active_type_.snap_xyz.first && goal_dist < mprim_active_type_.snap_xyz.second)
-            actions_.push_back({INF_DOUBLE, INF_DOUBLE, INF_DOUBLE,
-                                INF_DOUBLE, INF_DOUBLE, INF_DOUBLE});  // TODO: Fix this to make it better designed
-        if (mprim_active_type_.snap_rpy.first && goal_dist < mprim_active_type_.snap_rpy.second)
-            actions_.push_back({INF_DOUBLE, INF_DOUBLE, INF_DOUBLE,
-                                INF_DOUBLE, INF_DOUBLE, INF_DOUBLE});  // TODO: Fix this to make it better designed
-        if (mprim_active_type_.snap_xyzrpy.first && goal_dist < mprim_active_type_.snap_xyzrpy.second) {
-            actions_.push_back({INF_DOUBLE, INF_DOUBLE, INF_DOUBLE,
-                                INF_DOUBLE, INF_DOUBLE, INF_DOUBLE});  // TODO: Fix this to make it better designed
-            ROS_DEBUG_NAMED("adaptive_mprim", "snap xyzrpy");
-            ROS_DEBUG_STREAM("goal_dist: " << goal_dist);
-        }
-        return actions_;
-    }
-
-    /// @brief Set values in the motion primitive active type.
-    /// @param short_dist The short distance threshold
-    /// @param long_dist The long distance threshold
-    /// @param snap_xyz The snap xyz threshold
-    /// @param snap_rpy The snap rpy threshold
-    /// @param snap_xyzrpy The snap xyzrpy threshold
-    void setMprimActiveType(const std::pair<bool, double> &short_dist,
-                            const std::pair<bool, double> &long_dist,
-                            const std::pair<bool, double> &snap_xyz,
-                            const std::pair<bool, double> &snap_rpy,
-                            const std::pair<bool, double> &snap_xyzrpy) {
-        mprim_active_type_.short_dist = short_dist;
-        mprim_active_type_.long_dist = long_dist;
-        mprim_active_type_.snap_xyz = snap_xyz;
-        mprim_active_type_.snap_rpy = snap_rpy;
-        mprim_active_type_.snap_xyzrpy = snap_xyzrpy;
-    }
-
-    /// @brief Motion primitive active type: Used for adaptive motion primitives, given a few motion primitives,
-    /// which one is active at a given time and it's threshold
-    struct MotionPrimitiveActiveType {
-        std::pair<bool, double> short_dist = std::make_pair(true, 0.2);
-        std::pair<bool, double> long_dist = std::make_pair(true, 0.4);
-        std::pair<bool, double> snap_xyz = std::make_pair(false, 0.2);
-        std::pair<bool, double> snap_rpy = std::make_pair(false, 0.2);
-        std::pair<bool, double> snap_xyzrpy = std::make_pair(true, 0.5);
-    };
-
-    ActionType action_type_;
-    SpaceType space_type_;
-    std::string mprim_file_name_;
-    MotionPrimitiveActiveType mprim_active_type_;
-
-    std::vector<Action> actions_;
-    std::vector<Action> short_mprim_;
-    std::vector<Action> long_mprim_;
-
-    std::vector<bool> mprim_enabled_;
-    std::vector<double> mprim_thresh_;
-    double max_action_;
-};
 
 /// @class ManipulationActionSpace
 /// @brief A class that implements the ActionSpace for Moveit
@@ -392,8 +76,9 @@ protected:
 
 public:
     /// @brief Constructor
-    /// @param moveitInterface The moveit interface
-    /// @param ManipulationType The manipulation type
+    /// @param env
+    /// @param actions_ptr
+    /// @param bfs_heuristic
     ManipulationActionSpace(const MoveitInterface &env,
                             const ManipulationType &actions_ptr,
                             BFSHeuristic *bfs_heuristic = nullptr) : ActionSpace(), bfs_heuristic_(bfs_heuristic) {
@@ -456,17 +141,17 @@ public:
 
     /// @brief Set the manipulation space type
     /// @param SpaceType The manipulation type
-    void setManipActionType(ManipulationType::SpaceType SpaceType) {
+    void setManipActionType(ManipulationType::SpaceType SpaceType) const {
         manipulation_type_->setSpaceType(SpaceType);
     }
 
-    ManipulationType::SpaceType getManipActionType() {
+    ManipulationType::SpaceType getManipActionType() const {
         return manipulation_type_->getSpaceType();
     }
 
     /// @brief Get current joint states
     /// @param joint_states The joint states
-    void getCurrJointStates(StateType &joint_states) {
+    void getCurrJointStates(StateType &joint_states) const {
         auto joints = moveit_interface_->planning_scene_->getCurrentState();
         joints.copyJointGroupPositions(moveit_interface_->group_name_,
                                        joint_states);
@@ -474,7 +159,7 @@ public:
 
     /// @brief Get the workspace state
     /// @param ws_state The workspace state
-    void getCurrWorkspaceState(StateType &ws_state) {
+    void getCurrWorkspaceState(StateType &ws_state) const {
         // get the tip link name
         auto tip_link = moveit_interface_->planning_scene_->getRobotModel()->getJointModelGroup(moveit_interface_->group_name_)->getLinkModelNames().back();
         // get the end-effector pose
@@ -494,7 +179,7 @@ public:
 
     /// @brief Get the end effector pose in the robot frame.
     /// @param ee_pose The end effector pose
-    void calculateFK(const StateType &state, StateType &ee_pose) {
+    void calculateFK(const StateType &state, StateType &ee_pose) const {
         moveit_interface_->calculateFK(state, ee_pose);
     }
 
@@ -563,7 +248,7 @@ public:
 
     bool isStateValid(const StateType &state_val,
                       const StateType &seed,
-                      StateType &joint_state) {
+                      StateType &joint_state) const {
         // check if the state is valid
         switch (manipulation_type_->getSpaceType()) {
             case ManipulationType::SpaceType::ConfigurationSpace:
@@ -817,4 +502,4 @@ public:
 };
 }  // namespace ims
 
-#endif  // MANIPULATION_PLANNING_MANIPULATIONACTIONSPACE_HPP
+#endif  // MANIPULATIONACTIONSPACE_HPP

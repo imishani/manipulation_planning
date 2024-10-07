@@ -660,6 +660,30 @@ public:
         return planning_scene_;
     }
 
+    /// @brief Get the subgroups, if any.
+    /// @param subgroups_names_idx The names of the subgroups.
+    void getSubGroups(std::vector<std::pair<std::string, std::vector<int>>>& subgroups_names_idx) const {
+        // Get the subgroups.
+        std::vector<const moveit::core::JointModelGroup*> subgroups;
+        joint_model_group_->getSubgroups(subgroups);
+        for (const auto& subgroup : subgroups) {
+            std::vector<int> joint_indices;
+            for (const auto& joint : subgroup->getActiveJointModels()) {
+                joint_indices.push_back(joint->getJointIndex());
+            }
+            std::string subgroup_name = subgroup->getName();
+            std::pair<std::string, std::vector<int>> subgroup_name_idx = std::make_pair(subgroup_name, joint_indices);
+            subgroups_names_idx.push_back(subgroup_name_idx);
+        }
+    }
+
+    /// @brief Get the joint type
+    /// @param joint_name
+    /// @return the joint type
+    moveit::core::JointModel::JointType getJointType(const std::string& joint_name) const {
+        return joint_model_group_->getJointModel(joint_name)->getType();
+    }
+
     planning_scene_monitor::PlanningSceneMonitorPtr planning_scene_monitor_;
     std::shared_ptr<planning_scene::PlanningScene> planning_scene_;
     std::shared_ptr<moveit::planning_interface::PlanningSceneInterface> planning_scene_interface_;

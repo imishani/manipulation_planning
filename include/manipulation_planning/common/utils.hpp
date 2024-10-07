@@ -921,7 +921,7 @@ inline void visualizeBoundingBox(std::shared_ptr<distance_field::PropagationDist
                                  ros::Publisher &marker_pub,
                                  const std::string &frame_id) {
     int id{1};
-    int x_min{0}, x_max{df->getXNumCells()}, y_min{0}, y_max{df->getYNumCells()}, z_min{0}, z_max{df->getYNumCells()};
+    int x_min{0}, x_max{df->getXNumCells()}, y_min{0}, y_max{df->getYNumCells()}, z_min{0}, z_max{df->getZNumCells()};
     visualization_msgs::Marker marker;
     marker.header.frame_id = frame_id;
     marker.ns = "bounding_box";
@@ -1732,10 +1732,7 @@ inline bool shortcutPath(const PathType &path,
                          double timeout = 1.0) {
     // start clock
     auto start_time = std::chrono::high_resolution_clock::now();
-    auto object_names = planning_scene->getWorld()->getObjectIds();
-    for (const auto &object_name : object_names) {
-        std::cout << "Object name: " << object_name << "\n";
-    }
+    // auto object_names = planning_scene->getWorld()->getObjectIds();
     // Keep track of the current t0 and t1 for the agent. These are indices pointing to the current start and end times of the tentative addition to the smoothed path. This addition is an interpolation between the current t0 and t1 on the individual path.
     int agent_t0 = 0;
     int agent_t1 = 1;
