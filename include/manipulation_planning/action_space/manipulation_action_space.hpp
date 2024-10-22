@@ -68,8 +68,7 @@ struct ManipulationType : ActionType {
     /// @param[in] bfs_heuristic A pointer to a BFSHeuristic object
     explicit ManipulationType(std::string mprim_file) : action_type_(ActionType::MOVE),
                                                         space_type_(SpaceType::ConfigurationSpace),
-                                                        mprim_file_name_(std::move(mprim_file)),
-                                                        max_action_(0.0) {
+                                                        mprim_file_name_(std::move(mprim_file)),max_action_(0.0) {
     };
 
     /// @brief Constructor with adaptive motion primitives given
@@ -118,106 +117,104 @@ struct ManipulationType : ActionType {
         state_discretization_ = state_des;
     }
 
-    void loadMprimFamily(const YAML::Node &root_node,
-                         const std::string &family_name,
-                         std::vector<ActionSequence> &action_seqs,
-                         std::vector<std::vector<double>> &action_transition_times) {
-        if (root_node[family_name]) {
-            for (const auto &action: root_node[family_name]) {
-                std::string action_name = action.first.as<std::string>();
-                // Check if "mprim_sequence" exists in the key list.
-                // This will commonly be in degrees for configuration space primitives, and in [m, m, m, deg, deg, deg] for workspace.
-                // The structure would be like this:
-                //          action_name:
-                //            mprim_sequence:
-                //              - [ 0, 0, 0, 0, 0, 0, 0 ]
-                //              - [ 7, 0, 0, 0, 0, 0, 0 ]
-                //            mprim_sequence_transition_costs: [ 1, 0 ]
-                //            generate_negative: true
-                if (!action.second["mprim_sequence"]) {
-                    std::cerr << "Action \"" << action_name << "\" does not have \"mprim_sequence\".\n";
-                    throw std::runtime_error("Action \"" + action_name + "\" does not have \"mprim_sequence\".");
+    void loadMprimFamily(const YAML::Node& root_node,
+                         const std::string& family_name,
+                         std::vector<ActionSequence>& action_seqs,
+                         std::vector<std::vector<double>>& action_transition_times) {
+    if (root_node[family_name]) {
+        for (const auto& action : root_node[family_name]) {
+            std::string action_name = action.first.as<std::string>();
+            // Check if "mprim_sequence" exists in the key list.
+            // This will commonly be in degrees for configuration space primitives, and in [m, m, m, deg, deg, deg] for workspace.
+            // The structure would be like this:
+            //          action_name:
+            //            mprim_sequence:
+            //              - [ 0, 0, 0, 0, 0, 0, 0 ]
+            //              - [ 7, 0, 0, 0, 0, 0, 0 ]
+            //            mprim_sequence_transition_costs: [ 1, 0 ]
+            //            generate_negative: true
+            if (!action.second["mprim_sequence"]) {
+                std::cerr << "Action \"" << action_name << "\" does not have \"mprim_sequence\".\n";
+                throw std::runtime_error("Action \"" + action_name + "\" does not have \"mprim_sequence\".");
+            }
+            // Check if required to also generate negated actions.
+            bool is_generate_negated_action = false;
+            if (action.second["generate_negative"]) {
+                is_generate_negated_action = action.second["generate_negative"].as<bool>();
+            }
+            ActionSequence action_seq;
+            ActionSequence neg_action_seq;
+            std::vector<std::vector<double>> action_transition_cost;
+            for (const auto& action_seq_state_it : action.second["mprim_sequence"]) {
+                StateType state;
+                StateType neg_state;
+                for (int i{0}; i < action_seq_state_it.size(); i++) {
+                    double num = action_seq_state_it[i].as<double>();
+                    // Converte to radians if the planning space is configuration, or if planning in workspace and i in {3, 4 5}.
+                    if (space_type_ == SpaceType::ConfigurationSpace || (space_type_ == SpaceType::WorkSpace && i > 2)) {
+                        num = num / 180.0 * M_PI;
+                    }
+                    // Populate max_action_.
+                    if (abs(num) > max_action_) {
+                        max_action_ = abs(num);
+                    }
+                    state.push_back(num);
+                    neg_state.push_back(-num);
                 }
-                // Check if required to also generate negated actions.
-                bool is_generate_negated_action = false;
-                if (action.second["generate_negative"]) {
-                    is_generate_negated_action = action.second["generate_negative"].as<bool>();
-                }
-                ActionSequence action_seq;
-                ActionSequence neg_action_seq;
-                std::vector<std::vector<double>> action_transition_cost;
-                for (const auto &action_seq_state_it: action.second["mprim_sequence"]) {
-                    StateType state;
-                    StateType neg_state;
-                    for (int i{0}; i < action_seq_state_it.size(); i++) {
-                        double num = action_seq_state_it[i].as<double>();
-                        // Converte to radians if the planning space is configuration, or if planning in workspace and i in {3, 4 5}.
-                        if (space_type_ == SpaceType::ConfigurationSpace ||
-                            (space_type_ == SpaceType::WorkSpace && i > 2)) {
-                            num = num / 180.0 * M_PI;
-                        }
-                        // Populate max_action_.
-                        if (abs(num) > max_action_) {
-                            max_action_ = abs(num);
-                        }
-                        state.push_back(num);
-                        neg_state.push_back(-num);
-                    }
-                    action_seq.push_back(state);
-                    if (is_generate_negated_action) {
-                        neg_action_seq.push_back(neg_state);
-                    }
-                }
-                // Note that we do not add the action_seq and the neg_action_seq to the action_seqs. We only do it at the end as those may need to be modified.
-                // Get the transition times, if those are available.
-                // This does two things. First, it stores the transition times for each action sequence:
-                if (action.second["mprim_sequence_transition_costs"]) {
-                    std::vector<double> transition_time; // This is the same for both the normal and negated action.
-                    for (size_t i{0}; i < action.second["mprim_sequence_transition_costs"].size(); i++) {
-                        double num = action.second["mprim_sequence_transition_costs"][i].as<TimeType>();
-                        // Store the time interval of the step in the transition time.
-                        transition_time.push_back(num);
-                    }
-                    assert(transition_time.size() == action_seq.size());
-
-                    // Second, it adds a time dimension to the action sequence. Time 0 for the first, 1 for the second, etc.
-                    // If we have time information, then modify the action sequence to include the time in the last element.
-                    // Add the time 0 to the first state in the sequence.
-                    action_seq[0].push_back(0.0);
-                    if (is_generate_negated_action) {
-                        neg_action_seq[0].push_back(0.0);
-                    }
-
-                    for (size_t i{0}; i < action_seq.size() - 1; i++) {
-                        action_seq[i + 1].push_back(action_seq[i].back() + transition_time[i]);
-                        if (is_generate_negated_action) {
-                            neg_action_seq[i + 1].push_back(neg_action_seq[i].back() + transition_time[i]);
-                        }
-                    }
-
-                    // Save the transition times for the action sequence.
-                    action_transition_times.push_back(transition_time);
-                    if (is_generate_negated_action) {
-                        action_transition_times.push_back(transition_time);
-                    }
-                }
-
-                // Add the action sequence to the list of action sequences.
-                action_seqs.push_back(action_seq);
+                action_seq.push_back(state);
                 if (is_generate_negated_action) {
-                    action_seqs.push_back(neg_action_seq);
+                    neg_action_seq.push_back(neg_state);
                 }
             }
+            // Note that we do not add the action_seq and the neg_action_seq to the action_seqs. We only do it at the end as those may need to be modified.
+            // Get the transition times, if those are available.
+            // This does two things. First, it stores the transition times for each action sequence:
+            if (action.second["mprim_sequence_transition_costs"]) {
+                std::vector<double> transition_time; // This is the same for both the normal and negated action.
+                for (size_t i{0}; i < action.second["mprim_sequence_transition_costs"].size(); i++) {
+                    double num = action.second["mprim_sequence_transition_costs"][i].as<TimeType>();
+                    // Store the time interval of the step in the transition time.
+                    transition_time.push_back(num);
+                }
+                assert(transition_time.size() == action_seq.size());
+
+                // Second, it adds a time dimension to the action sequence. Time 0 for the first, 1 for the second, etc.
+                // If we have time information, then modify the action sequence to include the time in the last element.
+                // Add the time 0 to the first state in the sequence.
+                action_seq[0].push_back(0.0);
+                if (is_generate_negated_action) {
+                    neg_action_seq[0].push_back(0.0);
+                }
+
+                for (size_t i{0}; i < action_seq.size() - 1; i++) {
+                    action_seq[i + 1].push_back(action_seq[i].back() + transition_time[i]);
+                    if (is_generate_negated_action) {
+                        neg_action_seq[i + 1].push_back(neg_action_seq[i].back() + transition_time[i]);
+                    }
+                }
+
+                // Save the transition times for the action sequence.
+                action_transition_times.push_back(transition_time);
+                if (is_generate_negated_action) {
+                    action_transition_times.push_back(transition_time);
+                }
+            }
+
+            // Add the action sequence to the list of action sequences.
+            action_seqs.push_back(action_seq);
+            if (is_generate_negated_action) {
+                action_seqs.push_back(neg_action_seq);
+            }
         }
-        else {
-            std::cerr << "Family \"" << family_name << "\" not found in the YAML file.\n";
-        }
-        // Check that the length of the transition times is the same as the length of the action sequence.
-        if (action_seqs.size() != action_transition_times.size()) {
-            std::cerr << "The number of action sequences and the number of transition times do not match.\n";
-            throw std::runtime_error("The number of action sequences and the number of transition times do not match.");
-        }
+    } else {
+        std::cerr << "Family \"" << family_name << "\" not found in the YAML file.\n";
     }
+    // Check that the length of the transition times is the same as the length of the action sequence.
+    if (action_seqs.size() != action_transition_times.size()) {
+        std::cerr << "The number of action sequences and the number of transition times do not match.\n";
+        throw std::runtime_error("The number of action sequences and the number of transition times do not match.");
+    }
+}
 
     void readMPfile() {
         // Read the motion primitive YAML file.
@@ -258,8 +255,7 @@ struct ManipulationType : ActionType {
                                                             short_mprim_transition_times_.begin(),
                                                             short_mprim_transition_times_.end());
 
-                        }
-                            break;
+                        } break;
                         case SpaceType::WorkSpace: {
                             // Populate the action_seqs_ vector with the short_mprim_ and the long_mprim_.
                             // Convert the euler angles (rad) to quaternions.
@@ -958,6 +954,12 @@ public:
     /// @return The scene interface
     std::shared_ptr<MoveitInterface> getSceneInterface() {
         return moveit_interface_;
+    }
+
+    /// @brief Set the BFS heuristic.
+    /// @param bfs_heuristic The BFS heuristic
+    void setBFSHeuristic(BFSHeuristic *bfs_heuristic) {
+        bfs_heuristic_ = bfs_heuristic;
     }
 };
 }  // namespace ims
