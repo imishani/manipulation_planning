@@ -1,6 +1,3 @@
 <launch>
-
-    <!-- Given the published joint states, publish tf for the robot links -->
-    <node name="cbs_test" pkg="manipulation_planning" type="manipulation_planning_node"/>
-
+    <node pkg="manipulation_planning" type="manipulation_planning_cspace_test" name="manipulation_planning_cspace_test_node" args="panda0_arm" output="screen"/>
 </launch>

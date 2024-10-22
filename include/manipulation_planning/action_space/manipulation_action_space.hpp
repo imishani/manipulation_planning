@@ -120,7 +120,7 @@ struct ManipulationType : ActionType {
     void loadMprimFamily(const YAML::Node& root_node,
                          const std::string& family_name,
                          std::vector<ActionSequence>& action_seqs,
-                         std::vector<std::vector<double>>& action_transition_times) {
+                         std::vector<std::vector<double>>& action_transition_costs) {
     if (root_node[family_name]) {
         for (const auto& action : root_node[family_name]) {
             std::string action_name = action.first.as<std::string>();
@@ -132,6 +132,7 @@ struct ManipulationType : ActionType {
             //              - [ 0, 0, 0, 0, 0, 0, 0 ]
             //              - [ 7, 0, 0, 0, 0, 0, 0 ]
             //            mprim_sequence_transition_costs: [ 1, 0 ]
+            //            mprim_sequence_transition_times: [ 1, 0 ] // Optional.
             //            generate_negative: true
             if (!action.second["mprim_sequence"]) {
                 std::cerr << "Action \"" << action_name << "\" does not have \"mprim_sequence\".\n";
@@ -144,7 +145,6 @@ struct ManipulationType : ActionType {
             }
             ActionSequence action_seq;
             ActionSequence neg_action_seq;
-            std::vector<std::vector<double>> action_transition_cost;
             for (const auto& action_seq_state_it : action.second["mprim_sequence"]) {
                 StateType state;
                 StateType neg_state;
@@ -166,19 +166,41 @@ struct ManipulationType : ActionType {
                     neg_action_seq.push_back(neg_state);
                 }
             }
+
+            // Get the transition costs. If those are not available then throw an error.
+            if (action.second["mprim_sequence_transition_costs"]) {
+                std::vector<double> transition_cost; // This is the same for both the normal and negated action.
+                for (size_t i{0}; i < action.second["mprim_sequence_transition_costs"].size(); i++) {
+                    double num = action.second["mprim_sequence_transition_costs"][i].as<double>();
+                    // Store the time interval of the step in the transition time.
+                    transition_cost.push_back(num);
+                }
+                assert(transition_cost.size() == action_seq.size());
+
+                // Save the transition costs for the action sequence.
+                action_transition_costs.push_back(transition_cost);
+                if (is_generate_negated_action) {
+                    action_transition_costs.push_back(transition_cost);
+                }
+            }
+            else{
+                std::cerr << "Action \"" << action_name << "\" does not have \"mprim_sequence_transition_costs\".\n";
+                throw std::runtime_error("Action \"" + action_name + "\" does not have \"mprim_sequence_transition_costs\".");
+            }
+
             // Note that we do not add the action_seq and the neg_action_seq to the action_seqs. We only do it at the end as those may need to be modified.
             // Get the transition times, if those are available.
-            // This does two things. First, it stores the transition times for each action sequence:
-            if (action.second["mprim_sequence_transition_costs"]) {
+            // This adds the transition times to the state sequence, where the last element in each state is time.
+            if (action.second["mprim_sequence_transition_times"]) {
                 std::vector<double> transition_time; // This is the same for both the normal and negated action.
-                for (size_t i{0}; i < action.second["mprim_sequence_transition_costs"].size(); i++) {
-                    double num = action.second["mprim_sequence_transition_costs"][i].as<TimeType>();
+                for (size_t i{0}; i < action.second["mprim_sequence_transition_times"].size(); i++) {
+                    double num = action.second["mprim_sequence_transition_times"][i].as<TimeType>();
                     // Store the time interval of the step in the transition time.
                     transition_time.push_back(num);
                 }
                 assert(transition_time.size() == action_seq.size());
 
-                // Second, it adds a time dimension to the action sequence. Time 0 for the first, 1 for the second, etc.
+                // Add a time dimension to the action sequence. Time 0 for the first, 1 for the second, etc.
                 // If we have time information, then modify the action sequence to include the time in the last element.
                 // Add the time 0 to the first state in the sequence.
                 action_seq[0].push_back(0.0);
@@ -192,12 +214,6 @@ struct ManipulationType : ActionType {
                         neg_action_seq[i + 1].push_back(neg_action_seq[i].back() + transition_time[i]);
                     }
                 }
-
-                // Save the transition times for the action sequence.
-                action_transition_times.push_back(transition_time);
-                if (is_generate_negated_action) {
-                    action_transition_times.push_back(transition_time);
-                }
             }
 
             // Add the action sequence to the list of action sequences.
@@ -210,7 +226,7 @@ struct ManipulationType : ActionType {
         std::cerr << "Family \"" << family_name << "\" not found in the YAML file.\n";
     }
     // Check that the length of the transition times is the same as the length of the action sequence.
-    if (action_seqs.size() != action_transition_times.size()) {
+    if (action_seqs.size() != action_transition_costs.size()) {
         std::cerr << "The number of action sequences and the number of transition times do not match.\n";
         throw std::runtime_error("The number of action sequences and the number of transition times do not match.");
     }
@@ -223,12 +239,12 @@ struct ManipulationType : ActionType {
         // 1. short distance motion primitives (short_mprim_) and
         // 2. long distance motion primitives (long_mprim_).
         if (space_type_ == SpaceType::ConfigurationSpace) {
-            loadMprimFamily(mprim_config, "short_primitives", short_mprim_seqs_, short_mprim_transition_times_);
-            loadMprimFamily(mprim_config, "long_primitives", long_mprim_seqs_, long_mprim_transition_times_);
+            loadMprimFamily(mprim_config, "short_primitives", short_mprim_seqs_, short_mprim_transition_costs_);
+            loadMprimFamily(mprim_config, "long_primitives", long_mprim_seqs_, long_mprim_transition_costs_);
         }
         else if (space_type_ == SpaceType::WorkSpace) {
             // TODO(yoraish, imishani): keeping previous convention: using short_mprim_ for workspace motion primitives.
-            loadMprimFamily(mprim_config, "short_primitives", short_mprim_seqs_, short_mprim_transition_times_);
+            loadMprimFamily(mprim_config, "short_primitives", short_mprim_seqs_, short_mprim_transition_costs_);
         }
     }
 
@@ -241,19 +257,19 @@ struct ManipulationType : ActionType {
             readMPfile();
         }
         // Populate the actions_ vector if not done so already.
-        if (action_seqs_.empty() || action_transition_times_.empty()) {
+        if (action_seqs_.empty() || action_transition_costs_.empty()) {
             switch (action_type_) {
                 case ActionType::MOVE:
                     switch (space_type_) {
                         case SpaceType::ConfigurationSpace: {
                             action_seqs_.insert(action_seqs_.end(), long_mprim_seqs_.begin(), long_mprim_seqs_.end());
                             action_seqs_.insert(action_seqs_.end(), short_mprim_seqs_.begin(), short_mprim_seqs_.end());
-                            action_transition_times_.insert(action_transition_times_.end(),
-                                                            long_mprim_transition_times_.begin(),
-                                                            long_mprim_transition_times_.end());
-                            action_transition_times_.insert(action_transition_times_.end(),
-                                                            short_mprim_transition_times_.begin(),
-                                                            short_mprim_transition_times_.end());
+                            action_transition_costs_.insert(action_transition_costs_.end(),
+                                                            long_mprim_transition_costs_.begin(),
+                                                            long_mprim_transition_costs_.end());
+                            action_transition_costs_.insert(action_transition_costs_.end(),
+                                                            short_mprim_transition_costs_.begin(),
+                                                            short_mprim_transition_costs_.end());
 
                         } break;
                         case SpaceType::WorkSpace: {
@@ -281,7 +297,7 @@ struct ManipulationType : ActionType {
                                     short_action[6] = sign * q.w();
                                     action_seq_converted.push_back(short_action);
                                 }
-                                action_transition_times_.push_back(short_mprim_transition_times_[i_short_action_seq]);
+                                action_transition_costs_.push_back(short_mprim_transition_costs_[i_short_action_seq]);
                                 action_seqs_.push_back(action_seq_converted);
                             }
                         } break;
@@ -294,7 +310,7 @@ struct ManipulationType : ActionType {
             }
         }
         action_seqs = action_seqs_;
-        action_transition_costs = action_transition_times_;
+        action_transition_costs = action_transition_costs_;
     }
 
     /// @brief Get the possible actions
@@ -303,8 +319,8 @@ struct ManipulationType : ActionType {
     std::vector<Action> getPrimActions() override {
         // Call the getPrimActions function.
         std::vector<ActionSequence> action_seqs;
-        std::vector<std::vector<double>> action_transition_times;
-        getPrimActions(action_seqs, action_transition_times);
+        std::vector<std::vector<double>> action_transition_costs;
+        getPrimActions(action_seqs, action_transition_costs);
 
         // Backwards compatability hack. This will return the actions_ vector where actions are only single-step actions.
         std::vector<Action> actions;
@@ -347,35 +363,35 @@ struct ManipulationType : ActionType {
             (!is_short &&
              mprim_active_type_.long_dist.first)) {
             action_seqs.insert(action_seqs.end(), long_mprim_seqs_.begin(), long_mprim_seqs_.end());
-            action_transition_costs.insert(action_transition_costs.end(), long_mprim_transition_times_.begin(),
-                                           long_mprim_transition_times_.end());
+            action_transition_costs.insert(action_transition_costs.end(), long_mprim_transition_costs_.begin(),
+                                           long_mprim_transition_costs_.end());
         }
         // Add the short motion primitives as well if required.
         if (is_short) {
             action_seqs.insert(action_seqs.end(), short_mprim_seqs_.begin(), short_mprim_seqs_.end());
-            action_transition_costs.insert(action_transition_costs.end(), short_mprim_transition_times_.begin(),
-                                           short_mprim_transition_times_.end());
+            action_transition_costs.insert(action_transition_costs.end(), short_mprim_transition_costs_.begin(),
+                                           short_mprim_transition_costs_.end());
         }
 
         // If allowed, and the cartesian goal distance is less than a threshold, insert snap primitive. The time for this is 1.
         ActionSequence snap_action_seq = {{0,          0,          0,          0,          0,          0},
                                           {INF_DOUBLE, INF_DOUBLE, INF_DOUBLE, INF_DOUBLE, INF_DOUBLE, INF_DOUBLE}};
-        std::vector<double> snap_transition_time = {1.0, 0.0};
+        std::vector<double> snap_transition_cost = {1.0, 0.0};
         // TODO(yoraish): the xyz and rpy snaps are not handled correctly yet.
         // Snap I: only xyz.
         if (mprim_active_type_.snap_xyz.first && goal_dist < mprim_active_type_.snap_xyz.second) {
             action_seqs.push_back(snap_action_seq);
-            action_transition_costs.push_back(snap_transition_time);
+            action_transition_costs.push_back(snap_transition_cost);
         }
         // Snap II: only rpy.
         if (mprim_active_type_.snap_rpy.first && goal_dist < mprim_active_type_.snap_rpy.second) {
             action_seqs.push_back(snap_action_seq);
-            action_transition_costs.push_back(snap_transition_time);
+            action_transition_costs.push_back(snap_transition_cost);
         }
         // Snap III: xyz and rpy. (Most common).
         if (mprim_active_type_.snap_xyzrpy.first && goal_dist < mprim_active_type_.snap_xyzrpy.second) {
             action_seqs.push_back(snap_action_seq);
-            action_transition_costs.push_back(snap_transition_time);
+            action_transition_costs.push_back(snap_transition_cost);
             ROS_DEBUG_NAMED("adaptive_mprim", "snap xyzrpy");
             ROS_DEBUG_STREAM("goal_dist: " << goal_dist);
         }
@@ -393,8 +409,8 @@ struct ManipulationType : ActionType {
     ) {
         // Call the getAdaptivePrimActionSequences function.
         std::vector<ActionSequence> action_seqs;
-        std::vector<std::vector<double>> action_transition_times;
-        getAdaptivePrimActionSequences(start_dist, goal_dist, action_seqs, action_transition_times,
+        std::vector<std::vector<double>> action_transition_costs;
+        getAdaptivePrimActionSequences(start_dist, goal_dist, action_seqs, action_transition_costs,
                                        is_add_long_with_short);
         std::vector<Action> actions;
         // Backwards compatability hack. This will return the only single-step actions and abort if the action sequences
@@ -446,14 +462,14 @@ struct ManipulationType : ActionType {
     /// @details The sequence is a list of states (potentially with a time dimension in the back). This list usually starts from the zero state and ends at the final state.
     ///          Each entry is not a delta from the previous, but a delta from the zero state.
     std::vector<ActionSequence> short_mprim_seqs_;
-    /// @brief The transitions costs at i are the time it takes to move from state i to state i+1 in the action sequence.
-    std::vector<std::vector<double>> short_mprim_transition_times_;
-    /// @brief The long distance motion primitives. In radians. Similar explanations as for short_mprim_seqs_ and short_mprim_transition_times_.
+    /// @brief The transitions costs at i are the cost it takes to move from state i to state i+1 in the action sequence.
+    std::vector<std::vector<double>> short_mprim_transition_costs_;
+    /// @brief The long distance motion primitives. In radians. Similar explanations as for short_mprim_seqs_ and short_mprim_transition_costs_.
     std::vector<ActionSequence> long_mprim_seqs_;
-    std::vector<std::vector<double>> long_mprim_transition_times_;
+    std::vector<std::vector<double>> long_mprim_transition_costs_;
     /// @brief The motion primitives. In radians.
     std::vector<ActionSequence> action_seqs_; // This could be bug prone if getPrimActions is called after getAdaptiveActions since it will append to the actions_ vector.
-    std::vector<std::vector<double>> action_transition_times_;
+    std::vector<std::vector<double>> action_transition_costs_;
 
     std::vector<bool> mprim_enabled_;
     std::vector<double> mprim_thresh_;
@@ -547,7 +563,7 @@ public:
                 // TODO: Add the option to have a goal state defined in ws even if planning in conf space
                 if (prim_action_seq.back()[0] == INF_DOUBLE) {
                     transformed_action_seq = {curr_state_val,
-                                              bfs_heuristic_->goal_};  // TODO: It is wierd that I am using the heuristic here
+                                              bfs_heuristic_->goal_};  // TODO: It is weird that I am using the heuristic here
                     transformed_action_transition_costs = {1.0, 0.0};
                 }
                 else {

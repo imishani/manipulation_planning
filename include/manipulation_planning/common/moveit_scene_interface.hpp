@@ -168,7 +168,7 @@ public:
         collision_request.max_contacts_per_pair = 1;
         collision_request.group_name = group_name_;
         planning_scene_->checkCollision(collision_request, collision_result);
-        return collision_result.collision;
+        return !collision_result.collision;
     }
 
     /// @brief check if the state is valid w.r.t. all other bodies. Robot and non-robot.

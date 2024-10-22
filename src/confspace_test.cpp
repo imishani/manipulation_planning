@@ -200,13 +200,13 @@ int main(int argc, char** argv) {
 
     // Shortcut the path.
     // Timing.
-    auto shortcutting_startt = std::chrono::high_resolution_clock::now();
-    PathType smoothed_path;
-    ims::shortcutPath(path, move_group, scene_interface.getPlanningSceneMoveit(), smoothed_path);
-    path = smoothed_path;
-    auto shortcutting_endt = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> shortcutting_time = shortcutting_endt - shortcutting_startt;
-    ROS_INFO_STREAM("Shortcutting time: " << shortcutting_time.count() << " sec");
+    // auto shortcutting_startt = std::chrono::high_resolution_clock::now();
+    // PathType smoothed_path;
+    // ims::shortcutPath(path, move_group, scene_interface.getPlanningSceneMoveit(), smoothed_path);
+    // path = smoothed_path;
+    // auto shortcutting_endt = std::chrono::high_resolution_clock::now();
+    // std::chrono::duration<double> shortcutting_time = shortcutting_endt - shortcutting_startt;
+    // ROS_INFO_STREAM("Shortcutting time: " << shortcutting_time.count() << " sec");
 
     // Print nicely the path
     int counter = 0;
