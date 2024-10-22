@@ -1,0 +1,94 @@
+# This file includes families of successors. Families could be "long_primitives," "short_primitives," etc.
+# Details.
+# <motion_primitive_family_name>:
+#   <motion_primitive1_name>:
+#     mprim_sequence: # List of delta degrees for each joint
+#       - [ 0, 0, 0, 0, 0, 0] # By convention, the first state in a sequence is the origin. A sequence starts from the robot's current configuration.
+#       - [ 7, 0, 0, 0, 0, 0] # The delta degrees for each dimension. This is from the origin point.
+#       - [ 12, 5, 5, 0, 0, 0] # More delta degrees can be added. This is from the origin point as well.
+#     mprim_sequence_transition_costs: [ 1, 1, 0 ] # Entry i is the time it takes to move from state i to state i+1. The last one is always zero.
+#     generate_negative: true # If true, the negative of the delta degrees will be added as well.
+#   <motion_primitive2_name>:
+#     ...
+
+long_primitives:
+  joint0:
+    mprim_sequence:
+      - [ 0, 0, 0, 0, 0, 0]
+      - [ 7, 0, 0, 0, 0, 0]
+    mprim_sequence_transition_costs: [ 1000, 0 ]
+    generate_negative: true
+  joint1:
+    mprim_sequence:
+      - [ 0, 0, 0, 0, 0, 0]
+      - [ 0, 7, 0, 0, 0, 0]
+    mprim_sequence_transition_costs: [ 1000, 0 ]
+    generate_negative: true
+  joint2:
+    mprim_sequence:
+      - [ 0, 0, 0, 0, 0, 0]
+      - [ 0, 0, 7, 0, 0, 0]
+    mprim_sequence_transition_costs: [ 1000, 0 ]
+    generate_negative: true
+  joint3:
+    mprim_sequence:
+      - [ 0, 0, 0, 0, 0, 0]
+      - [ 0, 0, 0, 7, 0, 0]
+    mprim_sequence_transition_costs: [ 1000, 0 ]
+    generate_negative: true
+  joint4:
+    mprim_sequence:
+      - [ 0, 0, 0, 0, 0, 0]
+      - [ 0, 0, 0, 0, 7, 0]
+    mprim_sequence_transition_costs: [ 1000, 0 ]
+    generate_negative: true
+#  wait: # Optional wait action.
+#    mprim_sequence:
+#      - [ 0, 0, 0, 0, 0, 0]
+#      - [ 0, 0, 0, 0, 0, 0]
+#    mprim_sequence_transition_costs: [ 1000, 0 ]
+#    generate_negative: false
+
+short_primitives:
+  joint0:
+    mprim_sequence:
+      - [ 0, 0, 0, 0, 0, 0]
+      - [ 4, 0, 0, 0, 0, 0]
+    mprim_sequence_transition_costs: [ 1000, 0 ]
+    generate_negative: true
+  joint1:
+    mprim_sequence:
+      - [ 0, 0, 0, 0, 0, 0]
+      - [ 0, 4, 0, 0, 0, 0]
+    mprim_sequence_transition_costs: [ 1000, 0 ]
+    generate_negative: true
+  joint2:
+    mprim_sequence:
+      - [ 0, 0, 0, 0, 0, 0]
+      - [ 0, 0, 4, 0, 0, 0]
+    mprim_sequence_transition_costs: [ 1000, 0 ]
+    generate_negative: true
+  joint3:
+    mprim_sequence:
+      - [ 0, 0, 0, 0, 0, 0]
+      - [ 0, 0, 0, 4, 0, 0]
+    mprim_sequence_transition_costs: [ 1000, 0 ]
+    generate_negative: true
+  joint4:
+    mprim_sequence:
+      - [ 0, 0, 0, 0, 0, 0]
+      - [ 0, 0, 0, 0, 4, 0]
+    mprim_sequence_transition_costs: [ 1000, 0 ]
+    generate_negative: true
+  joint5:
+    mprim_sequence:
+      - [ 0, 0, 0, 0, 0, 0]
+      - [ 0, 0, 0, 0, 0, 4]
+    mprim_sequence_transition_costs: [ 1000, 0 ]
+    generate_negative: true
+  joint6:
+    mprim_sequence:
+      - [ 0, 0, 0, 0, 0, 0]
+      - [ 0, 0, 0, 0, 0, 0]
+    mprim_sequence_transition_costs: [ 1000, 0 ]
+    generate_negative: true

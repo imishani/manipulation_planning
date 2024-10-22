@@ -32,8 +32,7 @@
  * \date   Sept 6 2023
  */
 
-#ifndef MANIPULATION_PLANNING_MANIPULATION_EXPERIENCE_ACCELERATED_CONSTRAINEDACTIONSPACE_HPP
-#define MANIPULATION_PLANNING_MANIPULATION_EXPERIENCE_ACCELERATED_CONSTRAINEDACTIONSPACE_HPP
+#pragma once
 
 // include standard libraries
 #include <iostream>
@@ -59,7 +58,8 @@ namespace ims {
 /// @brief A class that implements the ConstrainedActionSpace for Moveit. This class borrows many function implementations from the ManipulationSubcostExperienceAcceleratedConstrainedActionSpace class.
 /// @class ManipulationSubcostExperienceAcceleratedConstrainedActionSpace
 /// @brief A class that implements the ActionSpace for Moveit
-class ManipulationSubcostExperienceAcceleratedConstrainedActionSpace : public SubcostExperienceAcceleratedConstrainedActionSpace {
+class ManipulationSubcostExperienceAcceleratedConstrainedActionSpace
+        : public SubcostExperienceAcceleratedConstrainedActionSpace {
 protected:
     /// @brief Manipulation type
     std::shared_ptr<ManipulationType> manipulation_type_;
@@ -86,11 +86,12 @@ public:
     /// @param moveitInterface The moveit interface
     /// @param ManipulationType The manipulation type
     ManipulationSubcostExperienceAcceleratedConstrainedActionSpace(const MoveitInterface &env,
-                            const ManipulationType &actions_ptr,
-                            BFSHeuristic *bfs_heuristic = nullptr) : bfs_heuristic_(bfs_heuristic), SubcostExperienceAcceleratedConstrainedActionSpace() {
+                                                                   const ManipulationType &actions_ptr,
+                                                                   BFSHeuristic *bfs_heuristic = nullptr)
+            : bfs_heuristic_(bfs_heuristic), SubcostExperienceAcceleratedConstrainedActionSpace() {
         moveit_interface_ = std::make_shared<MoveitInterface>(env);
         manipulation_type_ = std::make_shared<ManipulationType>(actions_ptr);
-        
+
         // Get the joint limits.
         moveit_interface_->getJointLimits(joint_limits_);
         vis_pub_ = nh_.advertise<visualization_msgs::Marker>("visualization_marker", 0);
@@ -175,8 +176,12 @@ public:
             }
             path.push_back(state);
         }
+        // Add the end state.
+        path.push_back(end);
+
         return path;
     }
+
     bool isStateToStateValid(const StateType &start, const StateType &end) {
         PathType path = interpolatePath(start, end);
         return isPathValid(path);
@@ -187,41 +192,41 @@ public:
     }
 
     virtual bool getSuccessorsWs(int curr_state_ind,
-                                 std::vector<int> &successors,
-                                 std::vector<double> &costs) {
-        return manip_action_space_->getSuccessors(curr_state_ind, successors, costs);
+                                 std::vector<std::vector<int>> &seqs_state_ids,
+                                 std::vector<std::vector<double>> &seqs_transition_costs) {
+        return manip_action_space_->getSuccessors(curr_state_ind, seqs_state_ids, seqs_transition_costs);
     }
 
     virtual bool getSuccessorsCs(int curr_state_ind,
-                                 std::vector<int> &successors,
-                                 std::vector<double> &costs) {
-        return manip_action_space_->getSuccessors(curr_state_ind, successors, costs);
+                                 std::vector<std::vector<int>> &seqs_state_ids,
+                                 std::vector<std::vector<double>> &seqs_transition_costs) {
+        return manip_action_space_->getSuccessors(curr_state_ind, seqs_state_ids, seqs_transition_costs);
     }
 
     virtual bool getSuccessorsWs(int curr_state_ind,
-                                 std::vector<int> &successors,
-                                 std::vector<double>& costs,
-                                 std::vector<double>& subcosts) {
+                                 std::vector<std::vector<int>> &seqs_state_ids,
+                                 std::vector<std::vector<double>> &seqs_transition_costs,
+                                 std::vector<std::vector<double>> &seqs_transition_subcosts) {
         throw std::runtime_error("Not implemented.");
     }
 
     virtual bool getSuccessorsCs(int curr_state_ind,
-                                 std::vector<int> &successors,
-                                 std::vector<double>& costs,
-                                 std::vector<double>& subcosts) {
+                                 std::vector<std::vector<int>> &seqs_state_ids,
+                                 std::vector<std::vector<double>> &seqs_transition_costs,
+                                 std::vector<std::vector<double>> &seqs_transition_subcosts) {
         throw std::runtime_error("Not implemented.");
     }
 
     virtual bool getSuccessors(int curr_state_ind,
-                       std::vector<int> &successors,
-                       std::vector<double> &costs) override {
-        return manip_action_space_->getSuccessors(curr_state_ind, successors, costs);
+                               std::vector<std::vector<int>> &seqs_state_ids,
+                               std::vector<std::vector<double>> &seqs_transition_costs) override {
+        return manip_action_space_->getSuccessors(curr_state_ind, seqs_state_ids, seqs_transition_costs);
     }
 
     virtual bool getSuccessors(int curr_state_ind,
-                       std::vector<int>& successors,
-                       std::vector<double>& costs,
-                       std::vector<double>& subcosts) override {
+                               std::vector<std::vector<int>> &seqs_state_ids,
+                               std::vector<std::vector<double>> &seqs_transition_costs,
+                               std::vector<std::vector<double>> &seqs_transition_subcosts) override {
         throw std::runtime_error("Not implemented.");
     }
 
@@ -259,7 +264,7 @@ public:
         marker.color.g = g;
         marker.color.b = b;
         marker.color.a = a;
-        
+
         // Lifetime.
         marker.lifetime = ros::Duration(5.0);
         // visualize
@@ -280,21 +285,37 @@ public:
         marker.action = visualization_msgs::Marker::ADD;
         marker.pose = pose;
 
-        marker.scale.x = 0.1; marker.scale.y = 0.01; marker.scale.z = 0.01;
+        marker.scale.x = 0.1;
+        marker.scale.y = 0.01;
+        marker.scale.z = 0.01;
         // green
-        marker.color.r = 0.0; marker.color.g = 1.0; marker.color.b = 0.0;
+        marker.color.r = 0.0;
+        marker.color.g = 1.0;
+        marker.color.b = 0.0;
         marker.color.a = 0.5;
 
         // Lifetime.
         marker.lifetime = ros::Duration(5.0);
-        
+
         // visualize
         vis_pub_.publish(marker);
         vis_id_++;
     }
 
+    /// @brief Visualize a state via its end effector pose in rviz for debugging.
+    /// @param state The state to visualize, of format {x, y, z, roll, pitch, yaw} [m, rad].
+    void visualizePose(const StateType &state) {
+        assert(state.size() == 6);
+        geometry_msgs::Pose pose;
+        pose.position.x = state[0];
+        pose.position.y = state[1];
+        pose.position.z = state[2];
+        pose.orientation = tf::createQuaternionMsgFromRollPitchYaw(state[3], state[4], state[5]);
+        visualizePose(pose);
+    }
+
     /// @brief Visualize a sphere in rviz for debugging.
-    void visualizeSphere(int x, int y, int z, double r) {
+    void visualizeSphere(double x, double y, double z, double r) {
         visualization_msgs::Marker marker;
         marker.header.frame_id = moveit_interface_->planning_scene_->getPlanningFrame();
         marker.header.stamp = ros::Time();
@@ -309,6 +330,11 @@ public:
         marker.pose.orientation.y = 0.0;
         marker.pose.orientation.z = 0.0;
         marker.pose.orientation.w = 1.0;
+        // Color.
+        marker.color.a = 1.0;
+        marker.color.r = 0.0;
+        marker.color.g = 0.0;
+        marker.color.b = 1.0;
 
         marker.scale.x = r;
         marker.scale.y = r;
@@ -318,13 +344,13 @@ public:
         marker.lifetime = ros::Duration(5.0);
         // visualize
         vis_pub_.publish(marker);
+        // Print the message.
         vis_id_++;
     }
 
     /// @brief Get the end effector pose in the robot frame.
     /// @param ee_pose The end effector pose
-    void calculateFK(const StateType &state, StateType &ee_pose)
-    {
+    void calculateFK(const StateType &state, StateType &ee_pose) {
         moveit_interface_->calculateFK(state, ee_pose);
     }
 
@@ -336,12 +362,12 @@ public:
     /// @param names The names of the agents.
     /// @param time_start The start time from which to check for conflicts. Inclusive. -1 defaults to zero.
     /// @param time_end The end time until which to check for conflicts. Inclusive. -1 defaults to the end.
-    void getPathsConflicts(std::shared_ptr<MultiAgentPaths> paths, 
-                           std::vector<std::shared_ptr<Conflict>> &conflicts_ptrs, 
+    void getPathsConflicts(std::shared_ptr<MultiAgentPaths> paths,
+                           std::vector<std::shared_ptr<Conflict>> &conflicts_ptrs,
                            const std::vector<ConflictType> &conflict_types,
-                           int max_conflicts, 
-                           const std::vector<std::string> &names, 
-                           TimeType time_start = 0, 
+                           int max_conflicts,
+                           const std::vector<std::string> &names,
+                           TimeType time_start = 0,
                            TimeType time_end = -1) override {
         throw std::runtime_error("Not implemented");
     }
@@ -351,7 +377,13 @@ public:
     std::shared_ptr<MoveitInterface> getSceneInterface() {
         return moveit_interface_;
     }
-    };
+
+    void getActionSequences(int state_id,
+                            std::vector<ActionSequence> &action_seqs,
+                            std::vector<std::vector<double>> &action_transition_costs,
+                            bool check_validity) {
+        manip_action_space_->getActionSequences(state_id, action_seqs, action_transition_costs, check_validity);
+    }
+};
 }  // namespace ims
 
-#endif  // MANIPULATION_PLANNING_MANIPULATION_EXPERIENCE_ACCELERATED_CONSTRAINEDACTIONSPACE_HPP

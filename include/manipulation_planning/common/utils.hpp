@@ -98,6 +98,18 @@ void deg2rad(std::vector<T>& state, const std::vector<bool>& valid_mask = std::v
     }
 }
 
+template<typename T>
+T radianDifference(T a, T b) {
+    T diff = a - b;
+    if (diff > M_PI) {
+        diff -= 2 * M_PI;
+    }
+    else if (diff < -M_PI) {
+        diff += 2 * M_PI;
+    }
+    return diff;
+}
+
 inline void negateState(StateType& state, const std::vector<bool>& valid_mask = std::vector<bool>()) {
     // If the mask is not passed, then all the dimensions are assumed to be valid.
     bool is_valid_mask_passed = !valid_mask.empty();
@@ -135,10 +147,10 @@ inline void normalizeAngles(std::vector<T>& state, std::vector<std::pair<T, T>>&
         }
 
         // Normalize the dimension to the range [joint_limits[i].first, joint_limits[i].second] and request angles to be in the range of [-pi, pi], if it is not in the range of the joint limits and it is valid according to the mask.
-        if (state[i] > joint_limits[i].second) {
+        while (state[i] > joint_limits[i].second) {
             state[i] = state[i] - 2 * M_PI;
         }
-        else if (state[i] < joint_limits[i].first) {
+        while (state[i] < joint_limits[i].first) {
             state[i] = state[i] + 2 * M_PI;
         }
     }
@@ -162,10 +174,10 @@ inline void normalizeAngles(std::vector<T>& state, const std::vector<bool>& vali
         }
 
         // Normalize the dimension, if it is not in the range of the joint limits and it is valid according to the mask.
-        if (state[i] > M_PI) {
+        while (state[i] > M_PI) {
             state[i] = state[i] - 2 * M_PI;
         }
-        else if (state[i] < -M_PI) {
+        while (state[i] < -M_PI) {
             state[i] = state[i] + 2 * M_PI;
         }
     }
@@ -198,14 +210,14 @@ inline void from_euler_zyx(T y, T p, T r, Eigen::Matrix<T, 3, 3>& rot) {
 }
 
 template <typename T>
-void from_euler_zyx(T y, T p, T r, Eigen::Quaternion<T>& q) {
+inline void from_euler_zyx(T y, T p, T r, Eigen::Quaternion<T>& q) {
     Eigen::Matrix<T, 3, 3> R;
     from_euler_zyx(y, p, r, R);
     q = Eigen::Quaternion<T>(R);
 }
 
 template <typename T>
-void from_euler_zyx(T y, T p, T r, geometry_msgs::Pose& q) {
+inline void from_euler_zyx(T y, T p, T r, geometry_msgs::Pose& q) {
     Eigen::Matrix<T, 3, 3> R;
     from_euler_zyx(y, p, r, R);
     Eigen::Quaternion<T> quat(R);
@@ -213,14 +225,14 @@ void from_euler_zyx(T y, T p, T r, geometry_msgs::Pose& q) {
 }
 
 template <typename T>
-void normalize_euler_zyx(T& y, T& p, T& r) {
+inline void normalize_euler_zyx(T& y, T& p, T& r) {
     Eigen::Matrix<T, 3, 3> rot;
     from_euler_zyx(y, p, r, rot);
     get_euler_zyx(rot, y, p, r);
 }
 
 template <typename T>
-void normalize_euler_zyx(T* angles)  // in order r, p, y
+inline void normalize_euler_zyx(T* angles)  // in order r, p, y
 {
     Eigen::Matrix<T, 3, 3> rot;
     from_euler_zyx(angles[2], angles[1], angles[0], rot);
@@ -340,8 +352,8 @@ inline bool profileTrajectory(const StateType& start,
                               const std::vector<StateType>& trajectory,
                               const moveit::planning_interface::MoveGroupInterface& move_group_,
                               moveit_msgs::RobotTrajectory& trajectory_msg,
-                              double velocity_scaling_factor = 0.2,
-                              double acceleration_scaling_factor = 0.2) {
+                              double velocity_scaling_factor = 0.1,
+                              double acceleration_scaling_factor = 0.1) {
     trajectory_msg.joint_trajectory.header.frame_id = move_group_.getPlanningFrame();
     trajectory_msg.joint_trajectory.joint_names = move_group_.getActiveJoints();
     trajectory_msg.joint_trajectory.points.resize(trajectory.size());
@@ -1032,16 +1044,16 @@ inline void moveitCollisionResultToCollisionsCollective(const collision_detectio
 }
 
 /// @brief Convert a mapping between robot names to states to a composite state given an ordering of the robots.
-void namedMultiAgentStateToStackedState(std::unordered_map<std::string, StateType> multi_state, std::vector<std::string> robot_names, StateType& stacked_state) {
+inline void namedMultiAgentStateToStackedState(std::unordered_map<std::string, StateType> multi_state, std::vector<std::string> robot_names, StateType& stacked_state) {
     stacked_state.clear();
     for (const auto& robot_name : robot_names) {
         stacked_state.insert(stacked_state.end(), multi_state[robot_name].begin(), multi_state[robot_name].end());
     }
 }
 
-void densifyPath(PathType& path, int num_intermediate_states = 3) {
+inline void densifyPath(PathType& path, int num_intermediate_states = 3) {
     // Add intermediate states to the path. These are interpolated between the states of the individual paths to verify transitions are okay.
-    PathType path_dense{path[0]};
+    PathType path_dense;
 
     for (int t = 0; t < path.size() - 1; t++) {
         StateType state_t = path[t];
@@ -1062,7 +1074,7 @@ void densifyPath(PathType& path, int num_intermediate_states = 3) {
     path = path_dense;
 }
 
-void densifyMultiAgentPaths(MultiAgentPaths& paths, int num_intermediate_states = 3) {
+inline void densifyMultiAgentPaths(MultiAgentPaths& paths, int num_intermediate_states = 3) {
     // Iterate over the paths and densify them.
     for (auto& agent_id_and_path : paths) {
         int agent_id = agent_id_and_path.first;
@@ -1159,7 +1171,7 @@ std::unordered_map<int, bool> isMultiAgentPathValid(MultiAgentPaths paths,
 }
 
 /// @brief Smooth a set of paths, one for each agent.
-bool smoothMultiAgentPaths(MultiAgentPaths paths,
+inline bool smoothMultiAgentPaths(MultiAgentPaths paths,
                            const moveit::planning_interface::MoveGroupInterface& move_group_multi,
                            const planning_scene::PlanningScenePtr& planning_scene,
                            std::unordered_map<int, std::string> agent_names,
@@ -1233,7 +1245,6 @@ bool smoothMultiAgentPaths(MultiAgentPaths paths,
         MultiAgentPaths paths_to_test;
         for (auto agent_id_and_path : paths) {
             int agent_id = agent_id_and_path.first;
-            PathType agent_path = agent_id_and_path.second;
             PathType agent_path_to_test;
 
             // There are two portions to the path to test. A portion from the smoothed path (the portion that has already been added), and a portion interpolating between the poses at t0 and t1 on the individual path.
@@ -1334,8 +1345,45 @@ bool smoothMultiAgentPaths(MultiAgentPaths paths,
     return true;
 }
 
+inline bool isPathInCollision(PathType path,
+                              const moveit::planning_interface::MoveGroupInterface& move_group,
+                              const planning_scene::PlanningScenePtr& planning_scene) {
+    // Densify the path.
+    densifyPath(path, 3);
+
+    // Iterate over the states in the path and check for validity.
+    collision_detection::CollisionRequest collision_request;
+    collision_request.verbose = false;
+    collision_request.group_name = move_group.getName();
+    collision_request.contacts = true;
+    collision_request.max_contacts = 1000;
+    collision_detection::CollisionResult collision_result;
+    robot_state::RobotState robot_state = planning_scene->getCurrentStateNonConst();
+
+    // Iterate over the states.
+    for (int t = 0; t < path.size(); t++) {
+        StateType agent_state = path[t];
+
+        // Check if the state is valid.
+        robot_state.setJointGroupPositions(move_group.getName(), agent_state);
+        collision_result.clear();
+        planning_scene->checkCollision(collision_request, collision_result, robot_state);
+
+        // If there is no collision, then the state is valid.
+        if (!collision_result.collision) {
+            continue;
+        }
+        else {
+            return true;
+        }
+    }
+    // If we got here, then there is no collision.
+    return false;
+}
+
+
 /// @brief Shortcut a path with a context of other agents: not changing the path of other agents or colliding with it.
-bool shortcutPath(std::string agent_name,
+inline bool shortcutPath(std::string agent_name,
                   MultiAgentPaths paths,
                   const moveit::planning_interface::MoveGroupInterface& move_group_multi,
                   const planning_scene::PlanningScenePtr& planning_scene,
@@ -1490,7 +1538,7 @@ bool shortcutPath(std::string agent_name,
 }
 
 /// @brief Shortcut paths for multiple agents. Going one at a time around.
-bool shortcutMultiAgentPathsIterative(
+inline bool shortcutMultiAgentPathsIterative(
     MultiAgentPaths paths,
     const moveit::planning_interface::MoveGroupInterface& move_group_multi,
     const planning_scene::PlanningScenePtr& planning_scene,
@@ -1522,6 +1570,150 @@ bool shortcutMultiAgentPathsIterative(
     smoothed_paths = paths_copy;
 
     return true;
+}
+
+
+/// @brief Shortcut a path with a context of other agents: not changing the path of other agents or colliding with it.
+inline bool shortcutPath(PathType path,
+                  const moveit::planning_interface::MoveGroupInterface& move_group,
+                  const planning_scene::PlanningScenePtr& planning_scene,
+                  PathType& smoothed_path,
+                  double timeout = 1.0) {
+    auto object_names = planning_scene->getWorld()->getObjectIds();
+    for (auto object_name : object_names) {
+        std::cout << "Object name: " << object_name << "\n";
+    }
+    // Keep track of the current t0 and t1 for the agent. These are indices pointing to the current start and end times of the tentative addition to the smoothed path. This addition is an interpolation between the current t0 and t1 on the individual path.
+    int agent_t0 = 0;
+    int agent_t1 = 1;
+
+    smoothed_path.clear();
+
+    // Get the maximal "time" of the path. This is the number of elements in the path.
+    double t_max = path.size();
+
+    // If the length of the paths is less than or equal to 2, then there is nothing to smooth.
+    if (t_max <= 2) {
+        smoothed_path = path;
+        return true;
+    }
+
+    // Keep track of the current shortcut segment for the agent.
+    PathType agent_shortcut_segment;
+
+    // Iterate over the timesteps.
+    for (TimeType t{2}; t < t_max; t++) {
+//         std::cout << "\n========\nStarting smoothing iteration at t= " << t << "\n";
+
+        // Check if the transition from min(agent_t0s) to max(agent_t1s) is valid for the multi-agent transition. For each agent that fails, add the transition from t0 to t1-1 to the smoothed path and set the t0 and t1 to t1 and t1+1, respectively.
+        int t0 = agent_t0;
+        int t1 = t;
+
+        // Construct the path to test for validity.
+        PathType path_to_test;
+
+        // Look at the shortcut path of the agent of interest. This is a portion interpolating between the poses at t0 and t1 on the individual path.
+        // For the portion interpolating between t0 and t1, add the interpolated state to the path to test. This includes the state at t0 and t1.
+        for (int tt = t0; tt <= t1; tt++) {
+            // Get the state at t0 and t1.
+            StateType state_t0 = path[t0];
+            StateType state_t1 = path[t1];
+            // Interpolate between the states.
+            StateType state_t = state_t0;
+            for (int i = 0; i < state_t.size(); i++) {
+                state_t[i] = state_t0[i] + (state_t1[i] - state_t0[i]) * (tt - t0) / (t1 - t0);
+            }
+            // Add the state to the path to test.
+            path_to_test.push_back(state_t);
+        }
+
+
+        // Test the validity of this multi-agent transition.
+        bool is_agent_in_collision = isPathInCollision(path_to_test,
+                                                       move_group,
+                                                       planning_scene);
+
+        // Check if the shortcut is valid. If so, increase t1 by 1. Else, add the shortcut segment to the smoothed path and set t0 to t1 and t1 to t1+1.
+        if (!is_agent_in_collision) {
+            // Store the current segment as successful. This is the paths to test segment between the agent t0 and t1.
+            PathType agent_successful_segment;
+            for (StateType state : path_to_test) {
+                if (state.back() >= t0 && state.back() <= t1) {
+                    agent_successful_segment.push_back(state);
+                }
+            }
+            agent_shortcut_segment = agent_successful_segment;
+        }
+
+        // If the shortcut failed, add the transition from t0 to t1-1 to the smoothed path (should be stored already) and set the t0 and t1 to t1 and t1+1, respectively.
+        else {
+            // If there has been no successful transition before, then add the steps on the individual path to the smoothed path.
+            if (agent_shortcut_segment.size() == 0) {
+                for (int tt = t0; tt < t1; tt++) {
+                    smoothed_path.push_back(path[tt]);
+                }
+            }
+
+            // Otherwise, add the successful segment to the smoothed path.
+            else {
+                for (StateType state : agent_shortcut_segment) {
+                    smoothed_path.push_back(state);
+                }
+                agent_shortcut_segment.clear();
+            }
+
+            // Set the t0 and t1 to t1 and t1+1, respectively.
+            agent_t0 = t1;
+            agent_t1 = t1 + 1;
+
+//             std::cout << ">>> Agent failed, setting t0= " << agent_t0 << " and t1= " << agent_t1 << "\n";
+        }
+    }
+
+    // If the smoothed path segment is non-empty, add it to the smoothed paths.
+    if (agent_shortcut_segment.size() > 0) {
+        for (StateType state : agent_shortcut_segment) {
+            smoothed_path.push_back(state);
+        }
+    }
+
+    // Add the last state of the path to the smoothed path.
+    smoothed_path.push_back(path.back());
+
+    return true;
+}
+
+
+
+/// @brief Interpolate path between two states
+/// @param start The start state
+/// @param end The end state
+/// @param resolution The resolution of the path (default: 0.005 rad)
+/// @return The interpolated path
+inline PathType interpolatePath(const StateType &start, const StateType &end,
+                                const double resolution = 0.05) {
+    // TODO: Currently only works for configuration space
+    assert(start.size() == end.size());
+    PathType path;
+    // get the maximum distance between the two states
+    double max_distance{0.0};
+    for (int i{0}; i < start.size(); i++) {
+        double distance = std::abs(start[i] - end[i]);
+        if (distance > max_distance) {
+            max_distance = distance;
+        }
+    }
+    // calculate the number of steps
+    int steps = std::ceil(max_distance / resolution);
+    // interpolate the path
+    for (int i{0}; i < steps; i++) {
+        StateType state;
+        for (int j{0}; j < start.size(); j++) {
+            state.push_back(start[j] + (end[j] - start[j]) * i / steps);
+        }
+        path.push_back(state);
+    }
+    return path;
 }
 
 }  // namespace ims

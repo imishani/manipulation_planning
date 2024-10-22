@@ -1,0 +1,51 @@
+# This file includes families of workspace successors. Families could be "short_primitives," "short_primitives," etc.
+# In workspace, we often have a single family. We call it "short_primitives."
+# Details.
+# <motion_primitive_family_name>:
+#   <motion_primitive1_name>:
+#     mprim_sequence: # List of delta meters (in first three dimensions) and delta degrees (in the rest of the dimensions).
+#       - [ 0, 0, 0, 0, 0, 0 ] # For now, always start with 0. This is the reference point.
+#       - [ 0.02, 0, 0, 0, 0, 0 ] # The delta meters/degrees for each dimension. This is from the reference point.
+#       - [ 0.04, 0, 0, 5, 0, 0] # More delta steps can be added. This is from the reference point as well.
+#     mprim_sequence_transition_costs: [ 1, 1, 0 ] # Entry i is the time it takes to move from state i to state i+1. The last one is always zero.
+#     generate_negative: true # If true, the negative of the delta will be added as well.
+#   <motion_primitive2_name>:
+#     ...
+
+short_primitives:
+  delta_x:
+    mprim_sequence:
+      - [ 0, 0, 0, 0, 0, 0 ]
+      - [ 0.005, 0, 0, 0, 0, 0 ]
+    mprim_sequence_transition_costs: [ 1000, 0 ]
+    generate_negative: true
+  delta_y:
+    mprim_sequence:
+      - [ 0, 0, 0, 0, 0, 0 ]
+      - [ 0, 0.005, 0, 0, 0, 0 ]
+    mprim_sequence_transition_costs: [ 1000, 0 ]
+    generate_negative: true
+  delta_z:
+    mprim_sequence:
+      - [ 0, 0, 0, 0, 0, 0 ]
+      - [ 0, 0, 0.005, 0, 0, 0 ]
+    mprim_sequence_transition_costs: [ 1000, 0 ]
+    generate_negative: true
+  delta_roll:
+    mprim_sequence:
+      - [ 0, 0, 0, 0, 0, 0 ]
+      - [ 0, 0, 0, 1, 0, 0 ]
+    mprim_sequence_transition_costs: [ 1000, 0 ]
+    generate_negative: true
+  delta_pitch:
+    mprim_sequence:
+      - [ 0, 0, 0, 0, 0, 0 ]
+      - [ 0, 0, 0, 0, 1, 0 ]
+    mprim_sequence_transition_costs: [ 1000, 0 ]
+    generate_negative: true
+  delta_yaw:
+    mprim_sequence:
+      - [ 0, 0, 0, 0, 0, 0 ]
+      - [ 0, 0, 0, 0, 0, 1 ]
+    mprim_sequence_transition_costs: [ 1000, 0 ]
+    generate_negative: true

@@ -121,6 +121,7 @@ public:
         planning_scene_ = planning_scene;
         group_name_ = group_name;
         frame_id_ = planning_scene_->getPlanningFrame();
+        planning_scene_interface_ = std::make_shared<moveit::planning_interface::PlanningSceneInterface>();
 
         kinematic_state_ = std::make_shared<moveit::core::RobotState>(planning_scene_->getCurrentState());
         // joint model group
@@ -157,7 +158,17 @@ public:
 
         // Check for the joint limits and if the scene is valid.
         num_collision_checks_++;
-        return planning_scene_->isStateValid(robotState, group_name_);
+//        return planning_scene_->isStateValid(robotState, group_name_);
+
+        // Instead, do this with a collision request.
+        collision_detection::CollisionRequest collision_request;
+        collision_detection::CollisionResult collision_result;
+        collision_request.contacts = true;
+        collision_request.max_contacts = 1000;
+        collision_request.max_contacts_per_pair = 1;
+        collision_request.group_name = group_name_;
+        planning_scene_->checkCollision(collision_request, collision_result);
+        return !collision_result.collision;
     }
 
     /// @brief check if the state is valid w.r.t. all other bodies. Robot and non-robot.
@@ -186,6 +197,7 @@ public:
         collision_request.max_contacts = 1000;
         collision_request.max_contacts_per_pair = 1;
         collision_request.group_name = group_name_;
+        collision_request.verbose = verbose_;
         planning_scene_->checkCollision(collision_request, collision_result);
         num_collision_checks_++;
 
@@ -299,7 +311,6 @@ public:
     /// @param object_msgs the collision objects that were added to the scene.
     /// @return nothing.
     void addSpheresToScene(const std::vector<SphereWorldObject> &sphere_world_objects, std::vector<moveit_msgs::CollisionObject> &object_msgs) {
-        planning_scene_interface_ = std::make_shared<moveit::planning_interface::PlanningSceneInterface>();  // TODO(yorais): this should be initialized elsewhere.
 
         for (auto &obj : sphere_world_objects) {
             // Add the object to the scene with a new name.
@@ -335,7 +346,6 @@ public:
     /// @brief Remove collision objects from the planning scene.
     /// @param object_msgs
     void removeObjectsFromScene(std::vector<moveit_msgs::CollisionObject> object_msgs) {
-        planning_scene_interface_ = std::make_shared<moveit::planning_interface::PlanningSceneInterface>();  // TODO(yorais): this should be initialized elsewhere.
 
         for (auto &obj_msg : object_msgs) {
             obj_msg.operation = obj_msg.REMOVE;
@@ -649,10 +659,67 @@ public:
     void setEndEffectorMoveGroupName(const std::string& group_name_ee) {
         group_name_ee_ = group_name_ee;
     }
+    std::string getEndEffectorLinkName() const {
+        return joint_model_group_->getLinkModelNames().back();
+    }
 
     std::shared_ptr<planning_scene::PlanningScene> getPlanningSceneMoveit() {
         return planning_scene_;
     }
+
+    /// @brief Attach a box to the end effector of the robot.
+    /// \param origin_in_ee_frame
+    /// \param size This is x, y, z [m] in the ee frame. In the Kinva Gen3 robots, the (tool frame) frame is
+    /// x along the fingers axis and z along the axis away from the arm continuing the last link.
+    void attachPrimitiveBoxObjectToEndEffector(const Eigen::Vector3d& origin_in_ee_frame, const Eigen::Vector3d& size) {
+        // Create a collision object for the box.
+        moveit_msgs::CollisionObject collision_object;
+        collision_object.header.frame_id = getEndEffectorLinkName();
+        collision_object.id = group_name_ + "_attached_object";
+        shape_msgs::SolidPrimitive box;
+        box.type = box.BOX;
+        box.dimensions.resize(3);
+        box.dimensions[0] = size.x();
+        box.dimensions[1] = size.y();
+        box.dimensions[2] = size.z();
+        collision_object.primitives.push_back(box);
+        collision_object.operation = moveit_msgs::CollisionObject::ADD;
+        geometry_msgs::Pose box_pose;
+        box_pose.position.x = origin_in_ee_frame.x();
+        box_pose.position.y = origin_in_ee_frame.y();
+        box_pose.position.z = origin_in_ee_frame.z();
+        box_pose.orientation.x = 0.0;
+        box_pose.orientation.y = 0.0;
+        box_pose.orientation.z = 0.0;
+        box_pose.orientation.w = 1.0;
+        collision_object.primitive_poses.push_back(box_pose);
+
+        // Attach the object to the robot.
+        planning_scene_interface_->applyCollisionObject(collision_object);
+        planning_scene_->processCollisionObjectMsg(collision_object);
+
+        moveit_msgs::AttachedCollisionObject attached_object;
+        attached_object.link_name = getEndEffectorLinkName();
+//        attached_object.touch_links = { joint_model_group_->getLinkModelNames().back() };
+        attached_object.object = collision_object;
+        attached_object.object.operation = moveit_msgs::CollisionObject::ADD;
+        planning_scene_interface_->applyAttachedCollisionObject(attached_object);
+        planning_scene_->processAttachedCollisionObjectMsg(attached_object);
+        ros::Duration(0.1).sleep();
+    }
+
+    void removeObjectsAttachedToEndEffector(){
+        moveit_msgs::AttachedCollisionObject attached_object;
+        // By convention, attached objects are prefixed by the name of the group they are attached to. e.g., panda0_arm_attached_object
+        attached_object.link_name = getEndEffectorLinkName();
+        attached_object.object.id = group_name_ + "_attached_object";
+        attached_object.object.operation = moveit_msgs::CollisionObject::REMOVE;
+        planning_scene_interface_->applyAttachedCollisionObject(attached_object);
+        planning_scene_->processAttachedCollisionObjectMsg(attached_object);
+        // Remove from the scene as well.
+        planning_scene_interface_->applyCollisionObject(attached_object.object);
+        planning_scene_->processCollisionObjectMsg(attached_object.object);
+     }
 
     planning_scene_monitor::PlanningSceneMonitorPtr planning_scene_monitor_;
     std::shared_ptr<planning_scene::PlanningScene> planning_scene_;

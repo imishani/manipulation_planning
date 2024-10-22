@@ -32,140 +32,141 @@
 
 namespace ims {
 
-class scene3Dpoint : public SceneInterface {
-public:
-    explicit scene3Dpoint(std::shared_ptr<distance_field::PropagationDistanceField> &map_) : SceneInterface() {
-        this->df_map = map_;
-    }
-
-    std::shared_ptr<distance_field::PropagationDistanceField> df_map;
-};
-
-struct actionType3Dpoint : public ActionType {
-
-    actionType3Dpoint() : ActionType() {
-        this->num_actions = 26;
-        this->action_costs = std::vector<double>(num_actions, 1);
-        this->action_deltas = std::vector<std::vector<double>>(num_actions, std::vector<double>(3, 0));
-        int i{0};
-        for (int x{-1}; x <= 1; x++) {
-            for (int y{-1}; y <= 1; y++) {
-                for (int z{-1}; z <= 1; z++) {
-                    if (x == 0 && y == 0 && z == 0) {
-                        continue;
-                    }
-                    action_deltas[i][0] = x;
-                    action_deltas[i][1] = y;
-                    action_deltas[i][2] = z;
-
-                    action_costs[i] = std::sqrt(x * x + y * y + z * z);
-                    i++;
-                }
-            }
-        }
-
-    }
-
-    std::vector<Action> getPrimActions() override {
-        return this->action_deltas;
-    }
-
-    void Discretization(StateType &state_des) override {
-        state_discretization_ = state_des;
-    }
-
-    int num_actions;
-    std::vector<double> action_costs;
-    std::vector<std::vector<double>> action_deltas;
-
-};
-
-class actionSpace3Dpoint : public ActionSpace {
-
-private:
-    std::shared_ptr<scene3Dpoint> m_env;
-    std::shared_ptr<actionType3Dpoint> m_actions;
-
-public:
-    actionSpace3Dpoint(const scene3Dpoint &env,
-                        const actionType3Dpoint &actions_ptr) : ActionSpace() {
-        this->m_env = std::make_shared<scene3Dpoint>(env);
-        this->m_actions = std::make_shared<actionType3Dpoint>(actions_ptr);
-    }
-
-    void getActions(int state_id,
-                    std::vector<ActionSequence> &actions_seq,
-                    bool check_validity) override {
-        auto actions = m_actions->getPrimActions();
-        for (int i {0} ; i < m_actions->num_actions ; i++){
-            auto action = actions[i];
-            if (check_validity){
-                auto curr_state = this->getRobotState(state_id);
-                auto next_state_val = StateType(curr_state->state.size());
-                std::transform(curr_state->state.begin(), curr_state->state.end(), action.begin(), next_state_val.begin(), std::plus<>());
-                if (!isStateValid(next_state_val)){
-                    continue;
-                }
-            }
-            ActionSequence action_seq;
-            action_seq.push_back(action);
-            actions_seq.push_back(action_seq);
-        }
-    }
-
-    bool isStateValid(const StateType &state_val) override {
-        return m_env->df_map->getCell((int)state_val[0], (int)state_val[1], (int)state_val[2]).distance_square_ > 0;
-    }
-
-    bool isPathValid(const PathType &path) override {
-        return std::all_of(path.begin(), path.end(),
-                            [this](const StateType &state_val) { return isStateValid(state_val); });
-    }
-
-    bool getSuccessors(int curr_state_ind,
-                        std::vector<int> &successors,
-                        std::vector<double> &costs) override {
-        auto curr_state = this->getRobotState(curr_state_ind);
-        auto curr_state_val = curr_state->state;
-        std::vector<ActionSequence> actions;
-        getActions(curr_state_ind, actions, false);
-        for (int i {0} ; i < actions.size() ; i++){
-            auto action = actions[i][0];
-            auto next_state_val = StateType(curr_state_val.size());
-            std::transform(curr_state_val.begin(), curr_state_val.end(), action.begin(), next_state_val.begin(),
-                            std::plus<>());
-            // Check if state is outside the map
-            if (next_state_val[0] < 0 || next_state_val[0] >= m_env->df_map->getXNumCells() ||
-                next_state_val[1] < 0 || next_state_val[1] >= m_env->df_map->getYNumCells() ||
-                next_state_val[2] < 0 || next_state_val[2] >= m_env->df_map->getZNumCells()) {
-                continue;
-            }
-            if (isStateValid(next_state_val)) {
-                int next_state_ind = getOrCreateRobotState(next_state_val);
-                successors.push_back(next_state_ind);
-                costs.push_back(m_actions->action_costs[i]);
-            }
-        }
-        return true;
-    }
-
-    /// \brief Get state by value (if not exist, DO NOT create it)
-    /// \param state_val The state value
-    /// \param state_ind The state index to be returned
-    /// \return True if the state exists, false otherwise
-    bool getStateByValue(const StateType& state_val, size_t& state_ind) {
-        // check if the state exists
-        auto curr_state = new RobotState; curr_state->state = state_val;
-        auto it = state_to_id_.find(curr_state);
-        if(it == state_to_id_.end()){
-            delete curr_state;
-            return false;
-        }
-        state_ind = it->second;
-        delete curr_state;
-        return true;
-    }
-};
+// Currently not compliant with void getPrimActions(std::vector<ActionSequence>& action_seqs, std::vector<std::vector<double>> & action_transition_costs ) = 0; Commented out for now.
+//class scene3Dpoint : public SceneInterface {
+//public:
+//    explicit scene3Dpoint(std::shared_ptr<distance_field::PropagationDistanceField> &map_) : SceneInterface() {
+//        this->df_map = map_;
+//    }
+//
+//    std::shared_ptr<distance_field::PropagationDistanceField> df_map;
+//};
+//
+//struct actionType3Dpoint : public ActionType {
+//
+//    actionType3Dpoint() : ActionType() {
+//        this->num_actions = 26;
+//        this->action_costs = std::vector<double>(num_actions, 1);
+//        this->action_deltas = std::vector<std::vector<double>>(num_actions, std::vector<double>(3, 0));
+//        int i{0};
+//        for (int x{-1}; x <= 1; x++) {
+//            for (int y{-1}; y <= 1; y++) {
+//                for (int z{-1}; z <= 1; z++) {
+//                    if (x == 0 && y == 0 && z == 0) {
+//                        continue;
+//                    }
+//                    action_deltas[i][0] = x;
+//                    action_deltas[i][1] = y;
+//                    action_deltas[i][2] = z;
+//
+//                    action_costs[i] = std::sqrt(x * x + y * y + z * z);
+//                    i++;
+//                }
+//            }
+//        }
+//
+//    }
+//
+//    std::vector<Action> getPrimActions() override {
+//        return this->action_deltas;
+//    }
+//
+//    void Discretization(StateType &state_des) override {
+//        state_discretization_ = state_des;
+//    }
+//
+//    int num_actions;
+//    std::vector<double> action_costs;
+//    std::vector<std::vector<double>> action_deltas;
+//
+//};
+//
+//class actionSpace3Dpoint : public ActionSpace {
+//
+//private:
+//    std::shared_ptr<scene3Dpoint> m_env;
+//    std::shared_ptr<actionType3Dpoint> m_actions;
+//
+//public:
+//    actionSpace3Dpoint(const scene3Dpoint &env,
+//                        const actionType3Dpoint &actions_ptr) : ActionSpace() {
+//        this->m_env = std::make_shared<scene3Dpoint>(env);
+//        this->m_actions = std::make_shared<actionType3Dpoint>(actions_ptr);
+//    }
+//
+//    void getActions(int state_id,
+//                    std::vector<ActionSequence> &actions_seq,
+//                    bool check_validity) override {
+//        auto actions = m_actions->getPrimActions();
+//        for (int i {0} ; i < m_actions->num_actions ; i++){
+//            auto action = actions[i];
+//            if (check_validity){
+//                auto curr_state = this->getRobotState(state_id);
+//                auto next_state_val = StateType(curr_state->state.size());
+//                std::transform(curr_state->state.begin(), curr_state->state.end(), action.begin(), next_state_val.begin(), std::plus<>());
+//                if (!isStateValid(next_state_val)){
+//                    continue;
+//                }
+//            }
+//            ActionSequence action_seq;
+//            action_seq.push_back(action);
+//            actions_seq.push_back(action_seq);
+//        }
+//    }
+//
+//    bool isStateValid(const StateType &state_val) override {
+//        return m_env->df_map->getCell((int)state_val[0], (int)state_val[1], (int)state_val[2]).distance_square_ > 0;
+//    }
+//
+//    bool isPathValid(const PathType &path) override {
+//        return std::all_of(path.begin(), path.end(),
+//                            [this](const StateType &state_val) { return isStateValid(state_val); });
+//    }
+//
+//    bool getSuccessors(int curr_state_ind,
+//                        std::vector<int> &successors,
+//                        std::vector<double> &costs) override {
+//        auto curr_state = this->getRobotState(curr_state_ind);
+//        auto curr_state_val = curr_state->state;
+//        std::vector<ActionSequence> actions;
+//        getActions(curr_state_ind, actions, false);
+//        for (int i {0} ; i < actions.size() ; i++){
+//            auto action = actions[i][0];
+//            auto next_state_val = StateType(curr_state_val.size());
+//            std::transform(curr_state_val.begin(), curr_state_val.end(), action.begin(), next_state_val.begin(),
+//                            std::plus<>());
+//            // Check if state is outside the map
+//            if (next_state_val[0] < 0 || next_state_val[0] >= m_env->df_map->getXNumCells() ||
+//                next_state_val[1] < 0 || next_state_val[1] >= m_env->df_map->getYNumCells() ||
+//                next_state_val[2] < 0 || next_state_val[2] >= m_env->df_map->getZNumCells()) {
+//                continue;
+//            }
+//            if (isStateValid(next_state_val)) {
+//                int next_state_ind = getOrCreateRobotState(next_state_val);
+//                successors.push_back(next_state_ind);
+//                costs.push_back(m_actions->action_costs[i]);
+//            }
+//        }
+//        return true;
+//    }
+//
+//    /// \brief Get state by value (if not exist, DO NOT create it)
+//    /// \param state_val The state value
+//    /// \param state_ind The state index to be returned
+//    /// \return True if the state exists, false otherwise
+//    bool getStateByValue(const StateType& state_val, size_t& state_ind) {
+//        // check if the state exists
+//        auto curr_state = new RobotState; curr_state->state = state_val;
+//        auto it = state_to_id_.find(curr_state);
+//        if(it == state_to_id_.end()){
+//            delete curr_state;
+//            return false;
+//        }
+//        state_ind = it->second;
+//        delete curr_state;
+//        return true;
+//    }
+//};
 
 
 /// @brief SE(3) distance heuristic using hopf coordinates
